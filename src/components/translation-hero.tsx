@@ -36,7 +36,7 @@ export function TranslationHero() {
         </h1>
 
         <p className="mt-4 max-w-[44ch] text-[1.03125rem] leading-relaxed text-muted">
-          MarketMiner reads them for you and answers the five questions that
+          WylthIQ reads them for you and answers the five questions that
           actually matter — in sentences, with a link to every source.
         </p>
 

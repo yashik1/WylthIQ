@@ -7,7 +7,7 @@ import { StructuredData } from "@/components/structured-data";
 export const metadata: Metadata = {
   title: "Learn — what the numbers actually mean",
   description:
-    "Plain-English explanations of the financial terms and scores used across MarketMiner.",
+    "Plain-English explanations of the financial terms and scores used across WylthIQ.",
 };
 
 interface Entry {
@@ -102,7 +102,7 @@ const SCORES: Entry[] = [
     term: "Altman Z-Score",
     short: "How far the company is from financial distress.",
     detail:
-      "Published by Edward Altman in 1968 to predict bankruptcy. Above 2.99 is the safe zone, 1.81–2.99 is grey, below 1.81 signals distress. MarketMiner uses the original five-factor model for manufacturers and the four-factor Z'' variant elsewhere, because the original was fitted on manufacturing companies. It is not shown at all for banks and insurers — see below.",
+      "Published by Edward Altman in 1968 to predict bankruptcy. Above 2.99 is the safe zone, 1.81–2.99 is grey, below 1.81 signals distress. WylthIQ uses the original five-factor model for manufacturers and the four-factor Z'' variant elsewhere, because the original was fitted on manufacturing companies. It is not shown at all for banks and insurers — see below.",
   },
   {
     term: "Beneish M-Score",
@@ -149,7 +149,7 @@ export default function LearnPage() {
         <p className="eyebrow">Reference</p>
         <h1 className="font-display mt-2 text-[2.75rem] leading-none">What the numbers mean</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">
-          Every term MarketMiner uses, explained without assuming you have read a
+          Every term WylthIQ uses, explained without assuming you have read a
           balance sheet before. Nothing here is advice — it is just vocabulary.
         </p>
       </header>
@@ -192,7 +192,7 @@ export default function LearnPage() {
             distressed.
           </p>
           <p>
-            Rather than print a confident number that is meaningless, MarketMiner omits
+            Rather than print a confident number that is meaningless, WylthIQ omits
             those scores for financial companies and says so. The rest of the analysis —
             profitability, growth, accounting quality — still applies.
           </p>
@@ -219,7 +219,7 @@ export default function LearnPage() {
           <p>
             Canadian companies appear when they cross-list on a US exchange and file a
             40-F, which most large Canadian firms do. They report under IFRS rather than
-            US accounting rules, and MarketMiner reads both.
+            US accounting rules, and WylthIQ reads both.
           </p>
           <p>
             Figures come from annual reports, so they update once a year and can be

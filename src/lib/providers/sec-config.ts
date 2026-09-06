@@ -6,7 +6,7 @@
  * Override via SEC_USER_AGENT in the environment when deploying.
  */
 export const SEC_USER_AGENT =
-  process.env.SEC_USER_AGENT ?? "MarketMiner (open source stock research) contact@marketminer.app";
+  process.env.SEC_USER_AGENT ?? "WylthIQ (open source stock research) contact@wylthiq.app";
 
 /** Conservative spacing between EDGAR requests, in milliseconds. */
 export const SEC_REQUEST_INTERVAL_MS = 150;

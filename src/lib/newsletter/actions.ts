@@ -151,7 +151,7 @@ export async function subscribeToNewsletter(
     const link = `${siteUrl()}/api/newsletter/confirm?token=${newsletterToken("confirm", email)}`;
     await sendEmail({
       to: email,
-      subject: "Confirm your MarketMiner newsletter subscription",
+      subject: "Confirm your WylthIQ newsletter subscription",
       text:
         "Click to confirm you want the weekly newsletter — what the companies " +
         `in our scored universe actually filed that week.\n\n${link}\n\n` +

@@ -24,13 +24,13 @@ export const MAX_USERNAME = 30;
  * Words nobody may register.
  *
  * Not a moderation list — a list of names that would let somebody be mistaken
- * for the service itself. A message from "Support" or "MarketMiner" carries an
+ * for the service itself. A message from "Support" or "WylthIQ" carries an
  * authority a stranger's account should not be able to borrow.
  */
 const RESERVED = new Set([
   "admin", "administrator", "root", "system", "support", "help", "helpdesk",
   "moderator", "mod", "staff", "team", "official", "security", "billing",
-  "marketminer", "market-miner", "stockfilter", "stock-filter", "sec", "edgar", "api", "www", "mail",
+  "wylthiq", "wylth", "marketminer", "stockfilter", "sec", "edgar", "api", "www", "mail",
   "postmaster", "webmaster", "abuse", "noreply", "no-reply", "null", "undefined",
   "me", "you", "account", "accounts", "settings", "signin", "signup", "login",
 ]);

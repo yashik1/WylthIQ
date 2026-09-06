@@ -1,13 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <!--
-    The sieve on a rounded indigo tile, gold stroke: four rules narrowing to
-    one, with a drop falling through. No gradient here — the mark has to hold
-    at 16px in a tab strip, where a gradient turns to mud.
-    Strokes are scaled from the 24px master (1.5 -> 2) so the weight reads the
-    same at tile size.
+    The W that is also a rising line, on a rounded indigo tile. Same geometry
+    as WylthMark in src/components/logo.tsx, scaled from the 24px master and
+    with the stroke thickened 2 -> 2.6 so the weight reads the same at tile
+    size. No gradient: the mark has to hold at 16px in a tab strip, which is
+    where a gradient turns to mud.
   -->
   <rect width="32" height="32" rx="8" fill="#3c4bd6"/>
-  <g fill="none" stroke="#f2b90f" stroke-width="2" stroke-linecap="round">
-    <path d="M7 10h18M11 16h10M14.5 22h3M16 22v4"/>
+  <g fill="none" stroke="#f2b90f" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 11 L11 23 L17 15 L23 19 L28.5 6.5"/>
   </g>
+  <circle cx="28.5" cy="6.5" r="2.6" fill="#f2b90f"/>
 </svg>

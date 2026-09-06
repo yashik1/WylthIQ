@@ -45,7 +45,7 @@ import {
 const INDEX = "https://www.sec.gov/data-research/sec-markets-data/form-13f-data-sets";
 const FTD_INDEX = "https://www.sec.gov/data/foiadocsfailsdatahtm";
 
-const UA = process.env.SEC_USER_AGENT ?? "MarketMiner (contact not configured)";
+const UA = process.env.SEC_USER_AGENT ?? "WylthIQ (contact not configured)";
 
 /** Rows written per insert. Postgres caps parameters per statement at 65535. */
 const BATCH = 500;

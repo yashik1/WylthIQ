@@ -103,7 +103,7 @@ vi.mock("../email", () => ({
 
 // Deterministic, so a reset link in a test assertion is not chasing whatever
 // AUTH_URL happens to be set in the shell that runs the suite.
-vi.mock("../site-url", () => ({ siteUrl: () => "https://marketminer.test" }));
+vi.mock("../site-url", () => ({ siteUrl: () => "https://wylthiq.test" }));
 
 // None of signUp / requestPasswordReset / resetPassword call auth() — only
 // changeUsername does — but the import still runs NextAuth()'s module-level
@@ -267,7 +267,7 @@ describe("requestPasswordReset", () => {
     existingUserRows = [{ id: "user-1" }];
     await requestPasswordReset(null, form({ email }));
     expect(sentEmails).toHaveLength(1);
-    expect(sentEmails[0].text).toContain("https://marketminer.test/reset-password?token=");
+    expect(sentEmails[0].text).toContain("https://wylthiq.test/reset-password?token=");
   });
 
   it("stores a hash of the token, never the token itself", async () => {
@@ -329,7 +329,7 @@ describe("requestPasswordReset", () => {
       await requestPasswordReset(null, form({ email }));
 
       expect(sentEmails).toHaveLength(1);
-      expect(sentEmails[0].text).toContain("https://marketminer.test/reset-password?token=");
+      expect(sentEmails[0].text).toContain("https://wylthiq.test/reset-password?token=");
       expect(insertedResetTokens).toHaveLength(1);
     });
   });

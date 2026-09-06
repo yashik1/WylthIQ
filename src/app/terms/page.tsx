@@ -8,7 +8,7 @@ import { num } from "@/lib/format";
 export const metadata: Metadata = {
   title: "Terms of use and privacy",
   description:
-    "What MarketMiner is, what it is not, where its data comes from, and what it stores about you.",
+    "What WylthIQ is, what it is not, where its data comes from, and what it stores about you.",
 };
 
 /**
@@ -42,7 +42,7 @@ export default async function TermsPage() {
         </div>
         <div className="space-y-3 p-5 text-sm leading-relaxed text-muted-strong">
           <p>
-            MarketMiner is an educational tool. It summarises public regulatory filings
+            WylthIQ is an educational tool. It summarises public regulatory filings
             and computes well-known academic scores from them. It does not know your
             circumstances, your goals, your tax position or your risk tolerance, and it
             cannot take them into account.
@@ -63,7 +63,7 @@ export default async function TermsPage() {
       <SectionHeading title="Terms of use" eyebrow="Section 1" />
       <Card className="divide-y divide-border">
         <Clause title="What this service is">
-          MarketMiner reads company financial statements from public regulatory sources
+          WylthIQ reads company financial statements from public regulatory sources
           and presents them in plain language, alongside scores drawn from published
           academic research. It is provided free, as-is, for personal and educational
           use.
@@ -209,7 +209,7 @@ export default async function TermsPage() {
         <p className="text-sm leading-relaxed text-muted">
           <strong className="text-foreground">A note on these terms.</strong> They were
           drafted to describe how this service actually behaves, and they have not been
-          reviewed by a lawyer. If you deploy MarketMiner publicly, charge for it, or
+          reviewed by a lawyer. If you deploy WylthIQ publicly, charge for it, or
           operate it somewhere with specific financial-promotion rules, have them
           reviewed before relying on them.
         </p>

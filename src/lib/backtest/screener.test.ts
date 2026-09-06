@@ -5,7 +5,7 @@ import type { Bar } from "../providers/types";
 
 /**
  * Building a basket at each rebalance date and chaining the results into one
- * equity curve — the part of the backtest that actually tests MarketMiner's
+ * equity curve — the part of the backtest that actually tests WylthIQ's
  * premise, so its arithmetic gets the same hand-verified treatment as
  * Phase 1's return math.
  */

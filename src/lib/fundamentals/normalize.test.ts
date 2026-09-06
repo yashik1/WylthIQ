@@ -294,7 +294,7 @@ describe("when a period's figures became public", () => {
     expect(revenue.filed).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  // Every fact MarketMiner reads from a real SEC filing does, in fact, carry
+  // Every fact WylthIQ reads from a real SEC filing does, in fact, carry
   // one — this is the assumption Phase 2's exclusion logic is built on.
   it("gives every field in a real filing a filed date", () => {
     const latest = aapl.annual[0]!;

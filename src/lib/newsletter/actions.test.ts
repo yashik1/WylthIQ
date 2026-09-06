@@ -51,7 +51,7 @@ vi.mock("../email", () => ({
   },
 }));
 
-vi.mock("../site-url", () => ({ siteUrl: () => "https://marketminer.test" }));
+vi.mock("../site-url", () => ({ siteUrl: () => "https://wylthiq.test" }));
 
 const { subscribeToNewsletter } = await import("./actions");
 
@@ -83,7 +83,7 @@ describe("a new address", () => {
     expect(inserted).toEqual([{ email }]);
     expect(sentEmails).toHaveLength(1);
     expect(sentEmails[0].subject).toMatch(/confirm/i);
-    expect(sentEmails[0].text).toContain("https://marketminer.test/api/newsletter/confirm?token=");
+    expect(sentEmails[0].text).toContain("https://wylthiq.test/api/newsletter/confirm?token=");
   });
 
   it("is lowercased and trimmed, so one address cannot become two rows", async () => {

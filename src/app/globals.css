@@ -401,20 +401,6 @@ html {
   border-radius: var(--radius-sm);
 }
 
-/* The hero waveform draws itself once on load — grounded in both "voltage" and
-   the subject's own instrument, the price chart. */
-@keyframes voltage-trace {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-.wave-trace {
-  stroke-dasharray: 1400;
-  stroke-dashoffset: 1400;
-  animation: voltage-trace 2.2s ease-out forwards;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -422,9 +408,5 @@ html {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
-  }
-
-  .wave-trace {
-    stroke-dashoffset: 0;
   }
 }

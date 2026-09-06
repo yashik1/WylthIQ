@@ -108,7 +108,7 @@ export function websiteLd(): JsonLd {
   return {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: "MarketMiner",
+    name: "WylthIQ",
     url: base,
     description:
       "Understand any company's financial health without reading a balance sheet. " +

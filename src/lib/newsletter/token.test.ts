@@ -30,7 +30,7 @@ describe("round trip", () => {
   });
 
   it("survives an address containing characters a URL would mangle", () => {
-    const plus = "reader+marketminer@example.co.uk";
+    const plus = "reader+wylthiq@example.co.uk";
     expect(verifyNewsletterToken("confirm", newsletterToken("confirm", plus))).toBe(plus);
   });
 });

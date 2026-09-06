@@ -21,7 +21,7 @@ export function mailLinkPage(title: string, body: string, status: number): NextR
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>${escapeHtml(title)} · MarketMiner</title>
+<title>${escapeHtml(title)} · WylthIQ</title>
 <style>
   :root { color-scheme: light dark; --bg:#f5f6fb; --fg:#10111a; --muted:#5c5f70; --border:#dcdee9; --accent:#3c4bd6; }
   @media (prefers-color-scheme: dark) {
@@ -40,7 +40,7 @@ export function mailLinkPage(title: string, body: string, status: number): NextR
 <main>
   <h1>${escapeHtml(title)}</h1>
   <p>${escapeHtml(body)}</p>
-  <p><a href="/">Back to MarketMiner</a></p>
+  <p><a href="/">Back to WylthIQ</a></p>
 </main>
 </body>
 </html>`;
