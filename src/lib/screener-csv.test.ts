@@ -149,7 +149,7 @@ describe("figures that are missing rather than zero", () => {
 describe("the filename", () => {
   it("says what it is and when it was taken", () => {
     expect(csvFilename(new Date("2026-08-30T12:00:00Z"))).toBe(
-      "marketminer-screen-2026-08-30.csv",
+      "wylthiq-screen-2026-08-30.csv",
     );
   });
 });

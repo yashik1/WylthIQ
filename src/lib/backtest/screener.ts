@@ -8,7 +8,7 @@ import { simulateInvestment, isInvestmentError, type InvestmentPoint } from "./s
  * "If I had bought the healthiest companies on this app and rebalanced every
  * year, how would that have done against the market?"
  *
- * This is the feature that actually tests MarketMiner's own premise — that a
+ * This is the feature that actually tests WylthIQ's own premise — that a
  * higher health score means something — rather than just displaying one.
  * Everything that decides the basket runs through `buildHealthReport`
  * unmodified, against a fundamentals snapshot containing only what was

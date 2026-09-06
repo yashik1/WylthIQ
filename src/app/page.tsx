@@ -154,7 +154,13 @@ function IndexStrip({
   asOf: Date | string | null;
 }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,190px),1fr))] border-b border-border">
+    /*
+      Bleeds with the hero above it. The rule is on the outer band so it runs
+      the whole width like the hero's does; the cells stay in the column, so
+      the figures line up with everything else on the page.
+    */
+    <div className="full-bleed border-b border-border">
+    <div className="mx-auto grid w-full max-w-[1360px] grid-cols-[repeat(auto-fit,minmax(min(100%,190px),1fr))] px-7">
       {readings.map((r) => (
         <div key={r.symbol} className="border-r border-border px-5 py-[18px] last:border-r-0">
           <p className="eyebrow">{r.label}</p>
@@ -185,6 +191,7 @@ function IndexStrip({
             "not yet ingested"
           )}
         </p>
+      </div>
       </div>
     </div>
   );

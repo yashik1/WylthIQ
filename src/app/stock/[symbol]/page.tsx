@@ -92,12 +92,12 @@ export async function generateMetadata({
     // query-decorated URL is not read as several competing pages.
     alternates: { canonical: `/stock/${encodeURIComponent(upper)}` },
     openGraph: {
-      title: `${title} · MarketMiner`,
+      title: `${title} · WylthIQ`,
       description,
       type: "article",
       url: `/stock/${encodeURIComponent(upper)}`,
     },
-    twitter: { card: "summary_large_image", title: `${title} · MarketMiner`, description },
+    twitter: { card: "summary_large_image", title: `${title} · WylthIQ`, description },
   };
 }
 
@@ -305,7 +305,7 @@ async function StockBody({
               ]
             : []),
           breadcrumbLd([
-            { name: "MarketMiner", path: "/" },
+            { name: "WylthIQ", path: "/" },
             { name: companyName, path: `/stock/${encodeURIComponent(upper)}` },
           ]),
         ]}

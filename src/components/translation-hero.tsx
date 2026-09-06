@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { SearchBox } from "@/components/search-box";
 import { CornerBrackets } from "@/components/ui";
+import { SLOGAN } from "@/lib/brand";
 
 /**
  * The hero shows the product doing its job rather than describing it.
@@ -18,7 +19,7 @@ import { CornerBrackets } from "@/components/ui";
 
 export function TranslationHero() {
   return (
-    <section className="relative overflow-hidden border-b border-border pt-[52px] pb-11">
+    <section className="full-bleed relative overflow-hidden border-b border-border pt-[52px] pb-11">
       {/* A soft wash of the two brand hues behind the fold — the one place
           in the app that reaches for a gradient, so it stays a signature
           rather than becoming wallpaper. Purely decorative. */}
@@ -27,16 +28,22 @@ export function TranslationHero() {
         <div className="absolute -top-24 right-0 size-[360px] rounded-full bg-accent-2/15 blur-[110px]" />
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-12">
+      {/* The band bleeds; its contents do not. This wrapper repeats the
+          column the header and main both use, so the eyebrow below still
+          starts on the same vertical line as the logo above it. */}
+      <div className="mx-auto grid w-full max-w-[1360px] grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-12 px-7">
       <div>
-        <p className="eyebrow">Company filings, in plain English</p>
+        {/* The slogan leads, because it is the one line that says what this
+            is for rather than what it does. The headline under it does the
+            explaining. */}
+        <p className="eyebrow">{SLOGAN}</p>
 
         <h1 className="font-display mt-3.5 max-w-[15ch] text-[3.25rem] leading-[1.02] [text-wrap:pretty]">
           Annual reports are written to be filed, not read.
         </h1>
 
         <p className="mt-4 max-w-[44ch] text-[1.03125rem] leading-relaxed text-muted">
-          MarketMiner reads them for you and answers the five questions that
+          WylthIQ reads them for you and answers the five questions that
           actually matter — in sentences, with a link to every source.
         </p>
 

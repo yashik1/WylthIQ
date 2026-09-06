@@ -37,7 +37,7 @@ async function check(symbol: string, name: string): Promise<Check> {
 
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; MarketMiner/1.0)" },
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; WylthIQ/1.0)" },
     });
 
     if (!res.ok) {

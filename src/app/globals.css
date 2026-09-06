@@ -260,6 +260,37 @@ body {
   background: var(--background);
   color: var(--foreground);
   -webkit-font-smoothing: antialiased;
+  /*
+    Absorbs the few pixels `.full-bleed` overshoots by.
+
+    `clip` rather than `hidden`, and the difference is load-bearing: `hidden`
+    makes this a scroll container, which would break every `position: sticky`
+    in the app against the viewport — the site header and the stock page's
+    section strip both depend on it. `clip` creates no scroll container, and
+    the spec keeps `overflow-y: visible` visible when the other axis is
+    `clip`, so nothing else changes.
+  */
+  overflow-x: clip;
+}
+
+/*
+  A band that runs the full width of the window from inside a centred column.
+
+  The header and footer are laid out at the top level and already span edge to
+  edge. Anything inside `main` is capped at 1360 and inset by its padding, so
+  a section carrying its own background or rule — the hero and the index strip
+  — stopped 40px short on each side and read as a panel floating between two
+  full-width bands rather than as part of them.
+
+  `100vw` counts the scrollbar and the percentage margins do not, so this
+  overshoots by the scrollbar's width; `overflow-x: clip` on the body above is
+  what makes that harmless. Content inside still needs its own centred,
+  padded wrapper to stay in line with everything above and below it.
+*/
+.full-bleed {
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
 }
 
 /* ---------------------------------------------------------------------------
@@ -401,20 +432,6 @@ html {
   border-radius: var(--radius-sm);
 }
 
-/* The hero waveform draws itself once on load — grounded in both "voltage" and
-   the subject's own instrument, the price chart. */
-@keyframes voltage-trace {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-.wave-trace {
-  stroke-dasharray: 1400;
-  stroke-dashoffset: 1400;
-  animation: voltage-trace 2.2s ease-out forwards;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -422,9 +439,5 @@ html {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
-  }
-
-  .wave-trace {
-    stroke-dashoffset: 0;
   }
 }

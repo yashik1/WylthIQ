@@ -120,7 +120,7 @@ export function MarketExpects({
         <p className="text-xs leading-relaxed text-faint">
           Nothing in this section is a figure this company reported about itself. These are
           expectations and positions — what the price implies, what analysts have
-          published, what short sellers are betting, and what large funds held at the last count. MarketMiner reports them; it does not endorse
+          published, what short sellers are betting, and what large funds held at the last count. WylthIQ reports them; it does not endorse
           them, does not forecast prices, and takes no view on whether any of them will turn out
           to be right.
         </p>

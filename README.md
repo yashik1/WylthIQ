@@ -1,8 +1,8 @@
-# MarketMiner
+# WylthIQ
 
 Understand any company's finances without reading a balance sheet.
 
-MarketMiner reads official regulatory filings and answers five questions in plain
+WylthIQ reads official regulatory filings and answers five questions in plain
 English — is it profitable, is it growing, is it drowning in debt, is it cheap, are
 there accounting red flags — and links every figure back to the filing it came from.
 
@@ -97,7 +97,7 @@ ten minutes.
 ## Honest scoring
 
 The models this tool uses were fitted on particular kinds of companies, and applying
-them everywhere produces confident nonsense. MarketMiner would rather show nothing than
+them everywhere produces confident nonsense. WylthIQ would rather show nothing than
 show a wrong number:
 
 - **Altman Z and Beneish M are suppressed for banks and insurers.** Their balance sheets

@@ -8,7 +8,7 @@ import { LocalTime } from "@/components/local-time";
  *
  * The hardest panel in this section to write without crossing the line. Every
  * other site reduces this to one word — "Buy" — and that word is a
- * recommendation. Printed here it would read as MarketMiner's recommendation,
+ * recommendation. Printed here it would read as WylthIQ's recommendation,
  * whoever it is attributed to, because a lone verdict in a page's own typeface
  * is the page speaking.
  *

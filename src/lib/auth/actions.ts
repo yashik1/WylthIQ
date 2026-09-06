@@ -137,7 +137,7 @@ export async function signUp(_prev: ActionResult | null, form: FormData): Promis
       to: email,
       subject: "Someone tried to sign up with your email",
       text:
-        "Somebody just tried to create a MarketMiner account with this address, " +
+        "Somebody just tried to create a WylthIQ account with this address, " +
         "but one already exists.\n\n" +
         "If that was you, sign in instead — or use the forgot-password link if " +
         "you cannot remember it. If it was not you, you can safely ignore this.",
@@ -261,7 +261,7 @@ export async function requestPasswordReset(
 
   await sendEmail({
     to: email,
-    subject: "Reset your MarketMiner password",
+    subject: "Reset your WylthIQ password",
     text:
       `Use this link to set a new password. It expires in an hour.\n\n${link}\n\n` +
       "If you did not ask for this, ignore it — your password has not changed.",
