@@ -19,7 +19,7 @@ import { SLOGAN } from "@/lib/brand";
 
 export function TranslationHero() {
   return (
-    <section className="relative overflow-hidden border-b border-border pt-[52px] pb-11">
+    <section className="full-bleed relative overflow-hidden border-b border-border pt-[52px] pb-11">
       {/* A soft wash of the two brand hues behind the fold — the one place
           in the app that reaches for a gradient, so it stays a signature
           rather than becoming wallpaper. Purely decorative. */}
@@ -28,7 +28,10 @@ export function TranslationHero() {
         <div className="absolute -top-24 right-0 size-[360px] rounded-full bg-accent-2/15 blur-[110px]" />
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-12">
+      {/* The band bleeds; its contents do not. This wrapper repeats the
+          column the header and main both use, so the eyebrow below still
+          starts on the same vertical line as the logo above it. */}
+      <div className="mx-auto grid w-full max-w-[1360px] grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-12 px-7">
       <div>
         {/* The slogan leads, because it is the one line that says what this
             is for rather than what it does. The headline under it does the
