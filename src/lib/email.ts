@@ -56,14 +56,34 @@ export async function sendEmail(opts: {
     });
 
     if (!res.ok) {
-      // The body can name the address it refused; keep it out of the log.
+      /*
+        Said out loud, because otherwise a rejection is invisible.
+
+        Every caller ignores this return value on purpose — the password
+        reset must answer identically whether or not an address is
+        registered, so it cannot report a send failure to the page. That
+        leaves the server log as the only place an operator can learn that
+        nothing was sent, and without this line an unverified sending domain
+        looks exactly like a delivered email from every angle.
+
+        Resend names the actual cause in the body ("The wylthiq.com domain is
+        not verified", and so on), which is the one piece of information
+        worth having here. Only its reason is logged, not the whole body,
+        which echoes the recipient back.
+      */
+      const detail = await res
+        .json()
+        .then((body: { message?: string; name?: string }) => body?.message ?? body?.name ?? "")
+        .catch(() => "");
+      console.error(
+        `[email] Provider refused the send: HTTP ${res.status}${detail ? ` — ${detail}` : ""}`,
+      );
       return { delivered: false, reason: `provider returned HTTP ${res.status}` };
     }
     return { delivered: true };
   } catch (err) {
-    return {
-      delivered: false,
-      reason: err instanceof Error ? err.message.slice(0, 120) : "send failed",
-    };
+    const message = err instanceof Error ? err.message.slice(0, 120) : "send failed";
+    console.error(`[email] Send failed before the provider answered: ${message}`);
+    return { delivered: false, reason: message };
   }
 }
