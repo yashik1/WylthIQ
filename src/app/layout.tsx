@@ -10,6 +10,7 @@ import { SessionProvider } from "next-auth/react";
 import { auth } from "@/lib/auth";
 import { AccountMenu } from "@/components/auth/account-menu";
 import { NewsletterSubscribeForm } from "@/components/newsletter/subscribe-form";
+import { SLOGAN } from "@/lib/brand";
 import { siteUrl } from "@/lib/site-url";
 
 /**
@@ -224,6 +225,14 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <footer className="mt-10 border-t border-border bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]">
           <div className="mx-auto grid w-full max-w-[1360px] grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-8 px-7 pt-[26px] pb-[34px]">
             <div>
+              {/* Brand above the disclaimer, not instead of it. The line
+                  below stays the loudest thing in this column — it is the one
+                  statement on the page that must never be conditional. */}
+              <p className="font-display text-[0.9375rem] leading-none font-semibold tracking-[-0.01em] text-foreground">
+                Wylth<span className="text-accent">IQ</span>
+              </p>
+              <p className="mt-1.5 mb-3 text-[0.78125rem] text-muted">{SLOGAN}</p>
+
               <p className="font-display text-sm font-semibold text-foreground">
                 Educational information only — not investment advice.
               </p>

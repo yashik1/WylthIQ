@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { Disclaimer, Eyebrow, Frame, OG, OG_CONTENT_TYPE, OG_SIZE } from "@/lib/og/card";
+import { BRAND, SLOGAN } from "@/lib/brand";
 
 export const alt =
   "WylthIQ — company financials in plain English, from regulatory filings";
@@ -12,7 +13,7 @@ export default async function Image() {
     (
       <Frame>
         <div style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between" }}>
-          <Eyebrow>WylthIQ</Eyebrow>
+          <Eyebrow>{`${BRAND} · ${SLOGAN}`}</Eyebrow>
 
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", fontSize: 82, fontWeight: 700, lineHeight: 1.05 }}>

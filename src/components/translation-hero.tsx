@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { SearchBox } from "@/components/search-box";
 import { CornerBrackets } from "@/components/ui";
+import { SLOGAN } from "@/lib/brand";
 
 /**
  * The hero shows the product doing its job rather than describing it.
@@ -29,7 +30,10 @@ export function TranslationHero() {
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-12">
       <div>
-        <p className="eyebrow">Company filings, in plain English</p>
+        {/* The slogan leads, because it is the one line that says what this
+            is for rather than what it does. The headline under it does the
+            explaining. */}
+        <p className="eyebrow">{SLOGAN}</p>
 
         <h1 className="font-display mt-3.5 max-w-[15ch] text-[3.25rem] leading-[1.02] [text-wrap:pretty]">
           Annual reports are written to be filed, not read.
