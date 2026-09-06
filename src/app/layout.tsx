@@ -288,7 +288,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                 <li>
                   <a
                     className={FOOTER_LINK}
-                    href="https://github.com/yashik1/StockFilter"
+                    href="https://github.com/yashik1/WylthIQ"
                     target="_blank"
                     rel="noreferrer noopener"
                   >
