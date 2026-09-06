@@ -669,6 +669,42 @@ export const savedScreeners = pgTable(
   ],
 );
 
+/**
+ * The public newsletter list.
+ *
+ * Deliberately not the `users` table. A subscriber is an email address and
+ * nothing else — no password, no session, and quite possibly no intention of
+ * ever registering — so folding them into accounts would mean rows that
+ * cannot sign in polluting every query that means "a person with an account",
+ * and an unsubscribe becoming indistinguishable from a deletion. Somebody can
+ * be on both lists at once, which is the point: the digest is personalised to
+ * companies an account holder saved, and this one is not personalised at all.
+ *
+ * `confirmedAt` null means the address was submitted but never confirmed —
+ * double opt-in, so a typo or a malicious submission of somebody else's
+ * address never becomes a subscription. Only confirmed rows are ever sent to.
+ *
+ * `unsubscribedAt` rather than deleting the row: a deleted address can be
+ * resubscribed by whoever submitted it the first time, which is exactly the
+ * loop an unsubscribe is meant to end.
+ */
+export const newsletterSubscribers = pgTable("newsletter_subscribers", {
+  id: serial("id").primaryKey(),
+  /** Stored lowercased. Normalised by the action, as `users.email` is. */
+  email: text("email").notNull().unique(),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
+  /**
+   * When a confirmation was last sent, which is the resend cooldown.
+   *
+   * Without it this form is an email cannon: submit somebody else's address
+   * on a loop and they receive one confirmation per submission. With it they
+   * receive at most one an hour however hard anybody leans on it.
+   */
+  confirmSentAt: timestamp("confirm_sent_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type Company = typeof companies.$inferSelect;
 export type Score = typeof scores.$inferSelect;
 export type Financial = typeof financials.$inferSelect;
@@ -681,3 +717,4 @@ export type TradeRow = typeof trades.$inferSelect;
 export type InstitutionalHolding = typeof institutionalHoldings.$inferSelect;
 export type CusipSymbol = typeof cusipSymbols.$inferSelect;
 export type SavedScreener = typeof savedScreeners.$inferSelect;
+export type NewsletterSubscriber = typeof newsletterSubscribers.$inferSelect;

@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { SessionProvider } from "next-auth/react";
 import { auth } from "@/lib/auth";
 import { AccountMenu } from "@/components/auth/account-menu";
+import { NewsletterSubscribeForm } from "@/components/newsletter/subscribe-form";
 import { siteUrl } from "@/lib/site-url";
 
 /**
@@ -233,6 +234,21 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                 Always check the linked source filings and speak to a licensed adviser
                 before making financial decisions.
               </p>
+            </div>
+
+            {/*
+              The newsletter capture, in the footer so it is on every page
+              without interrupting any of them. Its own column rather than
+              stacked under the disclaimer: the disclaimer is the one thing on
+              this page that must never read as an aside to something else.
+            */}
+            <div>
+              <p className="eyebrow mb-2">Weekly newsletter</p>
+              <p className="max-w-[36ch] text-[0.78125rem] leading-relaxed text-muted">
+                What the companies we score actually filed that week — from their SEC
+                filings. No prices, no tips, one email.
+              </p>
+              <NewsletterSubscribeForm />
             </div>
 
             <div>
