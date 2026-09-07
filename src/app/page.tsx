@@ -158,11 +158,19 @@ function IndexStrip({
       Bleeds with the hero above it. The rule is on the outer band so it runs
       the whole width like the hero's does; the cells stay in the column, so
       the figures line up with everything else on the page.
+
+      Which they did not, quite. The cells carry their own `px` for the space
+      either side of the rules between them, and that sat on top of the
+      wrapper gutter — so the first label started 20px right of the hero above
+      it and every card below. The wrapper gutter is now the page gutter
+      *minus* the cell padding, so the two compose to the same 16px on a phone
+      and 28px on a desktop that everything else on the page uses, while the
+      rules between cells keep their air.
     */
     <div className="full-bleed border-b border-border">
-    <div className="mx-auto grid w-full max-w-[1360px] grid-cols-[repeat(auto-fit,minmax(min(100%,190px),1fr))] px-7">
+    <div className="mx-auto grid w-full max-w-[var(--content-max)] grid-cols-[repeat(auto-fit,minmax(min(100%,190px),1fr))] px-0 sm:px-2">
       {readings.map((r) => (
-        <div key={r.symbol} className="border-r border-border px-5 py-[18px] last:border-r-0">
+        <div key={r.symbol} className="border-r border-border px-4 py-[18px] last:border-r-0 sm:px-5">
           <p className="eyebrow">{r.label}</p>
           <p className="display mt-1.5 text-[1.625rem]">
             {r.value == null ? "—" : r.format === "rate" ? `${num(r.value, 3)}%` : num(r.value, 2)}
@@ -177,7 +185,7 @@ function IndexStrip({
         </div>
       ))}
 
-      <div className="px-5 py-[18px]">
+      <div className="px-4 py-[18px] sm:px-5">
         <p className="eyebrow">Companies scored</p>
         <p className="display mt-1.5 text-[1.625rem]">
           {universeCount == null ? "—" : num(universeCount, 0)}

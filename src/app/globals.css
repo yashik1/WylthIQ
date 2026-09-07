@@ -630,6 +630,27 @@ body {
   */
   --sidebar-w: 0px;
   --header-h: 57px;
+
+  /*
+    How wide the content is allowed to get.
+
+    Four places have to agree on this — `main`, the footer's own row, and the
+    inner wrappers of the two full-bleed bands on the dashboard, which line
+    their contents up with `main` by hand. It was the literal 1360px in all
+    four, which is three copies too many of a number that has to match.
+
+    1700 rather than 1360 because the navigation moved into a rail. At 1920px
+    the column beside the rail is 1688px, and a 1360px box centred in it left
+    164px of dead space on each side — content that was neither aligned to
+    the rail nor filling the room it had. At this value the column is filled
+    outright up to roughly a 1930px window, and merely bounded beyond it,
+    which is the point where a table row stops being scannable.
+
+    Running prose does not rely on this: Learn and Terms cap themselves at
+    `max-w-3xl`, Account at `2xl`, and individual paragraphs carry their own
+    measure.
+  */
+  --content-max: 1700px;
 }
 
 @media (min-width: 1024px) {
@@ -643,18 +664,30 @@ body {
 }
 
 /*
-  The column beside the rail.
+  The column beside the rail, and the thing `.full-bleed` measures itself
+  against.
 
-  `overflow-x: clip` for the reason the body carries it — `.full-bleed`
-  overshoots by the scrollbar's width — but here it also matters that the
-  overshoot on the *left* is clipped at this column's edge rather than the
-  window's, or a bleeding band would paint across the rail beside it.
+  `container-type: inline-size` is what makes that measurement exact. The
+  band used to be sized as `100vw - var(--sidebar-w)`, which counts the
+  scrollbar when the column does not, so every band ran about 15px wide and
+  sat half of that to the left of where it belonged. That was invisible while
+  `main` was centred — the same overshoot cancelled on both sides — and
+  became a 7px misalignment the moment `main` started filling the column,
+  with the hero's first line sitting left of every card beneath it. `100cqw`
+  is the column's own inline size, so there is nothing to cancel.
 
-  `clip` and not `hidden`: hidden would make this a scroll container and
-  break the stock page's sticky section strip, which lives inside it.
+  Safe here specifically because nothing inside this column is positioned
+  `fixed`: the containment this establishes would otherwise become their
+  containing block. The charts' absolute positioning is scoped to their own
+  `relative` parents and is unaffected, and sticky resolves against the
+  scrollport rather than a containment box, so both sticky navs still work.
+
+  `overflow-x: clip` stays as the backstop, and `clip` not `hidden`: hidden
+  would make this a scroll container and break those same sticky navs.
 */
 .content-column {
   min-width: 0;
+  container-type: inline-size;
   overflow-x: clip;
 }
 
@@ -676,27 +709,26 @@ body {
   A band that runs the full width of the window from inside a centred column.
 
   The header and footer are laid out at the top level and already span edge to
-  edge. Anything inside `main` is capped at 1360 and inset by its padding, so
+  edge. Anything inside `main` is capped at `--content-max` and inset by its
+  padding, so
   a section carrying its own background or rule — the hero and the index strip
   — stopped 40px short on each side and read as a panel floating between two
   full-width bands rather than as part of them.
 
-  "Full width" means the column beside the navigation rail, not the window.
-  Measuring against `100vw` was right while the nav was a bar across the top;
-  with a rail down the side it made every band 232px too wide and slid the
-  overflow underneath it. Subtracting `--sidebar-w` — which is 0px below
-  `lg`, where there is no rail — keeps one expression correct at every width.
+  "Full width" means the column beside the navigation rail, not the window —
+  and exactly the column, which is why this is measured in `cqw` against the
+  container established on `.content-column` rather than in `vw` against the
+  viewport. A viewport measurement counts the scrollbar and a column does
+  not, and that difference is a real misalignment rather than a rounding
+  one: it put the hero's first line 7px left of every card below it.
 
-  `100vw` counts the scrollbar and the percentage margins do not, so this
-  still overshoots by the scrollbar's width; `overflow-x: clip` on
-  `.content-column` is what makes that harmless. Content inside still needs
-  its own centred, padded wrapper to stay in line with everything above and
-  below it.
+  Content inside still needs its own centred, padded wrapper carrying
+  `--content-max`, to stay in line with everything above and below it.
 */
 .full-bleed {
-  width: calc(100vw - var(--sidebar-w));
-  margin-left: calc(50% - (100vw - var(--sidebar-w)) / 2);
-  margin-right: calc(50% - (100vw - var(--sidebar-w)) / 2);
+  width: 100cqw;
+  margin-left: calc(50% - 50cqw);
+  margin-right: calc(50% - 50cqw);
 }
 
 /* ---------------------------------------------------------------------------

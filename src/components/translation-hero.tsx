@@ -31,7 +31,7 @@ export function TranslationHero() {
       {/* The band bleeds; its contents do not. This wrapper repeats the
           column the header and main both use, so the eyebrow below still
           starts on the same vertical line as the logo above it. */}
-      <div className="mx-auto grid w-full max-w-[1360px] grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-12 px-7">
+      <div className="mx-auto grid w-full max-w-[var(--content-max)] grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-12 px-4 sm:px-7">
       <div>
         {/* The slogan leads, because it is the one line that says what this
             is for rather than what it does. The headline under it does the

@@ -258,7 +258,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             the window's, so a bleeding band cannot paint across the rail.
           */}
           <div className="content-column flex flex-1 flex-col">
-            <main className="mx-auto w-full max-w-[1360px] flex-1 px-4 py-[var(--main-pad-y)] sm:px-7">
+            <main className="mx-auto w-full max-w-[var(--content-max)] flex-1 px-4 py-[var(--main-pad-y)] sm:px-7">
               {children}
             </main>
 
@@ -272,7 +272,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           what let them read as an afterthought before.
         */}
         <footer className="mt-10 border-t border-border bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]">
-          <div className="mx-auto grid w-full max-w-[1360px] grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-8 px-7 pt-[26px] pb-[34px]">
+          <div className="mx-auto grid w-full max-w-[var(--content-max)] grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-8 px-4 pt-[26px] pb-[34px] sm:px-7">
             <div>
               {/* Brand above the disclaimer, not instead of it. The line
                   below stays the loudest thing in this column — it is the one
