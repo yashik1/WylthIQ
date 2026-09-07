@@ -12,7 +12,7 @@ import type { Playbook } from "@/lib/db/schema";
 import { cn } from "@/lib/utils";
 
 const FIELD =
-  "mt-1 w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent";
+  "mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent";
 const LABEL = "text-xs text-muted";
 
 function Feedback({ state }: { state: TradeResult | null }) {
@@ -43,7 +43,7 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
 
   return (
     <form action={action} className="space-y-4 p-5">
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <div>
           <label htmlFor="t-symbol" className={LABEL}>Symbol</label>
           <input id="t-symbol" name="symbol" required maxLength={20} placeholder="AAPL"
@@ -72,7 +72,7 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-3 border-t border-border pt-4">
+      <div className="grid grid-cols-1 gap-3 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-5">
         <div>
           <label htmlFor="t-stop" className={LABEL}>Stop</label>
           <input id="t-stop" name="stopPrice" type="number" step="any" min="0"
@@ -88,7 +88,7 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
           <input id="t-fees" name="fees" type="number" step="any" min="0"
             placeholder="0" className={FIELD} />
         </div>
-        <div className="sm:col-span-2">
+        <div className="lg:col-span-2">
           <label htmlFor="t-playbook" className={LABEL}>Strategy</label>
           <select id="t-playbook" name="playbookId" className={FIELD} defaultValue="">
             <option value="">No strategy</option>
@@ -115,7 +115,7 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
         </label>
 
         {closing && (
-          <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] gap-3">
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div>
               <label htmlFor="t-exit" className={LABEL}>Exit price</label>
               <input id="t-exit" name="exitPrice" type="number" step="any" min="0"
@@ -125,7 +125,7 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
               <label htmlFor="t-closed" className={LABEL}>Closed</label>
               <input id="t-closed" name="closedAt" type="date" defaultValue={today} className={FIELD} />
             </div>
-            <div>
+            <div className="lg:col-span-3">
               <label htmlFor="t-followed" className={LABEL}>Did you follow your rules?</label>
               <select id="t-followed" name="followedRules" className={FIELD} defaultValue="">
                 <option value="">Not saying</option>
@@ -146,7 +146,7 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
 
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" disabled={pending}
-          className="border border-accent bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-opacity hover:opacity-90 disabled:opacity-60">
+          className="rounded-lg border border-transparent bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-opacity hover:opacity-90 disabled:opacity-60">
           {pending ? "Saving…" : "Log trade"}
         </button>
         <Feedback state={state} />
@@ -164,7 +164,7 @@ export function CloseTradeForm({ id }: { id: number }) {
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)}
-        className="border border-border px-2.5 py-1 text-xs font-medium transition-colors hover:border-accent hover:text-accent">
+        className="rounded-lg border border-border px-2.5 py-1 text-xs font-medium transition-colors hover:border-accent hover:text-accent">
         Close
       </button>
     );
@@ -176,24 +176,24 @@ export function CloseTradeForm({ id }: { id: number }) {
       <div>
         <label htmlFor={`x-${id}`} className="text-[0.6875rem] text-muted">Exit</label>
         <input id={`x-${id}`} name="exitPrice" required type="number" step="any" min="0"
-          className="mt-0.5 w-24 border border-border bg-surface px-2 py-1 text-xs" />
+          className="tnum mt-0.5 w-24 rounded-lg border border-border bg-surface px-2 py-1 text-xs" />
       </div>
       <div>
         <label htmlFor={`d-${id}`} className="text-[0.6875rem] text-muted">On</label>
         <input id={`d-${id}`} name="closedAt" type="date" defaultValue={today}
-          className="mt-0.5 border border-border bg-surface px-2 py-1 text-xs" />
+          className="mt-0.5 rounded-lg border border-border bg-surface px-2 py-1 text-xs" />
       </div>
       <div>
         <label htmlFor={`r-${id}`} className="text-[0.6875rem] text-muted">Rules?</label>
         <select id={`r-${id}`} name="followedRules" defaultValue=""
-          className="mt-0.5 border border-border bg-surface px-2 py-1 text-xs">
+          className="mt-0.5 rounded-lg border border-border bg-surface px-2 py-1 text-xs">
           <option value="">—</option>
           <option value="yes">Kept</option>
           <option value="no">Broke</option>
         </select>
       </div>
       <button type="submit" disabled={pending}
-        className="border border-accent bg-accent px-2.5 py-1 text-xs font-medium text-accent-fg disabled:opacity-60">
+        className="rounded-lg border border-transparent bg-accent px-2.5 py-1 text-xs font-medium text-accent-fg disabled:opacity-60">
         {pending ? "…" : "Save"}
       </button>
       <button type="button" onClick={() => setOpen(false)}
@@ -250,7 +250,7 @@ export function NewPlaybookForm() {
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" disabled={pending}
-          className="border border-border px-4 py-2 text-sm font-medium transition-colors hover:border-accent hover:text-accent disabled:opacity-60">
+          className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:border-accent hover:text-accent disabled:opacity-60">
           {pending ? "Saving…" : "Add strategy"}
         </button>
         <Feedback state={state} />

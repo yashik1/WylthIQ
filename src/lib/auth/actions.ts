@@ -254,7 +254,28 @@ export async function requestPasswordReset(
           "Ask whoever runs it to set a new password for you directly.",
       };
 
-  if (!EMAIL_SHAPE.test(email) || !isDatabaseConfigured()) return answer;
+  /*
+    Why this function says so little, out loud, in the server log.
+
+    Every branch below returns the same sentence to the page on purpose, so
+    a visitor cannot learn who is registered. The cost is that an operator
+    cannot tell a working reset from a broken one either: three of these
+    exits send nothing and, until now, left no trace at all — so "I never got
+    the email" and "that address has no account" and "you have asked three
+    times in fifteen minutes" were the same silence.
+
+    The address is deliberately not logged. Which path was taken is what an
+    operator needs; who asked is not, and a reset log full of email addresses
+    is a small breach waiting for a log viewer.
+  */
+  if (!EMAIL_SHAPE.test(email)) {
+    console.warn("[reset] Rejected: the submitted address is not a valid email.");
+    return answer;
+  }
+  if (!isDatabaseConfigured()) {
+    console.warn("[reset] Rejected: no DATABASE_URL, so no account can be looked up.");
+    return answer;
+  }
 
   /*
     Rate limited, and still answering identically when it trips.
@@ -265,7 +286,13 @@ export async function requestPasswordReset(
     produce a different reply afterwards. So the limit protects the mail
     sender without ever changing what the page says.
   */
-  if (await actionRateLimited("passwordReset")) return answer;
+  if (await actionRateLimited("passwordReset")) {
+    console.warn(
+      "[reset] Refused: rate limit reached (3 requests per 15 minutes from one address). " +
+        "Nothing was sent, and the page still answered as though it had been.",
+    );
+    return answer;
+  }
 
   const db = getDb();
   const [user] = await db
@@ -273,7 +300,13 @@ export async function requestPasswordReset(
     .from(users)
     .where(eq(users.email, email))
     .limit(1);
-  if (!user) return answer;
+  if (!user) {
+    console.warn(
+      "[reset] Nothing sent: no account exists for the address requested. " +
+        "The page answered as though one did, which is intended.",
+    );
+    return answer;
+  }
 
   const token = randomBytes(32).toString("base64url");
   await db.insert(passwordResetTokens).values({

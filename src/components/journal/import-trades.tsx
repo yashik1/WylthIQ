@@ -108,7 +108,7 @@ export function ImportTrades() {
     <div className="space-y-4 p-5">
       <div className="flex flex-wrap items-center gap-3">
         <label
-          className="cursor-pointer border border-border px-4 py-2 text-sm font-medium transition-colors hover:border-accent hover:text-accent"
+          className="cursor-pointer rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:border-accent hover:text-accent"
           htmlFor="trade-import"
         >
           Choose a file
@@ -313,7 +313,7 @@ function MappingStep({
           type="button"
           disabled={!ready || pending}
           onClick={() => onConfirm(preview)}
-          className="border border-accent bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="rounded-lg border border-transparent bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {pending
             ? "Importing…"

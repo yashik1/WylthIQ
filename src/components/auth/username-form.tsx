@@ -46,7 +46,7 @@ export function UsernameForm({ current }: { current: string }) {
           autoComplete="username"
           maxLength={30}
           placeholder="Not set"
-          className="mt-1 w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent"
+          className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent"
         />
         <p className="mt-1 text-xs text-faint">
           Letters, numbers, dots, dashes and underscores — no spaces. Leave it empty
@@ -58,7 +58,7 @@ export function UsernameForm({ current }: { current: string }) {
         <button
           type="submit"
           disabled={pending}
-          className="border border-border px-4 py-2 text-sm font-medium transition-colors hover:border-accent hover:text-accent disabled:opacity-60"
+          className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:border-accent hover:text-accent disabled:opacity-60"
         >
           {pending ? "Saving…" : "Save username"}
         </button>
@@ -80,7 +80,7 @@ export function UsernameForm({ current }: { current: string }) {
               <button
                 type="button"
                 onClick={() => applySuggestion(suggestion)}
-                className="border border-border px-2.5 py-1 text-xs font-medium transition-colors hover:border-accent hover:text-accent"
+                className="rounded-lg border border-border px-2.5 py-1 text-xs font-medium transition-colors hover:border-accent hover:text-accent"
               >
                 {suggestion}
               </button>
