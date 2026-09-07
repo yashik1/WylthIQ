@@ -67,7 +67,7 @@ export default async function JournalPage() {
   const names = new Map(playbooks.map((p) => [p.id, p.name]));
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-5">
+    <div className="w-full space-y-5">
       <PageHeader eyebrow="Your record" title="Trade journal">
         <p>
           What you traded, why you thought it was a good idea, and what it actually
