@@ -617,6 +617,45 @@ body {
 */
 :root {
   --main-pad-y: 2rem;
+
+  /*
+    The shell's own metrics.
+
+    `--sidebar-w` is zero below `lg`, where the rail is replaced by the
+    header's menu button — which is what lets `.full-bleed` below use one
+    expression at every width instead of branching. `--header-h` is the top
+    bar's real height and is what the rail sticks beneath; it is a constant
+    because that bar is a single row at every width, unlike the wrapping
+    header it replaced.
+  */
+  --sidebar-w: 0px;
+  --header-h: 57px;
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --sidebar-w: 232px;
+  }
+
+  :root[data-sidebar="collapsed"] {
+    --sidebar-w: 68px;
+  }
+}
+
+/*
+  The column beside the rail.
+
+  `overflow-x: clip` for the reason the body carries it — `.full-bleed`
+  overshoots by the scrollbar's width — but here it also matters that the
+  overshoot on the *left* is clipped at this column's edge rather than the
+  window's, or a bleeding band would paint across the rail beside it.
+
+  `clip` and not `hidden`: hidden would make this a scroll container and
+  break the stock page's sticky section strip, which lives inside it.
+*/
+.content-column {
+  min-width: 0;
+  overflow-x: clip;
 }
 
 /*
@@ -642,15 +681,22 @@ body {
   — stopped 40px short on each side and read as a panel floating between two
   full-width bands rather than as part of them.
 
+  "Full width" means the column beside the navigation rail, not the window.
+  Measuring against `100vw` was right while the nav was a bar across the top;
+  with a rail down the side it made every band 232px too wide and slid the
+  overflow underneath it. Subtracting `--sidebar-w` — which is 0px below
+  `lg`, where there is no rail — keeps one expression correct at every width.
+
   `100vw` counts the scrollbar and the percentage margins do not, so this
-  overshoots by the scrollbar's width; `overflow-x: clip` on the body above is
-  what makes that harmless. Content inside still needs its own centred,
-  padded wrapper to stay in line with everything above and below it.
+  still overshoots by the scrollbar's width; `overflow-x: clip` on
+  `.content-column` is what makes that harmless. Content inside still needs
+  its own centred, padded wrapper to stay in line with everything above and
+  below it.
 */
 .full-bleed {
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  margin-right: calc(50% - 50vw);
+  width: calc(100vw - var(--sidebar-w));
+  margin-left: calc(50% - (100vw - var(--sidebar-w)) / 2);
+  margin-right: calc(50% - (100vw - var(--sidebar-w)) / 2);
 }
 
 /* ---------------------------------------------------------------------------

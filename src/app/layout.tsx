@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
+import { CircleHelp } from "lucide-react";
 import { Barlow, Barlow_Condensed } from "next/font/google";
 import "./globals.css";
 import { WylthMark } from "@/components/logo";
-import { MobileNav, NavTabs } from "@/components/nav-tabs";
+import { MobileNav, Sidebar } from "@/components/sidebar";
 import { SearchBox } from "@/components/search-box";
 import { ThemePicker } from "@/components/theme-picker";
 import { SessionProvider } from "next-auth/react";
@@ -127,6 +128,9 @@ try {
   var t = localStorage.getItem('theme');
   var ids = ['light','dark','midnight','nature','sunset','minimal','contrast'];
   if (ids.indexOf(t) !== -1) document.documentElement.dataset.theme = t;
+  if (localStorage.getItem('sidebar') === 'collapsed') {
+    document.documentElement.dataset.sidebar = 'collapsed';
+  }
 } catch (e) {}
 `;
 
@@ -171,64 +175,92 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col font-sans">
         <SessionProvider session={session}>
         {/*
-          Three explicit columns rather than a wrapping flex row.
+          One row, at every width.
 
-          The old header let a fixed-width right-hand group sit in a flex-wrap
-          row, so below roughly 1050px it overflowed and the whole document
-          scrolled sideways. `minmax(0, 1fr)` on the middle column is the part
-          that matters: a bare `1fr` is `minmax(auto, 1fr)`, which refuses to
-          shrink below its content and pushes the overflow outward instead.
-
-          The right-hand band is its own grid with every control the same
-          height, so search, account and theme read as one ruled row rather
-          than three objects of different sizes that happen to be adjacent.
-        */}
-        {/*
-          The id is load-bearing, not decorative: the stock page's section
-          strip measures this element's real rendered height at runtime so it
-          can sit directly below it. That height is not a constant — the third
-          column force-wraps onto its own row below `lg`, so this header is
-          taller on a phone than on a desktop, and a hardcoded offset for the
-          strip was wrong on exactly the breakpoint where it wraps.
+          The id is load-bearing rather than decorative: the stock page's
+          section strip measures this element's real rendered height at
+          runtime so it can sit directly below it. That measurement is why
+          this bar must not wrap — it used to force its third column onto a
+          second row below `lg`, and the strip's offset was wrong on exactly
+          that breakpoint. With the navigation moved into the rail there is
+          room for search and actions on one line, so `--header-h` in
+          globals.css can be a constant and the rail can stick beneath it.
         */}
         <header
           id="site-header"
-          className="sticky top-0 z-30 border-b border-border bg-[color-mix(in_srgb,var(--background)_88%,transparent)] shadow-sm backdrop-blur-[10px]"
+          className="sticky top-0 z-40 flex h-[var(--header-h)] items-center gap-3 border-b border-border bg-[color-mix(in_srgb,var(--background)_88%,transparent)] px-4 shadow-sm backdrop-blur-[10px] sm:px-7"
         >
-          <div className="mx-auto grid w-full max-w-[1360px] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-5 gap-y-3 px-7 py-2.5 lg:grid-cols-[auto_minmax(0,1fr)_minmax(180px,320px)] xl:grid-cols-[auto_minmax(0,1fr)_minmax(180px,400px)]">
+          {/* The mark sits over the rail's own column, so the logo and the
+              navigation beneath it share a left edge. */}
+          <Link
+            href="/"
+            className="flex shrink-0 items-center gap-2.5 text-foreground lg:w-[calc(var(--sidebar-w)-1.75rem)]"
+          >
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-accent-bright text-accent-fg shadow-sm">
+              <WylthMark className="size-[18px] text-accent-2-bright" />
+            </span>
+            {/* Hidden rather than removed when the rail is collapsed: the
+                wordmark is the link's accessible name. */}
+            <span className="font-display truncate text-[1.1875rem] leading-none font-semibold tracking-[-0.01em] max-lg:sr-only lg:[[data-sidebar='collapsed']_&]:sr-only">
+              Wylth<span className="text-accent">IQ</span>
+            </span>
+          </Link>
+
+          <MobileNav items={NAV} />
+
+          {/* The search takes the room the seven tabs used to. */}
+          <SearchBox className="min-w-0 flex-1 lg:max-w-[560px]" />
+
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <Link
-              href="/"
-              className="flex shrink-0 items-center gap-2.5 text-foreground"
+              href="/learn"
+              className="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[0.8125rem] font-medium text-muted transition-colors hover:bg-surface-2 hover:text-foreground sm:inline-flex"
             >
-              {/* The mark sits in a filled, rounded tile carrying the gold
-                  spot colour — the one place in the chrome that isn't the
-                  primary indigo, so the mark still reads as a mark. */}
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-accent-bright text-accent-fg shadow-sm">
-                <WylthMark className="size-[18px] text-accent-2-bright" />
-              </span>
-              <span className="font-display text-[1.1875rem] leading-none font-semibold tracking-[-0.01em]">
-                Wylth<span className="text-accent">IQ</span>
-              </span>
+              <CircleHelp aria-hidden className="size-4" strokeWidth={2} />
+              Help
             </Link>
 
-            {/* min-w-0 for the same reason the header's own comment gives for
-                the columns around it: a grid item's default min-width is its
-                content, and without this the mobile panel's own layout could
-                push the track wider than the column meant to hold it. */}
-            <div className="min-w-0 justify-self-start">
-              <NavTabs items={NAV} />
-              <MobileNav items={NAV} />
-            </div>
+            {/*
+              Signed out, the two actions are spelled out rather than hidden
+              behind one "Sign in" link. Signing up is the thing this page is
+              asking for, and a reader cannot choose an action they cannot
+              see. Signed in, the account menu carries both.
+            */}
+            {session?.user?.email ? (
+              <AccountMenu email={session.user.email} name={session.user.name ?? null} />
+            ) : (
+              <>
+                <Link
+                  href="/signin"
+                  className="rounded-lg border border-border px-3 py-1.5 text-[0.8125rem] font-medium text-muted-strong transition-colors hover:border-accent hover:text-accent"
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/signup"
+                  className="hidden rounded-lg bg-accent px-3 py-1.5 text-[0.8125rem] font-medium text-accent-fg transition-opacity hover:opacity-90 sm:inline-block"
+                >
+                  Sign up
+                </Link>
+              </>
+            )}
 
-            <div className="col-span-2 grid grid-cols-[minmax(0,1fr)_auto_34px] items-center gap-2 lg:col-span-1">
-              <SearchBox className="w-full" />
-              <AccountMenu email={session?.user?.email ?? null} name={session?.user?.name ?? null} />
-              <ThemePicker />
-            </div>
+            <ThemePicker />
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1360px] flex-1 px-7 py-[var(--main-pad-y)]">{children}</main>
+        <div className="flex flex-1">
+          <Sidebar items={NAV} />
+
+          {/*
+            `.content-column` is not decoration: it clips the few pixels
+            `.full-bleed` overshoots by, at this column's edge rather than
+            the window's, so a bleeding band cannot paint across the rail.
+          */}
+          <div className="content-column flex flex-1 flex-col">
+            <main className="mx-auto w-full max-w-[1360px] flex-1 px-4 py-[var(--main-pad-y)] sm:px-7">
+              {children}
+            </main>
 
         {/*
           Three columns that collapse on their own.
@@ -316,6 +348,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             </div>
           </div>
         </footer>
+          </div>
+        </div>
         </SessionProvider>
       </body>
     </html>
