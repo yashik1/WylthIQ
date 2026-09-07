@@ -15,6 +15,7 @@ export const metadata: Metadata = {
   title: "Backtest the screener",
   description:
     "What buying this app's healthiest-rated companies and rebalancing every year would have returned.",
+  alternates: { canonical: "/backtest/screener" },
 };
 
 const SUGGESTIONS = [

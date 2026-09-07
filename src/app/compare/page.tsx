@@ -13,6 +13,8 @@ export const metadata: Metadata = {
   title: "Compare stocks and ETFs",
   description:
     "Compare companies and funds side by side — financial health, valuation, growth and performance.",
+  // `?symbols=` makes a fresh URL for every pair anybody has ever compared.
+  alternates: { canonical: "/compare" },
 };
 
 const SUGGESTIONS = [

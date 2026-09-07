@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   title: "Learn — what the numbers actually mean",
   description:
     "Plain-English explanations of the financial terms and scores used across WylthIQ.",
+  alternates: { canonical: "/learn" },
 };
 
 interface Entry {

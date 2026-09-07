@@ -102,14 +102,57 @@ export function faqLd(entries: { question: string; answer: string }[]): JsonLd {
   };
 }
 
+/**
+ * The publisher, as one identified thing.
+ *
+ * This is what a search for the product's own name resolves against. Without
+ * it a crawler reading the home page knows there is a website called WylthIQ
+ * but has nothing to attach the name, the mark and the description to, so the
+ * brand has no entity to rank — which is why a query for the app itself could
+ * return a company page from inside it, or nothing at all.
+ *
+ * `@id` is the load-bearing part rather than decoration: it gives the
+ * organisation a stable identifier that `websiteLd` and every future type can
+ * point at, so the two blocks describe one publisher instead of two unrelated
+ * things that happen to share a name.
+ *
+ * `sameAs` is deliberately absent until there are profiles to name. It exists
+ * to corroborate an entity against places that already know it, and inventing
+ * a link to an account that does not exist is worse than omitting the
+ * property — it is a claim a crawler will check.
+ */
+export function organisationLd(): JsonLd {
+  const base = siteUrl();
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": `${base}/#organisation`,
+    name: "WylthIQ",
+    // The spellings a reader actually types. A brand written as one word gets
+    // searched as two, and a query that never matches the name matches nothing.
+    alternateName: ["Wylth IQ", "Wylth"],
+    url: base,
+    logo: `${base}/icon.svg`,
+    description:
+      "WylthIQ reads company financial filings and explains them in plain English — " +
+      "profitability, growth, debt and valuation, with every figure traced to its source.",
+    slogan: "Understand before you invest.",
+  };
+}
+
 /** The site itself, for the home page. */
 export function websiteLd(): JsonLd {
   const base = siteUrl();
   return {
     "@context": "https://schema.org",
     "@type": "WebSite",
+    "@id": `${base}/#website`,
     name: "WylthIQ",
+    alternateName: ["Wylth IQ", "Wylth"],
     url: base,
+    // Points at the organisation above rather than repeating its fields, which
+    // is what makes the two blocks one entity to a crawler.
+    publisher: { "@id": `${base}/#organisation` },
     description:
       "Understand any company's financial health without reading a balance sheet. " +
       "Plain-English answers, sourced directly from regulatory filings.",

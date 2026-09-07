@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: "Terms of use and privacy",
   description:
     "What WylthIQ is, what it is not, where its data comes from, and what it stores about you.",
+  alternates: { canonical: "/terms" },
 };
 
 /**
