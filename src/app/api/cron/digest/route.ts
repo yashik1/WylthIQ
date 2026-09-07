@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { refuseUnauthorizedCron } from "@/lib/security/cron-auth";
+import { refuseIfRateLimited } from "@/lib/security/guard";
 import { runDigest } from "@/lib/digest/send";
 
 export const dynamic = "force-dynamic";
@@ -17,26 +19,16 @@ export const dynamic = "force-dynamic";
  * of "curl it to see what it does" should not be a mailshot.
  */
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  } else {
-    // Without a secret this endpoint is open to the internet. The other cron
-    // routes tolerate that because the worst case is a wasted API call; here
-    // the worst case is unsolicited mail sent in the operator's name.
-    return NextResponse.json(
-      {
-        error: "CRON_SECRET is not set",
-        message:
-          "The digest sends email, so it refuses to run unauthenticated. Set CRON_SECRET " +
-          "and call this route with an Authorization: Bearer header.",
-      },
-      { status: 503 },
-    );
-  }
+  /*
+    The same fail-closed gate the other two cron routes now use.
+
+    This route argued the case first — an email cannot be recalled, so it
+    refused to run without a secret while the others waved it through. That
+    asymmetry is gone: burning somebody else's API quota turned out to be
+    worth refusing too, so the reasoning moved into one shared helper.
+  */
+  const refusal = refuseUnauthorizedCron(request) ?? refuseIfRateLimited(request, "cron");
+  if (refusal) return refusal;
 
   const params = new URL(request.url).searchParams;
   const send = params.get("send") === "1";

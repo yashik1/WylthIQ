@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { refuseIfRateLimited } from "@/lib/security/guard";
 import { getBarsWithSource } from "@/lib/providers";
 import { eodhd, twelveData } from "@/lib/providers";
 import type { Timeframe } from "@/lib/providers/types";
@@ -22,6 +23,9 @@ const MAX_DAYS: Record<Timeframe, number> = {
 };
 
 export async function GET(request: Request) {
+  const limited = refuseIfRateLimited(request, "marketData");
+  if (limited) return limited;
+
   const params = new URL(request.url).searchParams;
   const symbol = params.get("symbol")?.toUpperCase();
   const timeframe = (params.get("timeframe") ?? "1Day") as Timeframe;

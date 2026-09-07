@@ -15,6 +15,7 @@ import {
 import { siteUrl } from "../site-url";
 import { revalidatePath } from "next/cache";
 import { auth } from "./index";
+import { actionRateLimited } from "../security/guard";
 
 /**
  * Sign-up and password-reset, as server actions.
@@ -98,6 +99,19 @@ export async function signUp(_prev: ActionResult | null, form: FormData): Promis
 
   const problem = describePasswordProblem(password);
   if (problem) return { ok: false, message: problem };
+
+  /*
+    Counted after the shape checks and before the database.
+
+    Placed here so a malformed submission costs nobody their allowance, and so
+    the allowance is spent before any query runs — the point is to make
+    automated account creation expensive, and a limiter that only trips after
+    the work is done has not saved the work.
+  */
+  const wait = await actionRateLimited("auth");
+  if (wait) {
+    return { ok: false, message: `Too many attempts. Try again in ${wait}s.` };
+  }
 
   if (!isDatabaseConfigured()) {
     return { ok: false, message: "Accounts are unavailable on this deployment." };
@@ -242,6 +256,17 @@ export async function requestPasswordReset(
 
   if (!EMAIL_SHAPE.test(email) || !isDatabaseConfigured()) return answer;
 
+  /*
+    Rate limited, and still answering identically when it trips.
+
+    Returning a distinguishable "too many attempts" here would undo the
+    anti-enumeration property the rest of this function is built around: an
+    attacker could spend the allowance deliberately and read which addresses
+    produce a different reply afterwards. So the limit protects the mail
+    sender without ever changing what the page says.
+  */
+  if (await actionRateLimited("passwordReset")) return answer;
+
   const db = getDb();
   const [user] = await db
     .select({ id: users.id })
@@ -304,7 +329,20 @@ export async function resetPassword(
   }
 
   const passwordHash = await hashPassword(password);
-  await db.update(users).set({ passwordHash }).where(eq(users.id, row.userId));
+
+  /*
+    The new password and the session watermark move together.
+
+    Somebody resetting a password may be doing it because another person has
+    their account open right now, so leaving those sessions alive would defeat
+    the reason they came. Sessions here are JWTs with nothing to delete, so
+    the watermark is the equivalent: every token issued before this instant
+    stops being accepted. See the jwt callback in ./index.ts.
+  */
+  await db
+    .update(users)
+    .set({ passwordHash, sessionsValidFrom: new Date() })
+    .where(eq(users.id, row.userId));
 
   // Burned immediately, so the same link cannot set a second password.
   await db

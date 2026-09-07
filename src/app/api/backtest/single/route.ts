@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { refuseIfRateLimited } from "@/lib/security/guard";
 import { runSingleStockBacktest } from "@/lib/backtest/run";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,9 @@ export const dynamic = "force-dynamic";
   answer are the same thing.
 */
 export async function GET(request: Request) {
+  const limited = refuseIfRateLimited(request, "compute");
+  if (limited) return limited;
+
   const params = new URL(request.url).searchParams;
   const symbol = params.get("symbol")?.toUpperCase();
   const startParam = params.get("start");

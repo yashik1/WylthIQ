@@ -19,7 +19,7 @@ export const metadata: Metadata = {
  * would defeat the point of having it.
  */
 export default async function TermsPage() {
-  const updated = "August 2026";
+  const updated = "September 2026";
   const status = providerStatus();
   const universeCount = await getUniverseCount();
 
@@ -177,19 +177,45 @@ export default async function TermsPage() {
 
       <SectionHeading title="Privacy" eyebrow="Section 3" />
       <Card className="divide-y divide-border">
-        <Clause title="There are no accounts">
-          You cannot sign up, and you are not asked for a name, an email address or any
-          other personal detail. Nothing identifying you is collected or stored by this
-          service.
+        <Clause title="You can use this without an account">
+          Company pages, the screener, comparisons, charts and market data all work
+          signed out, and nothing identifying you is collected to use them. An account
+          is optional and unlocks the backtester, the trade journal and a saved list
+          that follows you between devices.
         </Clause>
 
-        <Clause title="What is stored, and where">
-          Your saved companies, your recently viewed list and your light or dark theme
-          preference are kept in your own browser&apos;s local storage. They never leave
-          your device and are not transmitted anywhere. They stay on the device and
-          browser you used, so they will not follow you elsewhere. Clearing your browser
-          data deletes them permanently, and nobody — including the operator of this
-          site — can recover them.
+        <Clause title="What an account stores">
+          Your email address, a bcrypt hash of your password — never the password
+          itself — and a username if you choose one. Alongside it: the companies you
+          save, anything you write in the trade journal, screens you save, and whether
+          you asked for the weekly summary email. All of it is held in this
+          service&apos;s own database and is readable only by your own account.
+        </Clause>
+
+        <Clause title="What stays in your browser">
+          Signed out, your saved companies and recently viewed list live in your
+          browser&apos;s local storage and are never transmitted anywhere. Your light or
+          dark theme preference stays there whether or not you have an account.
+          Clearing your browser data deletes those permanently, and nobody — including
+          the operator of this site — can recover them. Signing in merges a
+          browser-held list into your account, once.
+        </Clause>
+
+        <Clause title="Email">
+          Your address is used to send what you asked for and nothing else: a password
+          reset when you request one, and the weekly summary if you switch it on. The
+          newsletter is separate and needs a confirmation click before anything is
+          sent, so an address submitted by somebody else never becomes a subscription.
+          Every email carries a one-click unsubscribe. There is no marketing list
+          beyond the newsletter, and addresses are never sold or shared.
+        </Clause>
+
+        <Clause title="Deleting your data">
+          Turning off the weekly summary or unsubscribing from the newsletter stops
+          those immediately. Removing a saved company or a journal entry deletes it.
+          For deleting an account and everything attached to it, email the address in
+          the security policy and it will be done by hand — an in-app button for this
+          is not built yet, and saying otherwise would be inaccurate.
         </Clause>
 
         <Clause title="No tracking or advertising">
@@ -201,7 +227,24 @@ export default async function TermsPage() {
           Loading a page causes this service to request data from the providers listed
           above. Those requests are made by the server, not your browser, so those
           providers do not receive your IP address or device details. Standard server
-          logs may record requests for security and debugging.
+          logs may record requests for security and debugging; they do not record
+          passwords, session cookies or authorisation headers.
+        </Clause>
+
+        <Clause title="Who else holds your data">
+          Three companies process it on this service&apos;s behalf. Railway hosts the
+          application and its Postgres database, so anything stored on your account
+          sits there. Resend delivers email, and therefore handles the address any
+          message is sent to. Stripe would handle payment if subscriptions are ever
+          switched on — card details go directly to Stripe and never reach this
+          service. Nothing is sold or shared with anybody else.
+        </Clause>
+
+        <Clause title="No tracking, and no cookie banner">
+          The only cookie this service sets is the one that keeps you signed in, and it
+          exists solely for that. There is no analytics cookie, no advertising
+          identifier and nothing following you between sites, which is why you are not
+          asked to consent to any.
         </Clause>
       </Card>
 

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
+import { refuseIfRateLimited } from "@/lib/security/guard";
 import { sql } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/lib/db";
 import {
@@ -58,8 +60,56 @@ function buildInfo(): Record<string, unknown> {
  * Deliberately exposes no credentials: the connection string is reduced to a
  * host and database name.
  */
-export async function GET() {
+/**
+ * Whether this caller may see the diagnostics.
+ *
+ * The detail below is genuinely useful — it has diagnosed a stale deployment,
+ * an internal-only database hostname and a refused provider key — but it is
+ * also a map of the deployment: the database host, which tables exist, how
+ * many rows they hold, which providers are configured, the running commit and
+ * how long the process has been up. None of that helps an anonymous visitor
+ * and all of it helps somebody deciding what to try.
+ *
+ * So the shape of the answer depends on who is asking. HEALTH_SECRET if it is
+ * set, otherwise CRON_SECRET, so a deployment does not need a second secret to
+ * keep its own diagnostics — but can have one.
+ */
+function isInternalCaller(request: Request): boolean {
+  const secret = process.env.HEALTH_SECRET || process.env.CRON_SECRET;
+  if (!secret) return false;
+
+  const header = Buffer.from(request.headers.get("authorization") ?? "");
+  const expected = Buffer.from(`Bearer ${secret}`);
+  if (header.length !== expected.length) return false;
+  return timingSafeEqual(header, expected);
+}
+
+export async function GET(request: Request) {
   const started = Date.now();
+
+  /*
+    Answered before any work is done, not after.
+
+    The probes below open a database connection, introspect the schema, count
+    two tables and make four live calls to metered price and news providers.
+    Running all of that for an anonymous caller — and then discarding it to
+    return one word — would turn this endpoint into a way to spend somebody
+    else's API quota at one request per hit. So the cheap answer returns
+    first, and nothing expensive runs for a caller who could not read it
+    anyway.
+  */
+  if (!isInternalCaller(request)) {
+    const limited = refuseIfRateLimited(request, "marketData");
+    if (limited) return limited;
+
+    return NextResponse.json(
+      { status: isDatabaseConfigured() ? "ok" : "degraded" },
+      {
+        status: isDatabaseConfigured() ? 200 : 503,
+        headers: { "Cache-Control": "no-store" },
+      },
+    );
+  }
 
   const url = process.env.DATABASE_URL;
   const database: Record<string, unknown> = {
@@ -99,6 +149,7 @@ export async function GET() {
   }
 
   const status = summarize(database);
+  const httpStatus = status.state === "ok" ? 200 : 503;
 
   return NextResponse.json(
     {
@@ -113,10 +164,7 @@ export async function GET() {
       yahooFallback: await yahoo.probe(),
       checkedInMs: Date.now() - started,
     },
-    {
-      status: status.state === "ok" ? 200 : 503,
-      headers: { "Cache-Control": "no-store" },
-    },
+    { status: httpStatus, headers: { "Cache-Control": "no-store" } },
   );
 }
 

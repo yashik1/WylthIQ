@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { refuseIfRateLimited } from "@/lib/security/guard";
 import { getCorporateEvents } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,9 @@ export const dynamic = "force-dynamic";
  * them should cost the annotation and nothing else.
  */
 export async function GET(request: Request) {
+  const limited = refuseIfRateLimited(request, "marketData");
+  if (limited) return limited;
+
   const params = new URL(request.url).searchParams;
   const symbol = params.get("symbol")?.toUpperCase();
   const days = Number(params.get("days") ?? 365);

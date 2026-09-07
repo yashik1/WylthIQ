@@ -6,6 +6,9 @@ import { getDb, isDatabaseConfigured } from "../db";
 import { accounts, sessions, users, verificationTokens } from "../db/schema";
 import { equalizeTiming, verifyPassword } from "./password";
 
+/** How long a token may go unverified against the revocation watermark. */
+const REVOCATION_CHECK_SECONDS = 300;
+
 /**
  * Authentication, on the Postgres this app already has.
  *
@@ -101,8 +104,53 @@ export const { handlers, signIn, signOut, auth } = NextAuth(() => ({
       after they cancelled, so paid access is always read fresh — see
       requireSubscription in lib/billing.
     */
-    jwt({ token, user }) {
+    /*
+      Revocation, without giving up the reason these are JWTs.
+
+      A password reset moves `users.sessionsValidFrom`, and a token issued
+      before that instant must stop working. Checking it means a database read
+      — exactly what this strategy exists to avoid on every request — so the
+      answer is cached on the token itself and rechecked at most once every
+      REVOCATION_CHECK_SECONDS.
+
+      That is a deliberate trade, stated plainly: a stolen session survives a
+      password reset for up to that window rather than being cut instantly.
+      Five minutes of exposure in exchange for keeping auth off the database
+      on the hot path; a shorter window costs more reads, and zero window
+      means database sessions and a query per request.
+    */
+    async jwt({ token, user }) {
       if (user?.id) token.userId = user.id;
+
+      const userId = token.userId as string | undefined;
+      if (!userId) return token;
+
+      const now = Math.floor(Date.now() / 1000);
+      const lastChecked = (token.revocationCheckedAt as number | undefined) ?? 0;
+      if (now - lastChecked < REVOCATION_CHECK_SECONDS) return token;
+
+      try {
+        const [row] = await getDb()
+          .select({ validFrom: users.sessionsValidFrom })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+
+        // Issued before the watermark: retired. Returning null ends the
+        // session, which is what a reset is for.
+        const issuedAt = token.iat as number | undefined;
+        if (row?.validFrom && issuedAt && issuedAt * 1000 < row.validFrom.getTime()) {
+          return null;
+        }
+
+        token.revocationCheckedAt = now;
+      } catch {
+        // A database blip must not sign everybody out. Failing open here is
+        // the right direction: the watermark is a revocation mechanism, not
+        // the thing granting access, and the signature has already been
+        // verified by the time this runs.
+      }
+
       return token;
     },
     session({ session, token }) {

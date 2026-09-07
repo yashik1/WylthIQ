@@ -257,6 +257,16 @@ export const users = pgTable("users", {
    * so the sender checks this rather than trusting that it runs once a week.
    */
   digestLastSentAt: timestamp("digest_last_sent_at", { withTimezone: true }),
+  /**
+   * Tokens issued before this instant are refused.
+   *
+   * Sessions are JWTs, so there are no rows to delete when somebody resets
+   * their password — and a reset is exactly when the sessions that already
+   * exist should stop working, because the person doing it may be trying to
+   * evict somebody else. Moving this watermark retires every token minted
+   * before it. Null means the password has never been reset.
+   */
+  sessionsValidFrom: timestamp("sessions_valid_from", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   /*
@@ -705,6 +715,21 @@ export const newsletterSubscribers = pgTable("newsletter_subscribers", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Stripe events already acted on, so a replay cannot be acted on twice.
+ *
+ * Signature verification proves an event came from Stripe. It does not prove
+ * this is the first delivery — Stripe retries until it gets a 2xx, and a
+ * captured payload can be replayed deliberately. The event id is the primary
+ * key, so writing the row *is* the check: a conflict means it is already
+ * handled.
+ */
+export const stripeEvents = pgTable("stripe_events", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type Company = typeof companies.$inferSelect;
 export type Score = typeof scores.$inferSelect;
 export type Financial = typeof financials.$inferSelect;
@@ -718,3 +743,4 @@ export type InstitutionalHolding = typeof institutionalHoldings.$inferSelect;
 export type CusipSymbol = typeof cusipSymbols.$inferSelect;
 export type SavedScreener = typeof savedScreeners.$inferSelect;
 export type NewsletterSubscriber = typeof newsletterSubscribers.$inferSelect;
+export type StripeEvent = typeof stripeEvents.$inferSelect;

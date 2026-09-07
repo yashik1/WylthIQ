@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { refuseIfRateLimited } from "@/lib/security/guard";
 import { canAccess, getEntitlement } from "@/lib/billing/entitlement";
 import { runScreen, type ScreenFilters } from "@/lib/screener";
 import { csvFilename, screenRowsToCsv } from "@/lib/screener-csv";
@@ -20,6 +21,9 @@ const MAX_ROWS = 1000;
  * screener page itself is driven by its query string.
  */
 export async function GET(request: Request) {
+  const limited = refuseIfRateLimited(request, "compute");
+  if (limited) return limited;
+
   const entitlement = await getEntitlement();
 
   if (!canAccess(entitlement, "CSV_EXPORT")) {

@@ -6,6 +6,7 @@ import { newsletterSubscribers } from "../db/schema";
 import { isEmailConfigured, sendEmail } from "../email";
 import { siteUrl } from "../site-url";
 import { newsletterToken } from "./token";
+import { actionRateLimited } from "../security/guard";
 
 /**
  * Joining and leaving the public newsletter.
@@ -93,6 +94,10 @@ export async function subscribeToNewsletter(
           "This site cannot send email yet, so the confirmation could not be delivered. " +
           "Nothing has been subscribed.",
       };
+
+  // Same reasoning as the password reset: the limit protects the sender, and
+  // trips to the identical answer so it cannot be used to probe the list.
+  if (await actionRateLimited("newsletter")) return answer;
 
   if (!isDatabaseConfigured()) return answer;
 

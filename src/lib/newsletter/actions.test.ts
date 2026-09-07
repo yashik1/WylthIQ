@@ -14,6 +14,7 @@ let existingRow:
   | { confirmedAt: Date | null; unsubscribedAt: Date | null; confirmSentAt: Date }
   | undefined;
 let insertError: unknown = null;
+let rateLimitedSeconds: number | null = null;
 
 const inserted: { email: string }[] = [];
 const updates: Record<string, unknown>[] = [];
@@ -53,6 +54,12 @@ vi.mock("../email", () => ({
 
 vi.mock("../site-url", () => ({ siteUrl: () => "https://wylthiq.test" }));
 
+// Reads request headers, which do not exist outside a request. Stubbed; the
+// tripped path has its own test below.
+vi.mock("../security/guard", () => ({
+  actionRateLimited: async () => rateLimitedSeconds,
+}));
+
 const { subscribeToNewsletter } = await import("./actions");
 
 function form(email: string): FormData {
@@ -70,6 +77,7 @@ beforeEach(() => {
   emailConfigured = true;
   existingRow = undefined;
   insertError = null;
+  rateLimitedSeconds = null;
   inserted.length = 0;
   updates.length = 0;
   sentEmails.length = 0;
@@ -220,5 +228,20 @@ describe("races and outages", () => {
 
     expect(inserted).toHaveLength(0);
     expect(sentEmails).toHaveLength(0);
+  });
+});
+
+describe("rate limiting", () => {
+  it("sends nothing once the limit is hit, and says the same thing anyway", async () => {
+    const ordinary = await subscribeToNewsletter(null, form("first@example.com"));
+    sentEmails.length = 0;
+    inserted.length = 0;
+
+    rateLimitedSeconds = 60;
+    const limited = await subscribeToNewsletter(null, form("second@example.com"));
+
+    expect(limited).toEqual(ordinary);
+    expect(sentEmails).toHaveLength(0);
+    expect(inserted).toHaveLength(0);
   });
 });

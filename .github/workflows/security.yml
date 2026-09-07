@@ -1,0 +1,75 @@
+name: Security
+
+# Runs on every push and pull request, and weekly — the weekly run matters
+# because a dependency does not have to change for an advisory against it to
+# be published. Code that passed on Monday can be vulnerable by Friday without
+# anybody touching it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 7 * * 1"
+
+# Read-only by default; CodeQL asks for what it needs in its own job.
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Dependencies, types, lint, tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Must match the Node that writes package-lock.json. npm 10 cannot
+          # read a lockfile npm 11 produced, which broke every scheduled run
+          # on this repo once already.
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      # Fails the build on high or critical only. Moderate findings in a dev
+      # dependency are not worth blocking a deploy over, and a check that
+      # cries wolf gets switched off.
+      - name: npm audit
+        run: npm audit --audit-level=high --omit=dev
+
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npm test -- --run
+      - run: npm run build
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Whole history, not just this commit: a secret committed and later
+          # removed is still in the history and still compromised.
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+
+      - uses: github/codeql-action/analyze@v3

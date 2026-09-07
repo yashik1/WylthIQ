@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { refuseIfRateLimited } from "@/lib/security/guard";
+import { refuseUnauthorizedCron } from "@/lib/security/cron-auth";
 import { isDatabaseConfigured } from "@/lib/db";
 import { getStaleSymbols, ingestSymbols } from "@/lib/ingest";
 
@@ -16,15 +18,11 @@ export const dynamic = "force-dynamic";
 const DEFAULT_BATCH = 100;
 
 export async function GET(request: Request) {
-  // Reject anything without the shared secret so the endpoint cannot be used
-  // to burn the SEC rate limit from outside.
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  }
+  // Rejected without the shared secret so the endpoint cannot be used to burn
+  // the SEC rate limit from outside — and refused outright when no secret is
+  // configured. See src/lib/security/cron-auth.ts for why that is fail-closed.
+  const refusal = refuseUnauthorizedCron(request) ?? refuseIfRateLimited(request, "cron");
+  if (refusal) return refusal;
 
   if (!isDatabaseConfigured()) {
     return NextResponse.json(

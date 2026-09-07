@@ -36,6 +36,7 @@ let resetTokenRows: {
 let insertUsersError: unknown = null;
 /** Whether the deployment under test has a mail provider. See the reset tests. */
 let emailConfigured = true;
+let rateLimitedSeconds: number | null = null;
 
 const insertedUsers: { email: string; name: string | null; passwordHash: string }[] = [];
 const insertedResetTokens: { userId: string; tokenHash: string; expires: Date }[] = [];
@@ -112,6 +113,16 @@ vi.mock("../site-url", () => ({ siteUrl: () => "https://wylthiq.test" }));
 // file does not close.
 vi.mock("./index", () => ({ auth: async () => null }));
 
+/*
+  The limiter reads request headers, which do not exist outside a request, so
+  it is stubbed rather than exercised here. `rateLimitedSeconds` lets the two
+  tests that care drive the tripped path; everything else runs unlimited,
+  which is the behaviour those tests were written against.
+*/
+vi.mock("../security/guard", () => ({
+  actionRateLimited: async () => rateLimitedSeconds,
+}));
+
 const { signUp, requestPasswordReset, resetPassword } = await import("./actions");
 
 function form(fields: Record<string, string>): FormData {
@@ -127,6 +138,7 @@ beforeEach(() => {
   resetTokenRows = [];
   insertUsersError = null;
   emailConfigured = true;
+  rateLimitedSeconds = null;
   insertedUsers.length = 0;
   insertedResetTokens.length = 0;
   updatedUserPasswords.length = 0;
@@ -390,5 +402,35 @@ describe("resetPassword", () => {
       form({ token: "", password: "a fresh long passphrase" }),
     );
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("rate limiting", () => {
+  it("refuses a sign-up once the limit is hit, before touching the database", async () => {
+    rateLimitedSeconds = 42;
+
+    const result = await signUp(null, form({ email: "new@example.com", password: "a long enough passphrase" }));
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/too many/i);
+    expect(insertedUsers).toHaveLength(0);
+  });
+
+  /*
+    The property worth protecting: a tripped limit must not become a way to
+    tell registered addresses from unregistered ones. If this reply differed
+    from the ordinary one, an attacker could spend the allowance on purpose
+    and read the difference.
+  */
+  it("answers a rate-limited reset identically to an ordinary one", async () => {
+    existingUserRows = [{ id: "user-1" }];
+    const ordinary = await requestPasswordReset(null, form({ email: "reader@example.com" }));
+
+    rateLimitedSeconds = 30;
+    const limited = await requestPasswordReset(null, form({ email: "reader@example.com" }));
+
+    expect(limited).toEqual(ordinary);
+    // And nothing was sent on the limited attempt.
+    expect(sentEmails).toHaveLength(1);
   });
 });

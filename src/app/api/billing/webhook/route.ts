@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/lib/db";
-import { subscriptions } from "@/lib/db/schema";
+import { subscriptions, stripeEvents } from "@/lib/db/schema";
 import { getStripe, tierForPriceId } from "@/lib/billing/stripe";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +58,43 @@ export async function POST(request: Request) {
   if (!HANDLED.has(event.type)) {
     // Acknowledged so Stripe stops retrying something we do not act on.
     return NextResponse.json({ received: true, ignored: event.type });
+  }
+
+  /*
+    Claim the event before acting on it.
+
+    Signature verification proved this came from Stripe; it did not prove this
+    is the first delivery. Stripe retries until it gets a 2xx, so a timeout on
+    our side after the work was done produces a second identical, correctly
+    signed delivery — and a captured payload can be replayed on purpose. Either
+    way the effect of processing twice is a subscription granted twice.
+
+    The insert is the check: the event id is the primary key, so a conflict
+    means somebody already handled it and there is nothing to do. Doing this
+    first also means a crash mid-apply does not leave the event unclaimed and
+    replayable, at the cost of a genuinely failed apply not being retried —
+    the right way round, because a duplicate grant is silent and a missing one
+    shows up in support.
+  */
+  try {
+    const claimed = await getDb()
+      .insert(stripeEvents)
+      .values({ id: event.id, type: event.type })
+      .onConflictDoNothing({ target: stripeEvents.id })
+      .returning({ id: stripeEvents.id });
+
+    if (claimed.length === 0) {
+      return NextResponse.json({ received: true, duplicate: event.id });
+    }
+  } catch (err) {
+    // Could not record it, so do not act on it — acting without a record is
+    // exactly the state this table exists to prevent.
+    console.error(
+      "[billing] could not claim event",
+      event.id,
+      err instanceof Error ? err.message : err,
+    );
+    return NextResponse.json({ error: "Could not record the event." }, { status: 500 });
   }
 
   try {

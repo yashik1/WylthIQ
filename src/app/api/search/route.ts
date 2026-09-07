@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { refuseIfRateLimited } from "@/lib/security/guard";
 import { getProvider } from "@/lib/providers";
 import { ASSET_CLASS_LABEL, searchInstruments } from "@/lib/instruments";
 import type { SymbolSearchResult } from "@/lib/providers/types";
@@ -15,6 +16,9 @@ import type { SymbolSearchResult } from "@/lib/providers/types";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const limited = refuseIfRateLimited(request, "search");
+  if (limited) return limited;
+
   const query = new URL(request.url).searchParams.get("q")?.trim() ?? "";
   if (query.length < 1) return NextResponse.json({ results: [] });
 

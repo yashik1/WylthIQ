@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { refuseIfRateLimited } from "@/lib/security/guard";
+import { refuseUnauthorizedCron } from "@/lib/security/cron-auth";
 import { isDatabaseConfigured } from "@/lib/db";
 import { getStaleQuoteSymbols, refreshQuotes } from "@/lib/ingest";
 
@@ -14,10 +16,8 @@ export const dynamic = "force-dynamic";
 const DEFAULT_BATCH = 120;
 
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret && request.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const refusal = refuseUnauthorizedCron(request) ?? refuseIfRateLimited(request, "cron");
+  if (refusal) return refusal;
 
   if (!isDatabaseConfigured()) {
     return NextResponse.json({ error: "DATABASE_URL is not configured" }, { status: 503 });

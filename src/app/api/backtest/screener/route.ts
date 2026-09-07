@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { refuseIfRateLimited } from "@/lib/security/guard";
 import { ACCESS_MODE, getEntitlement, hasAccess } from "@/lib/billing/entitlement";
 import { runFullScreenerBacktest } from "@/lib/backtest/run-screener";
 
@@ -15,6 +16,9 @@ export const maxDuration = 300;
  * scored at each rebalance date using only what was actually filed by then.
  */
 export async function GET(request: Request) {
+  const limited = refuseIfRateLimited(request, "compute");
+  if (limited) return limited;
+
 
   /*
     The API is gated as well as the page.
