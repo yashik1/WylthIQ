@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Card, CardHeader, EmptyState, Metric } from "@/components/ui";
+import { Card, CardHeader, EmptyState, Metric, PageHeader } from "@/components/ui";
 import { EquityChart } from "@/components/backtest/equity-chart";
 import { LocalTime } from "@/components/local-time";
 import {
@@ -100,22 +100,20 @@ export default async function BacktestPage({ searchParams }: PageProps<"/backtes
 
   return (
     <div className="space-y-5">
-      <header className="border-b border-border pt-10 pb-[22px]">
-        <p className="eyebrow mb-2">Textbook parameters, deliberately untuned</p>
-        <h1 className="font-display mb-2 text-[2.75rem] leading-none">Backtest</h1>
-        <p className="max-w-[60ch] text-sm leading-relaxed text-muted">
+      <PageHeader eyebrow="Textbook parameters, deliberately untuned" title="Backtest">
+        <p>
           Pick a stock, crypto, commodity or futures contract, a date and an amount. This
           shows what that money would be worth today, using the actual price history —
           nothing here is a prediction about what happens next.
         </p>
-        <p className="mt-2 max-w-[60ch] text-sm text-muted">
+        <p>
           Want to test the screener itself, not one stock?{" "}
           <Link href="/backtest/screener" className="text-accent underline">
             Backtest buying the healthiest companies
           </Link>
           .
         </p>
-      </header>
+      </PageHeader>
 
       <Card>
         <form method="get" className="grid grid-cols-[minmax(0,1fr)] gap-3 p-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">

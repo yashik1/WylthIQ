@@ -135,6 +135,64 @@ export function CardHeader({
   );
 }
 
+/**
+ * The band at the top of a page: eyebrow, title, standfirst.
+ *
+ * A component rather than a shape everyone copies, because copying is exactly
+ * what happened. Ten pages had hand-written headers that had drifted into two
+ * incompatible treatments — four carried `pt-10 pb-[22px]` and a rule beneath
+ * them, six carried `pt-1` and no rule, so moving between Screener and Compare
+ * shifted the title by nearly 40px and the rule under it appeared and vanished.
+ * The standfirst measure had drifted four ways as well (52ch, 56ch, 60ch,
+ * max-w-2xl, and none at all), and the Terms title was a different size from
+ * every other title in the app.
+ *
+ * The ruled treatment wins because the site header, the dashboard's bands and
+ * the stock page all already use it, so it is the app's established language
+ * rather than a new one.
+ *
+ * `aside` holds anything that belongs opposite the title — Markets puts a
+ * units note there. It only becomes a second column when it exists, so a page
+ * without one is not laid out as a grid with an empty half.
+ */
+export function PageHeader({
+  eyebrow,
+  title,
+  aside,
+  children,
+}: {
+  eyebrow: ReactNode;
+  title: ReactNode;
+  aside?: ReactNode;
+  /** The standfirst. Multiple paragraphs are spaced for you. */
+  children?: ReactNode;
+}) {
+  return (
+    <header
+      className={cn(
+        "border-b border-border pt-10 pb-[22px]",
+        aside &&
+          "grid grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] items-end gap-6",
+      )}
+    >
+      <div className="min-w-0">
+        <p className="eyebrow mb-2">{eyebrow}</p>
+        {/* break-words because one of these titles is a signed-in user's own
+            email address, which has no spaces to wrap at. */}
+        <h1 className="font-display mb-2 text-[2.75rem] leading-none break-words">
+          {title}
+        </h1>
+        {children && (
+          <div className="max-w-[60ch] space-y-2 text-sm leading-relaxed text-muted">
+            {children}
+          </div>
+        )}
+      </div>
+      {aside && <div className="justify-self-start sm:justify-self-end">{aside}</div>}
+    </header>
+  );
+}
+
 /** Section heading used between cards, with an optional trailing action. */
 export function SectionHeading({
   eyebrow,

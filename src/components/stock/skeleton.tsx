@@ -19,10 +19,19 @@ export function StockSkeleton({ label = "Loading company financials…" }: { lab
       {/* Read aloud, so it has to be true — Bitcoin has no financials to load. */}
       <span className="sr-only">{label}</span>
 
-      {/* header */}
-      <header className="pt-1">
-        <Shimmer className="h-9 w-40 max-w-full" />
-        <Shimmer className="mt-2.5 h-4 w-full max-w-64" />
+      {/*
+        Header, sized to the header it stands in for.
+
+        This carried `pt-1` and no rule while the real stock header — and now
+        every other page header, through `PageHeader` — carries `pt-10
+        pb-[22px]` and a bottom rule. A placeholder that does not reserve the
+        space its content will take is worse than none: everything below it
+        jumped roughly 40px the moment the real header arrived.
+      */}
+      <header className="border-b border-border pt-10 pb-[22px]">
+        <Shimmer className="h-3 w-full max-w-32" />
+        <Shimmer className="mt-2 h-9 w-40 max-w-full" />
+        <Shimmer className="mt-2 h-4 w-full max-w-64" />
       </header>
 
       {/* verdict */}

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Badge, Card, CardHeader, EmptyState } from "@/components/ui";
+import { Badge, Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
 import { Paywall } from "@/components/billing/paywall";
 import { NewEntryForm, DeleteEntryButton } from "@/components/journal/journal-form";
 import { ImportTrades } from "@/components/journal/import-trades";
@@ -68,15 +68,13 @@ export default async function JournalPage() {
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-5">
-      <header className="pt-1">
-        <p className="eyebrow">Your record</p>
-        <h1 className="font-display mt-2 text-[2.75rem] leading-none">Trade journal</h1>
-        <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted">
+      <PageHeader eyebrow="Your record" title="Trade journal">
+        <p>
           What you traded, why you thought it was a good idea, and what it actually
           did. Every figure here is computed from prices you enter yourself — nothing
           on this page is fetched from a market data provider.
         </p>
-      </header>
+      </PageHeader>
 
       {!allowed ? (
         <Paywall

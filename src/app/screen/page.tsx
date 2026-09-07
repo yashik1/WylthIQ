@@ -9,7 +9,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { SetupNotice } from "@/components/setup-notice";
-import { Badge, Card, EmptyState, MeterBar, NotReported, RatingBadge } from "@/components/ui";
+import { Badge, Card, EmptyState, MeterBar, NotReported, PageHeader, RatingBadge } from "@/components/ui";
 import { money, multiple, percent, price as fmtPrice, signedPercent } from "@/lib/format";
 import type { Rating } from "@/lib/scoring/types";
 import {
@@ -134,14 +134,12 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
 
   return (
     <div className="space-y-5">
-      <header className="border-b border-border pt-10 pb-[22px]">
-        <p className="eyebrow mb-2">Scores precomputed nightly</p>
-        <h1 className="font-display mb-2 text-[2.75rem] leading-none">Screener</h1>
-        <p className="max-w-[52ch] text-sm leading-relaxed text-muted">
+      <PageHeader eyebrow="Scores precomputed nightly" title="Screener">
+        <p>
           Filters on financial health, not price action. Every column traces back to a
           filing.
         </p>
-      </header>
+      </PageHeader>
 
       {/* Preset screens: the entry point for anyone who does not know which
           ratio they want to filter on. */}

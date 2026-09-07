@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Card, SectionHeading } from "@/components/ui";
+import { Card, PageHeader, SectionHeading } from "@/components/ui";
 import { providerStatus } from "@/lib/providers";
 import { getUniverseCount } from "@/lib/screener";
 import { num } from "@/lib/format";
@@ -25,13 +25,9 @@ export default async function TermsPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <header className="pt-1">
-        <p className="eyebrow">The rules</p>
-        <h1 className="font-display mt-2 text-4xl sm:text-5xl">
-          Terms of use &amp; privacy
-        </h1>
-        <p className="mt-2 text-sm text-muted">Last updated {updated}</p>
-      </header>
+      <PageHeader eyebrow="The rules" title="Terms of use & privacy">
+        <p>Last updated {updated}</p>
+      </PageHeader>
 
       {/* The clause everything else depends on. */}
       <Card className="mt-6 overflow-hidden">

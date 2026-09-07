@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Card, CardHeader, EmptyState, Metric, RatingBadge } from "@/components/ui";
+import { Card, CardHeader, EmptyState, Metric, PageHeader, RatingBadge } from "@/components/ui";
 import { EquityChart } from "@/components/backtest/equity-chart";
 import { LocalTime } from "@/components/local-time";
 import { runFullScreenerBacktest } from "@/lib/backtest/run-screener";
@@ -58,31 +58,27 @@ export default async function ScreenerBacktestPage({
 
   return (
     <div className="space-y-5">
-      <header className="pt-1">
-        <p className="eyebrow">Backtest</p>
-        <h1 className="font-display mt-2 text-[2.75rem] leading-none">
-          What the healthiest returned
-        </h1>
-        <p className="mt-1.5 max-w-2xl text-sm text-muted">
+      <PageHeader eyebrow="Backtest" title="What the healthiest returned">
+        <p>
           Ranks today&apos;s screening universe by health score at each rebalance date, using only
           what was actually filed by then, and buys the top scorers. This is the one test that
           actually checks whether a higher score on this app has meant anything.
         </p>
-        <p className="mt-1.5 max-w-2xl text-sm text-muted">
+        <p>
           To judge this against the market, put the same window into{" "}
           <Link href="/compare?symbols=SPY,QQQ" className="text-accent underline">
             Compare
           </Link>
           {" "}— that is where an index is charted properly, against as many symbols as you like.
         </p>
-        <p className="mt-1.5 max-w-2xl text-sm text-muted">
+        <p>
           Want to test one stock instead?{" "}
           <Link href="/backtest" className="text-accent underline">
             Try the single-stock version
           </Link>
           .
         </p>
-      </header>
+      </PageHeader>
 
       <Card>
         <form method="get" className="grid grid-cols-[minmax(0,1fr)] gap-3 p-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">

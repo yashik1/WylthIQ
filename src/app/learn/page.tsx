@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Card, CardHeader } from "@/components/ui";
+import { Card, CardHeader, PageHeader } from "@/components/ui";
 import { faqLd } from "@/lib/structured-data";
 import { StructuredData } from "@/components/structured-data";
 
@@ -145,14 +145,12 @@ export default function LearnPage() {
         )}
       />
 
-      <header className="pt-1">
-        <p className="eyebrow">Reference</p>
-        <h1 className="font-display mt-2 text-[2.75rem] leading-none">What the numbers mean</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">
+      <PageHeader eyebrow="Reference" title="What the numbers mean">
+        <p>
           Every term WylthIQ uses, explained without assuming you have read a
           balance sheet before. Nothing here is advice — it is just vocabulary.
         </p>
-      </header>
+      </PageHeader>
 
       <Section
         title="The basics"

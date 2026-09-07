@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CompareChart } from "@/components/compare-chart";
-import { Badge, Card, CardHeader, Change, NotReported, RatingBadge } from "@/components/ui";
+import { Badge, Card, CardHeader, Change, NotReported, PageHeader, RatingBadge } from "@/components/ui";
 import { loadComparison, MAX_COMPARE, parseSymbols, type CompareItem } from "@/lib/compare";
 import { money, multiple, percent, price as fmtPrice } from "@/lib/format";
 import { ASSET_CLASS_LABEL } from "@/lib/instruments";
@@ -37,24 +37,32 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
 
   return (
     <div className="space-y-5">
-      <header className="pt-1">
-        <p className="eyebrow">Side by side</p>
-        <h1 className="font-display mt-2 text-[2.75rem] leading-none">Compare</h1>
-        <p className="mt-1.5 text-sm text-muted">
-          Put up to {MAX_COMPARE} companies, funds, commodities or coins next to each other — health, valuation,
-          growth and performance.
+      <PageHeader eyebrow="Side by side" title="Compare">
+        <p>
+          Put up to {MAX_COMPARE} companies, funds, commodities or coins next to each
+          other — health, valuation, growth and performance.
         </p>
-      </header>
+      </PageHeader>
 
       <Card>
-        <form method="get" className="flex flex-wrap items-end gap-3 p-5">
-          {/*
-            Capped rather than left to take the whole row. Four tickers is
-            about thirty characters, and flex-1 alone stretched the field to
-            1099px — a box twenty times longer than anything anyone types into
-            it, with the button marooned at the far end.
-          */}
-          <div className="min-w-0 flex-1 sm:max-w-md">
+        {/*
+          The same grid the backtest form uses: fields take the row, the submit
+          button sits flush against the card's own padding.
+
+          This field used to be capped at `sm:max-w-md`, on the reasoning that
+          four tickers is about thirty characters and a 1099px box for thirty
+          characters is absurd. That is true on its own terms, and it produced
+          something worse: on a 1304px card the controls stopped after 570px
+          and left 734px of empty panel — 56% of a card with nothing in it,
+          while the identically-shaped bar on /backtest ran edge to edge. A
+          field wider than its content reads as a search box; a card mostly
+          empty reads as a layout that broke.
+        */}
+        <form
+          method="get"
+          className="grid grid-cols-[minmax(0,1fr)] gap-3 p-5 sm:grid-cols-[minmax(0,1fr)_auto]"
+        >
+          <div className="min-w-0">
             <label htmlFor="symbols" className="text-xs text-muted">
               Tickers, separated by commas
             </label>
@@ -68,7 +76,7 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
           </div>
           <button
             type="submit"
-            className="rounded-lg border border-transparent bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-opacity hover:opacity-90"
+            className="h-fit self-end rounded-lg border border-transparent bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-opacity hover:opacity-90"
           >
             Compare
           </button>

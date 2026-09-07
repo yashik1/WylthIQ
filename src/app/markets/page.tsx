@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Badge, Card, CardHeader, SectionHeading } from "@/components/ui";
+import { Badge, Card, CardHeader, PageHeader, SectionHeading } from "@/components/ui";
 import { getProvider, getBarsWithSource } from "@/lib/providers";
 import { price, signedPercent } from "@/lib/format";
 import {
@@ -101,20 +101,17 @@ export default async function MarketsPage() {
 
   return (
     <div className="space-y-11">
-      <header className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] items-end gap-6 border-b border-border pt-10 pb-[22px]">
-        <div>
-          <p className="eyebrow">Crypto · metals · energy · agriculture · index futures</p>
-          <h1 className="font-display mt-2 text-[2.75rem] leading-none">Markets</h1>
-          <p className="mt-2 max-w-[56ch] text-sm leading-relaxed text-muted">
-            None of these file accounts, so none of them get a health score. They get the
-            chart, the comparison and the backtest — and this page says so rather than
-            showing an empty panel.
-          </p>
-        </div>
-        <p className="justify-self-start sm:justify-self-end">
-          <Badge>Eleven agricultural contracts quote in US cents (USX)</Badge>
+      <PageHeader
+        eyebrow="Crypto · metals · energy · agriculture · index futures"
+        title="Markets"
+        aside={<Badge>Eleven agricultural contracts quote in US cents (USX)</Badge>}
+      >
+        <p>
+          None of these file accounts, so none of them get a health score. They get the
+          chart, the comparison and the backtest — and this page says so rather than
+          showing an empty panel.
         </p>
-      </header>
+      </PageHeader>
 
       <section>
         <p className="eyebrow">Where things stand</p>

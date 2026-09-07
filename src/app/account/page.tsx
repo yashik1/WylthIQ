@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Card, CardHeader, Metric } from "@/components/ui";
+import { Card, CardHeader, Metric, PageHeader } from "@/components/ui";
 import { BillingButton } from "@/components/billing/subscribe-button";
 import { LocalTime } from "@/components/local-time";
 import { getEntitlement } from "@/lib/billing/entitlement";
@@ -53,15 +53,14 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
         they are in, so the address has to be readable somewhere, and the
         header no longer prints it.
       */}
-      <header className="pt-1">
-        <p className="eyebrow">Account</p>
-        <h1 className="font-display mt-2 text-[2.75rem] leading-none break-words">
-          {session.user.name?.trim() || session.user.email}
-        </h1>
+      <PageHeader
+        eyebrow="Account"
+        title={session.user.name?.trim() || session.user.email}
+      >
         {session.user.name?.trim() && (
-          <p className="mt-1 text-sm break-words text-muted">{session.user.email}</p>
+          <p className="break-words">{session.user.email}</p>
         )}
-      </header>
+      </PageHeader>
 
       {justPaid && !entitlement.subscribed && (
         <p className="rounded-lg border border-border bg-surface-2 px-4 py-2.5 text-xs text-muted-strong">
