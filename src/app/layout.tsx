@@ -84,8 +84,17 @@ export const metadata: Metadata = {
     title: "WylthIQ — Company financials in plain English",
     description: DESCRIPTION,
   },
+  /*
+    `summary_large_image`, not `summary`.
+
+    Every page in the app resolves a 1200x630 card — the root
+    `opengraph-image.tsx` is the fallback and the company pages render their
+    own — and `summary` crops that to a small square thumbnail beside the
+    text. The card was already being generated and paid for on every share;
+    this is the tag that lets it be seen.
+  */
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "WylthIQ — Company financials in plain English",
     description: DESCRIPTION,
   },

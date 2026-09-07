@@ -31,6 +31,9 @@ export const metadata: Metadata = {
     "See what an investment in any stock, crypto or commodity would be worth today, " +
     "how the same holding did over one, three, five and ten years, and how well-known " +
     "trading rules would have done with it.",
+  // One URL per symbol, per date range, per rule — none of them worth indexing
+  // separately, and the form is the same page underneath.
+  alternates: { canonical: "/backtest" },
 };
 
 const SUGGESTIONS = [

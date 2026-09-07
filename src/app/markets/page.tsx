@@ -26,6 +26,7 @@ export const metadata: Metadata = {
   description:
     "Bitcoin, gold, oil, wheat and the index futures — price history and backtesting for " +
     "the markets that file no accounts.",
+  alternates: { canonical: "/markets" },
 };
 
 /**

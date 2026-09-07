@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { TranslationHero } from "@/components/translation-hero";
 import { WatchlistPanel, WatchlistSync } from "@/components/watchlist";
@@ -9,12 +10,27 @@ import { LocalTime } from "@/components/local-time";
 import { money, num, percent, signedPercent } from "@/lib/format";
 import type { Rating } from "@/lib/scoring/types";
 import { getHealthiest, getUniverseCount } from "@/lib/screener";
-import { websiteLd } from "@/lib/structured-data";
+import { organisationLd, websiteLd } from "@/lib/structured-data";
 import { StructuredData } from "@/components/structured-data";
 import { auth } from "@/lib/auth";
 import { listWatchlist } from "@/lib/watchlist/actions";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * The home page keeps the root title and description — it is the page they
+ * were written for — and adds the one thing they cannot inherit.
+ *
+ * The canonical matters more here than anywhere: this deployment answers on
+ * its own domain and on the Railway hostname underneath it, so without this
+ * tag the same home page exists at two addresses and a search engine has to
+ * guess which is the real one. It splits the brand between them when it
+ * guesses wrong. `siteUrl()` resolves to the configured domain whichever
+ * hostname served the request, so both copies now point at the same one.
+ */
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 function healthRating(score: number | null): Rating {
   if (score == null) return "unknown";
@@ -38,7 +54,10 @@ export default async function HomePage() {
 
   return (
     <div>
-      <StructuredData data={websiteLd()} />
+      {/* Both blocks, once, on the one page a crawler treats as the site's
+          front door. The organisation is what a search for the product's own
+          name has to match; the website is what carries the search box. */}
+      <StructuredData data={[organisationLd(), websiteLd()]} />
 
       <TranslationHero />
 

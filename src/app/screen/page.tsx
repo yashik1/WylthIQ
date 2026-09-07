@@ -33,6 +33,14 @@ export const metadata: Metadata = {
   title: "Screener — filter companies by financial health",
   description:
     "Filter hundreds of US and Canadian companies by financial health, valuation, growth and debt.",
+  /*
+    Every combination of filters is a URL, and there are more combinations
+    than there are companies to find with them. Left uncanonicalised a crawler
+    treats each one as a separate page of near-identical content and spends
+    its budget on permutations instead of on the company pages — so all of
+    them are declared to be this one.
+  */
+  alternates: { canonical: "/screen" },
 };
 
 /** One icon per preset. "red-flags" is a warning, not an invitation, so it is
