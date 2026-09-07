@@ -43,7 +43,7 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
 
   return (
     <form action={action} className="space-y-4 p-5">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 @md:grid-cols-2 @4xl:grid-cols-5">
         <div>
           <label htmlFor="t-symbol" className={LABEL}>Symbol</label>
           <input id="t-symbol" name="symbol" required maxLength={20} placeholder="AAPL"
@@ -72,7 +72,7 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 border-t border-border pt-4 @md:grid-cols-2 @4xl:grid-cols-5">
         <div>
           <label htmlFor="t-stop" className={LABEL}>Stop</label>
           <input id="t-stop" name="stopPrice" type="number" step="any" min="0"
@@ -88,7 +88,7 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
           <input id="t-fees" name="fees" type="number" step="any" min="0"
             placeholder="0" className={FIELD} />
         </div>
-        <div className="lg:col-span-2">
+        <div className="@4xl:col-span-2">
           <label htmlFor="t-playbook" className={LABEL}>Strategy</label>
           <select id="t-playbook" name="playbookId" className={FIELD} defaultValue="">
             <option value="">No strategy</option>
@@ -115,7 +115,7 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
         </label>
 
         {closing && (
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-3 grid grid-cols-1 gap-3 @md:grid-cols-2 @4xl:grid-cols-5">
             <div>
               <label htmlFor="t-exit" className={LABEL}>Exit price</label>
               <input id="t-exit" name="exitPrice" type="number" step="any" min="0"
@@ -125,7 +125,7 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
               <label htmlFor="t-closed" className={LABEL}>Closed</label>
               <input id="t-closed" name="closedAt" type="date" defaultValue={today} className={FIELD} />
             </div>
-            <div className="lg:col-span-3">
+            <div className="@4xl:col-span-3">
               <label htmlFor="t-followed" className={LABEL}>Did you follow your rules?</label>
               <select id="t-followed" name="followedRules" className={FIELD} defaultValue="">
                 <option value="">Not saying</option>

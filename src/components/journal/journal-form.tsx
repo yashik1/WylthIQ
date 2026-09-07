@@ -24,7 +24,7 @@ export function NewEntryForm() {
 
   return (
     <form action={action} className="space-y-3 p-5">
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_8rem_9rem]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 @md:grid-cols-2 @3xl:grid-cols-[minmax(0,1fr)_8rem_8rem_9rem]">
         <div>
           <label htmlFor="title" className="text-xs text-muted">
             What happened

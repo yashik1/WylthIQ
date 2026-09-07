@@ -116,7 +116,7 @@ export default async function BacktestPage({ searchParams }: PageProps<"/backtes
       </PageHeader>
 
       <Card>
-        <form method="get" className="grid grid-cols-[minmax(0,1fr)] gap-3 p-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+        <form method="get" className="grid grid-cols-[minmax(0,1fr)] gap-3 p-5 @md:grid-cols-2 @4xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
           <div>
             <label htmlFor="symbol" className="text-xs text-muted">
               Ticker

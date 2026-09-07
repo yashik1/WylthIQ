@@ -60,7 +60,7 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
         */}
         <form
           method="get"
-          className="grid grid-cols-[minmax(0,1fr)] gap-3 p-5 sm:grid-cols-[minmax(0,1fr)_auto]"
+          className="grid grid-cols-[minmax(0,1fr)] gap-3 p-5 @md:grid-cols-[minmax(0,1fr)_auto]"
         >
           <div className="min-w-0">
             <label htmlFor="symbols" className="text-xs text-muted">
