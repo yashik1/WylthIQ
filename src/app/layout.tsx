@@ -5,7 +5,7 @@ import "./globals.css";
 import { WylthMark } from "@/components/logo";
 import { MobileNav, NavTabs } from "@/components/nav-tabs";
 import { SearchBox } from "@/components/search-box";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ThemePicker } from "@/components/theme-picker";
 import { SessionProvider } from "next-auth/react";
 import { auth } from "@/lib/auth";
 import { AccountMenu } from "@/components/auth/account-menu";
@@ -94,22 +94,39 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  // Matches the canvas token in each theme, so the mobile browser chrome does
-  // not sit on a colour the page never uses.
+  /*
+    The starting value for the mobile browser chrome, for the two themes a
+    media query can express. Static metadata cannot name the other five, so the
+    picker rewrites this tag from the ground the stylesheet actually resolved —
+    see `apply()` in theme-picker.tsx. These two are what a reader sees before
+    they have chosen anything, which is exactly when a media query is right.
+  */
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f5f6fb" },
-    { media: "(prefers-color-scheme: dark)", color: "#090a10" },
+    { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0f14" },
   ],
 };
 
 /**
- * Applies the stored theme before first paint. Without this the page renders in
- * the system theme and then snaps to the saved one.
+ * Applies the stored theme before first paint.
+ *
+ * Without this the page renders in the default palette and then snaps to the
+ * saved one. That was a visible blink when there were two themes; across seven
+ * it would be a reader watching their Sunset page load as Light every time.
+ *
+ * The id list is written out rather than imported because this string is
+ * inlined into the document head and runs before any bundle: it cannot see
+ * `@/lib/themes`. `themes.test.ts` compares the two and fails if they diverge,
+ * which is the only reason it is safe to repeat them here.
+ *
+ * `system` is stored but deliberately stamps nothing — the absence of the
+ * attribute is what hands control to the `prefers-color-scheme` block.
  */
 const THEME_SCRIPT = `
 try {
   var t = localStorage.getItem('theme');
-  if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+  var ids = ['light','dark','midnight','nature','sunset','minimal','contrast'];
+  if (ids.indexOf(t) !== -1) document.documentElement.dataset.theme = t;
 } catch (e) {}
 `;
 
@@ -206,7 +223,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             <div className="col-span-2 grid grid-cols-[minmax(0,1fr)_auto_34px] items-center gap-2 lg:col-span-1">
               <SearchBox className="w-full" />
               <AccountMenu email={session?.user?.email ?? null} name={session?.user?.name ?? null} />
-              <ThemeToggle />
+              <ThemePicker />
             </div>
           </div>
         </header>

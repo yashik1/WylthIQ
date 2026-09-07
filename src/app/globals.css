@@ -1,142 +1,143 @@
 @import "tailwindcss";
 
-/*
- * SEAM — a modern reading tool with real depth.
- *
- * Where the previous system drew everything as a flat, square wireframe, this
- * one lifts: white (or near-black) cards on a visibly different canvas, soft
- * elevation instead of hairline-only edges, and a genuine accent — a
- * saturated indigo — carrying real contrast instead of a desaturated steel
- * that measured just 3.7:1. A warm gold, --accent-2, appears sparingly: the
- * mark, the odd highlight — a nod to what "mining" the filings turns up,
- * never load-bearing for text.
- *
- * Light lives on bare :root so it applies with no theme stamp present. Dark is
- * declared twice: under prefers-color-scheme for viewers on "system", and under
- * [data-theme="dark"] so the manual toggle wins in both directions.
- *
- * Token *names* are unchanged from the theme this replaces, so every
- * component keeps working without a find-and-replace.
- */
+/* ===========================================================================
+   THEMES — generated block. Structure is uniform on purpose.
+
+   Seven palettes, each defining the identical set of forty-two tokens. A theme
+   that omitted one would inherit it from the block above, which is how a light
+   border ends up on a dark page; `themes.test.ts` reads this file and fails if
+   any theme's token set differs from the others.
+
+   Light lives on bare :root so it applies with no stamp present at all — no
+   JavaScript, no attribute, still a working page. Dark is declared twice: once
+   for readers whose system asks for it and who have chosen nothing, and once
+   for readers who picked it. That duplication is deliberate; a media query
+   cannot be merged into an attribute selector, and the alternative — having
+   JavaScript stamp a theme before paint in every case — would leave a reader
+   with scripting disabled on the light theme forever.
+
+   Every other theme needs one block, because none of them is a system default.
+
+   The theme blocks are keyed on a bare [data-theme] rather than :root
+   [data-theme] so a palette can also be scoped to a subtree — the picker draws
+   each swatch by nesting an element stamped with that theme id, which is what
+   keeps every colour in this file and stops a swatch advertising a colour the
+   theme no longer uses. They tie with :root on specificity and win on source
+   order, which is why they must stay below it.
+   =========================================================================== */
 
 :root {
-  --background: #f5f6fb;
+  color-scheme: light;
+
+  --background: #f8fafc;
   --surface: #ffffff;
-  --surface-2: #eef0f8;
-  --surface-3: #e1e4f0;
-  --border: color-mix(in srgb, #12131f 12%, transparent);
-  --border-strong: color-mix(in srgb, #12131f 28%, transparent);
-  /* Chart ink. Literal rgba because a canvas strokeStyle is parsed by the
-     canvas, not the cascade — a color-mix() reaching it is a coin toss.
-     Weights follow the drawing convention: the series is the only confident
-     line, the comparison is drawn back, the grid is barely there. */
-  --chart-grid: rgba(18, 19, 31, 0.07);
-  --chart-axis: rgba(18, 19, 31, 0.3);
-  --chart-compare: rgba(18, 19, 31, 0.38);
+  --surface-2: #f1f5f9;
+  --surface-3: #e2e8f0;
+  --border: color-mix(in srgb, #0f172a 12%, transparent);
+  --border-strong: color-mix(in srgb, #0f172a 26%, transparent);
 
-  --foreground: #10111a;
-  /* Three text tiers at roughly 15, 8 and 5.6 to one — each clears AA on the
-     canvas, and they stay far enough apart to read as a hierarchy. */
-  --muted-strong: #3d3f4d;
-  --muted: #5c5f70;
-  --faint: #7b7e8f;
+  --chart-grid: rgba(15, 23, 42, 0.07);
+  --chart-axis: rgba(15, 23, 42, 0.32);
+  --chart-compare: rgba(15, 23, 42, 0.38);
 
-  --accent: #3c4bd6;
-  --accent-hover: #2c39ad;
+  --foreground: #0f172a;
+  --muted-strong: #334155;
+  --muted: #55637a;
+  --faint: #78849a;
+
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
   --accent-fg: #ffffff;
-  --accent-soft: #e7e9fc;
-  /* Chrome only — never body text. See the note above. */
-  --accent-bright: #5a68ea;
-  /* The gold: the mark, a spot highlight, the hero. Never text on its own. */
-  --accent-2: #c8850f;
-  --accent-2-bright: #e6a417;
+  --accent-soft: #dbeafe;
+  --accent-bright: #3b82f6;
+  --accent-2: #b45309;
+  --accent-2-bright: #d97706;
 
-  /* Status stays off the accent hue entirely: a rising price and a brand
-     colour must never be the same signal. Every rating carries its word as
-     well as its colour, so none of this is load-bearing on its own. */
-  --good: #1c8657;
-  --good-soft: #dcf3e7;
-  --good-fg: #146341;
-  --fair: #5c5f70;
-  --fair-soft: #eef0f8;
-  --fair-fg: #3d3f4d;
-  --poor: #d33a52;
-  --poor-soft: #fbe1e6;
-  --poor-fg: #a3223a;
-  --unknown: #7b7e8f;
-  --unknown-soft: #eef0f8;
-  --unknown-fg: #5c5f70;
+  --good: #047857;
+  --good-soft: #d1fae5;
+  --good-fg: #065f46;
+  --fair: #55637a;
+  --fair-soft: #f1f5f9;
+  --fair-fg: #334155;
+  --poor: #dc2626;
+  --poor-soft: #fee2e2;
+  --poor-fg: #b91c1c;
+  --unknown: #78849a;
+  --unknown-soft: #f1f5f9;
+  --unknown-fg: #55637a;
 
-  --up: #1c8657;
-  --down: #d33a52;
+  --up: #047857;
+  --down: #dc2626;
 
-  /* One hue, stepped. Series read as a ramp; the last step drops to neutral
-     rather than introducing a colour. */
-  --series-1: #3c4bd6;
-  --series-2: #7480e6;
-  --series-3: #a6afef;
-  --series-4: #7b7e8f;
+  --series-1: #2563eb;
+  --series-2: #60a5fa;
+  --series-3: #a5c4fb;
+  --series-4: #78849a;
 
-  /* Real values — Tailwind's rounded-sm/md/lg/xl/2xl/3xl resolve from these,
-     so every card, button, input and badge in the app picks up genuine
-     rounding from this one place. */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 1px rgba(15, 23, 42, 0.04);
+  --shadow: 0 8px 24px -6px rgba(15, 23, 42, 0.12), 0 2px 8px -2px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 24px 56px -12px rgba(15, 23, 42, 0.22), 0 8px 20px -6px rgba(15, 23, 42, 0.1);
+  --glow: 0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent);
+
+  /* Structural, not thematic: these hold across every palette. */
   --radius-sm: 8px;
   --radius: 16px;
   --radius-lg: 20px;
-
-  /* Real elevation. Cards lift off the canvas instead of sitting flush with
-     it, which is what a flat grey-on-grey wireframe was missing. */
-  --shadow-sm: 0 1px 2px rgba(16, 17, 26, 0.05), 0 1px 1px rgba(16, 17, 26, 0.04);
-  --shadow: 0 8px 24px -6px rgba(16, 17, 26, 0.12), 0 2px 8px -2px rgba(16, 17, 26, 0.06);
-  --shadow-lg: 0 24px 56px -12px rgba(16, 17, 26, 0.22), 0 8px 20px -6px rgba(16, 17, 26, 0.1);
-  --glow: 0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
+/*
+  A reader on "system" who has never chosen a theme. `:not([data-theme])`
+  rather than `:not([data-theme="light"])`: once any theme is stamped it must
+  win, including on a machine set to dark.
+*/
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --background: #090a10;
-    --surface: #12141c;
-    --surface-2: #171a24;
-    --surface-3: #20232f;
-    --border: color-mix(in srgb, #eef0f8 14%, transparent);
-    --border-strong: color-mix(in srgb, #eef0f8 30%, transparent);
-    --chart-grid: rgba(238, 240, 248, 0.08);
-    --chart-axis: rgba(238, 240, 248, 0.32);
-    --chart-compare: rgba(238, 240, 248, 0.4);
+  :root:not([data-theme]) {
+    color-scheme: dark;
 
-    --foreground: #eef0f8;
-    --muted-strong: #c5c9d8;
-    --muted: #999eb3;
-    --faint: #7d8296;
+    --background: #0b0f14;
+    --surface: #111827;
+    --surface-2: #1f2937;
+    --surface-3: #2b3748;
+    --border: color-mix(in srgb, #e5e7eb 14%, transparent);
+    --border-strong: color-mix(in srgb, #e5e7eb 30%, transparent);
 
-    --accent: #8490fa;
-    --accent-hover: #a1abfc;
-    --accent-fg: #0c0d14;
-    --accent-soft: #1c2050;
-    --accent-bright: #97a2fb;
+    --chart-grid: rgba(229, 231, 235, 0.08);
+    --chart-axis: rgba(229, 231, 235, 0.32);
+    --chart-compare: rgba(229, 231, 235, 0.4);
+
+    --foreground: #f3f4f6;
+    --muted-strong: #d1d5db;
+    --muted: #9ca3af;
+    --faint: #6f7787;
+
+    --accent: #3b82f6;
+    --accent-hover: #60a5fa;
+    --accent-fg: #0b0f14;
+    --accent-soft: #17263f;
+    --accent-bright: #60a5fa;
     --accent-2: #f2b90f;
     --accent-2-bright: #ffce3d;
 
-    --good: #3fc389;
-    --good-soft: #123424;
-    --good-fg: #74e0ac;
-    --fair: #999eb3;
-    --fair-soft: #171a24;
-    --fair-fg: #c5c9d8;
-    --poor: #f56b81;
-    --poor-soft: #391521;
-    --poor-fg: #ff92a3;
-    --unknown: #999eb3;
-    --unknown-soft: #171a24;
-    --unknown-fg: #c5c9d8;
+    --good: #10b981;
+    --good-soft: #0c2f24;
+    --good-fg: #34d399;
+    --fair: #9ca3af;
+    --fair-soft: #1f2937;
+    --fair-fg: #d1d5db;
+    --poor: #f87171;
+    --poor-soft: #3b1620;
+    --poor-fg: #fca5a5;
+    --unknown: #9ca3af;
+    --unknown-soft: #1f2937;
+    --unknown-fg: #d1d5db;
 
-    --up: #3fc389;
-    --down: #f56b81;
+    --up: #10b981;
+    --down: #f87171;
 
-    --series-1: #97a2fb;
-    --series-2: #6f7bdb;
-    --series-3: #c3caff;
-    --series-4: #999eb3;
+    --series-1: #60a5fa;
+    --series-2: #3b82f6;
+    --series-3: #93c5fd;
+    --series-4: #9ca3af;
 
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
     --shadow: 0 8px 24px -4px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.4);
@@ -145,55 +146,389 @@
   }
 }
 
-:root[data-theme="dark"] {
-  --background: #090a10;
-  --surface: #12141c;
-  --surface-2: #171a24;
-  --surface-3: #20232f;
-  --border: color-mix(in srgb, #eef0f8 14%, transparent);
-  --border-strong: color-mix(in srgb, #eef0f8 30%, transparent);
-  --chart-grid: rgba(238, 240, 248, 0.08);
-  --chart-axis: rgba(238, 240, 248, 0.32);
-  --chart-compare: rgba(238, 240, 248, 0.4);
+/* The default. Cool neutrals with a single confident blue. */
+[data-theme="light"] {
+  color-scheme: light;
 
-  --foreground: #eef0f8;
-  --muted-strong: #c5c9d8;
-  --muted: #999eb3;
-  --faint: #7d8296;
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --surface-3: #e2e8f0;
+  --border: color-mix(in srgb, #0f172a 12%, transparent);
+  --border-strong: color-mix(in srgb, #0f172a 26%, transparent);
 
-  --accent: #8490fa;
-  --accent-hover: #a1abfc;
-  --accent-fg: #0c0d14;
-  --accent-soft: #1c2050;
-  --accent-bright: #97a2fb;
+  --chart-grid: rgba(15, 23, 42, 0.07);
+  --chart-axis: rgba(15, 23, 42, 0.32);
+  --chart-compare: rgba(15, 23, 42, 0.38);
+
+  --foreground: #0f172a;
+  --muted-strong: #334155;
+  --muted: #55637a;
+  --faint: #78849a;
+
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-fg: #ffffff;
+  --accent-soft: #dbeafe;
+  --accent-bright: #3b82f6;
+  --accent-2: #b45309;
+  --accent-2-bright: #d97706;
+
+  --good: #047857;
+  --good-soft: #d1fae5;
+  --good-fg: #065f46;
+  --fair: #55637a;
+  --fair-soft: #f1f5f9;
+  --fair-fg: #334155;
+  --poor: #dc2626;
+  --poor-soft: #fee2e2;
+  --poor-fg: #b91c1c;
+  --unknown: #78849a;
+  --unknown-soft: #f1f5f9;
+  --unknown-fg: #55637a;
+
+  --up: #047857;
+  --down: #dc2626;
+
+  --series-1: #2563eb;
+  --series-2: #60a5fa;
+  --series-3: #a5c4fb;
+  --series-4: #78849a;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 1px rgba(15, 23, 42, 0.04);
+  --shadow: 0 8px 24px -6px rgba(15, 23, 42, 0.12), 0 2px 8px -2px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 24px 56px -12px rgba(15, 23, 42, 0.22), 0 8px 20px -6px rgba(15, 23, 42, 0.1);
+  --glow: 0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* Neutral slate, the same blue lifted for a dark ground. */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #0b0f14;
+  --surface: #111827;
+  --surface-2: #1f2937;
+  --surface-3: #2b3748;
+  --border: color-mix(in srgb, #e5e7eb 14%, transparent);
+  --border-strong: color-mix(in srgb, #e5e7eb 30%, transparent);
+
+  --chart-grid: rgba(229, 231, 235, 0.08);
+  --chart-axis: rgba(229, 231, 235, 0.32);
+  --chart-compare: rgba(229, 231, 235, 0.4);
+
+  --foreground: #f3f4f6;
+  --muted-strong: #d1d5db;
+  --muted: #9ca3af;
+  --faint: #6f7787;
+
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-fg: #0b0f14;
+  --accent-soft: #17263f;
+  --accent-bright: #60a5fa;
   --accent-2: #f2b90f;
   --accent-2-bright: #ffce3d;
 
-  --good: #3fc389;
-  --good-soft: #123424;
-  --good-fg: #74e0ac;
-  --fair: #999eb3;
-  --fair-soft: #171a24;
-  --fair-fg: #c5c9d8;
-  --poor: #f56b81;
-  --poor-soft: #391521;
-  --poor-fg: #ff92a3;
-  --unknown: #999eb3;
-  --unknown-soft: #171a24;
-  --unknown-fg: #c5c9d8;
+  --good: #10b981;
+  --good-soft: #0c2f24;
+  --good-fg: #34d399;
+  --fair: #9ca3af;
+  --fair-soft: #1f2937;
+  --fair-fg: #d1d5db;
+  --poor: #f87171;
+  --poor-soft: #3b1620;
+  --poor-fg: #fca5a5;
+  --unknown: #9ca3af;
+  --unknown-soft: #1f2937;
+  --unknown-fg: #d1d5db;
 
-  --up: #3fc389;
-  --down: #f56b81;
+  --up: #10b981;
+  --down: #f87171;
 
-  --series-1: #97a2fb;
-  --series-2: #6f7bdb;
-  --series-3: #c3caff;
-  --series-4: #999eb3;
+  --series-1: #60a5fa;
+  --series-2: #3b82f6;
+  --series-3: #93c5fd;
+  --series-4: #9ca3af;
 
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
   --shadow: 0 8px 24px -4px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.4);
   --shadow-lg: 0 24px 56px -10px rgb(0 0 0 / 0.65), 0 8px 20px -6px rgb(0 0 0 / 0.45);
   --glow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* Navy ground, cyan as the spot colour. */
+[data-theme="midnight"] {
+  color-scheme: dark;
+
+  --background: #0a192f;
+  --surface: #0f2a44;
+  --surface-2: #163a5c;
+  --surface-3: #1d4b78;
+  --border: color-mix(in srgb, #a8c8e8 16%, transparent);
+  --border-strong: color-mix(in srgb, #a8c8e8 32%, transparent);
+
+  --chart-grid: rgba(200, 224, 245, 0.09);
+  --chart-axis: rgba(200, 224, 245, 0.34);
+  --chart-compare: rgba(200, 224, 245, 0.42);
+
+  --foreground: #e8f1fb;
+  --muted-strong: #bcd3ea;
+  --muted: #8fb0cf;
+  --faint: #6b8bab;
+
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-fg: #061224;
+  --accent-soft: #10305a;
+  --accent-bright: #60a5fa;
+  --accent-2: #22d3ee;
+  --accent-2-bright: #67e8f9;
+
+  --good: #10b981;
+  --good-soft: #0b3630;
+  --good-fg: #34d399;
+  --fair: #8fb0cf;
+  --fair-soft: #163a5c;
+  --fair-fg: #bcd3ea;
+  --poor: #fb7185;
+  --poor-soft: #45162a;
+  --poor-fg: #fda4af;
+  --unknown: #8fb0cf;
+  --unknown-soft: #163a5c;
+  --unknown-fg: #bcd3ea;
+
+  --up: #10b981;
+  --down: #fb7185;
+
+  --series-1: #3b82f6;
+  --series-2: #22d3ee;
+  --series-3: #7dd3fc;
+  --series-4: #8fb0cf;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow: 0 8px 24px -4px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 24px 56px -10px rgb(0 0 0 / 0.65), 0 8px 20px -6px rgb(0 0 0 / 0.45);
+  --glow: 0 0 0 6px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+/* Deep green ground. The accent is teal so it cannot be mistaken for a rising price. */
+[data-theme="nature"] {
+  color-scheme: dark;
+
+  --background: #0c1f17;
+  --surface: #122c22;
+  --surface-2: #16382c;
+  --surface-3: #1d4a3a;
+  --border: color-mix(in srgb, #a7d8bf 16%, transparent);
+  --border-strong: color-mix(in srgb, #a7d8bf 32%, transparent);
+
+  --chart-grid: rgba(199, 231, 214, 0.09);
+  --chart-axis: rgba(199, 231, 214, 0.34);
+  --chart-compare: rgba(199, 231, 214, 0.42);
+
+  --foreground: #e7f6ee;
+  --muted-strong: #bfe3d1;
+  --muted: #93c4ac;
+  --faint: #6f9f88;
+
+  --accent: #2dd4bf;
+  --accent-hover: #5eead4;
+  --accent-fg: #04231b;
+  --accent-soft: #0d3b34;
+  --accent-bright: #5eead4;
+  --accent-2: #fbbf24;
+  --accent-2-bright: #fcd34d;
+
+  --good: #4ade80;
+  --good-soft: #12331f;
+  --good-fg: #86efac;
+  --fair: #93c4ac;
+  --fair-soft: #16382c;
+  --fair-fg: #bfe3d1;
+  --poor: #f87171;
+  --poor-soft: #3b1620;
+  --poor-fg: #fca5a5;
+  --unknown: #93c4ac;
+  --unknown-soft: #16382c;
+  --unknown-fg: #bfe3d1;
+
+  --up: #4ade80;
+  --down: #f87171;
+
+  --series-1: #2dd4bf;
+  --series-2: #4ade80;
+  --series-3: #a7f3d0;
+  --series-4: #93c4ac;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow: 0 8px 24px -4px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 24px 56px -10px rgb(0 0 0 / 0.65), 0 8px 20px -6px rgb(0 0 0 / 0.45);
+  --glow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* Aubergine ground, warm orange accent, violet in the series ramp. */
+[data-theme="sunset"] {
+  color-scheme: dark;
+
+  --background: #1e0b2e;
+  --surface: #2a1140;
+  --surface-2: #351650;
+  --surface-3: #442066;
+  --border: color-mix(in srgb, #dcc9ee 16%, transparent);
+  --border-strong: color-mix(in srgb, #dcc9ee 32%, transparent);
+
+  --chart-grid: rgba(228, 212, 244, 0.09);
+  --chart-axis: rgba(228, 212, 244, 0.34);
+  --chart-compare: rgba(228, 212, 244, 0.42);
+
+  --foreground: #f6ecff;
+  --muted-strong: #dcc9ee;
+  --muted: #bda3d4;
+  --faint: #9a7fb4;
+
+  --accent: #f97316;
+  --accent-hover: #fb923c;
+  --accent-fg: #1e0b2e;
+  --accent-soft: #45210f;
+  --accent-bright: #fb923c;
+  --accent-2: #fde68a;
+  --accent-2-bright: #fef3c7;
+
+  --good: #34d399;
+  --good-soft: #0f3a2c;
+  --good-fg: #6ee7b7;
+  --fair: #bda3d4;
+  --fair-soft: #351650;
+  --fair-fg: #dcc9ee;
+  --poor: #fb7185;
+  --poor-soft: #45162a;
+  --poor-fg: #fda4af;
+  --unknown: #bda3d4;
+  --unknown-soft: #351650;
+  --unknown-fg: #dcc9ee;
+
+  --up: #34d399;
+  --down: #fb7185;
+
+  --series-1: #f97316;
+  --series-2: #a78bfa;
+  --series-3: #fde68a;
+  --series-4: #bda3d4;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow: 0 8px 24px -4px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 24px 56px -10px rgb(0 0 0 / 0.65), 0 8px 20px -6px rgb(0 0 0 / 0.45);
+  --glow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* Near-monochrome. The accent stays a deep blue rather than going black, because links here are underlined only on hover — a black link would be invisible. */
+[data-theme="minimal"] {
+  color-scheme: light;
+
+  --background: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --surface-3: #e5e7eb;
+  --border: color-mix(in srgb, #111827 11%, transparent);
+  --border-strong: color-mix(in srgb, #111827 24%, transparent);
+
+  --chart-grid: rgba(17, 24, 39, 0.06);
+  --chart-axis: rgba(17, 24, 39, 0.3);
+  --chart-compare: rgba(17, 24, 39, 0.36);
+
+  --foreground: #111827;
+  --muted-strong: #374151;
+  --muted: #6b7280;
+  --faint: #9098a5;
+
+  --accent: #1e40af;
+  --accent-hover: #1e3a8a;
+  --accent-fg: #ffffff;
+  --accent-soft: #e6ecfb;
+  --accent-bright: #2f52c9;
+  --accent-2: #4b5563;
+  --accent-2-bright: #6b7280;
+
+  --good: #047857;
+  --good-soft: #d1fae5;
+  --good-fg: #065f46;
+  --fair: #6b7280;
+  --fair-soft: #f4f4f5;
+  --fair-fg: #374151;
+  --poor: #b91c1c;
+  --poor-soft: #fee2e2;
+  --poor-fg: #991b1b;
+  --unknown: #9098a5;
+  --unknown-soft: #f4f4f5;
+  --unknown-fg: #6b7280;
+
+  --up: #047857;
+  --down: #b91c1c;
+
+  --series-1: #1e40af;
+  --series-2: #6b7280;
+  --series-3: #9ca3af;
+  --series-4: #d4d4d8;
+
+  --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.05), 0 1px 1px rgba(17, 24, 39, 0.04);
+  --shadow: 0 8px 24px -6px rgba(17, 24, 39, 0.12), 0 2px 8px -2px rgba(17, 24, 39, 0.06);
+  --shadow-lg: 0 24px 56px -12px rgba(17, 24, 39, 0.22), 0 8px 20px -6px rgba(17, 24, 39, 0.1);
+  --glow: 0 0 0 6px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* Pure black ground, borders carrying most of the structure rather than shadow. */
+[data-theme="contrast"] {
+  color-scheme: dark;
+
+  --background: #000000;
+  --surface: #0a0a0a;
+  --surface-2: #161616;
+  --surface-3: #232323;
+  --border: color-mix(in srgb, #ffffff 45%, transparent);
+  --border-strong: color-mix(in srgb, #ffffff 75%, transparent);
+
+  --chart-grid: rgba(255, 255, 255, 0.18);
+  --chart-axis: rgba(255, 255, 255, 0.6);
+  --chart-compare: rgba(255, 255, 255, 0.66);
+
+  --foreground: #ffffff;
+  --muted-strong: #f0f0f0;
+  --muted: #d4d4d4;
+  --faint: #b0b0b0;
+
+  --accent: #00bfff;
+  --accent-hover: #5cd2ff;
+  --accent-fg: #000000;
+  --accent-soft: #002a3d;
+  --accent-bright: #5cd2ff;
+  --accent-2: #ffd700;
+  --accent-2-bright: #ffe44d;
+
+  --good: #00ff88;
+  --good-soft: #00311c;
+  --good-fg: #00ff88;
+  --fair: #d4d4d4;
+  --fair-soft: #161616;
+  --fair-fg: #f0f0f0;
+  --poor: #ff6b6b;
+  --poor-soft: #3d0f0f;
+  --poor-fg: #ff9b9b;
+  --unknown: #b0b0b0;
+  --unknown-soft: #161616;
+  --unknown-fg: #d4d4d4;
+
+  --up: #00ff88;
+  --down: #ff6b6b;
+
+  --series-1: #00bfff;
+  --series-2: #ffd700;
+  --series-3: #00ff88;
+  --series-4: #d4d4d4;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow: 0 8px 24px -4px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 24px 56px -10px rgb(0 0 0 / 0.65), 0 8px 20px -6px rgb(0 0 0 / 0.45);
+  --glow: 0 0 0 6px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 
