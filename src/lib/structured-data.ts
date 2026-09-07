@@ -113,6 +113,12 @@ export function websiteLd(): JsonLd {
     description:
       "Understand any company's financial health without reading a balance sheet. " +
       "Plain-English answers, sourced directly from regulatory filings.",
+    publisher: {
+      "@type": "Organization",
+      name: "WylthIQ",
+      url: base,
+      sameAs: ["https://github.com/yashik1/WylthIQ"],
+    },
     potentialAction: {
       "@type": "SearchAction",
       target: { "@type": "EntryPoint", urlTemplate: `${base}/stock/{search_term_string}` },
