@@ -211,7 +211,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1360px] flex-1 px-7 py-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1360px] flex-1 px-7 py-[var(--main-pad-y)]">{children}</main>
 
         {/*
           Three columns that collapse on their own.

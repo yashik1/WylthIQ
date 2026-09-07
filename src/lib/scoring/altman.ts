@@ -6,7 +6,37 @@ import {
   type SectorKind,
 } from "./applicability";
 import { add, coalesce, div, round, sub } from "./math";
-import type { AltmanResult, ScoreResult } from "./types";
+import type { AltmanResult, AltmanVariant, Rating, ScoreResult } from "./types";
+
+/**
+ * Where each variant puts the boundary between its zones.
+ *
+ * The three models were fitted on different populations and do not share a
+ * scale: a Z of 2.7 is the safe zone for a service company and the grey zone
+ * for a manufacturer. These numbers used to sit as literals at the three
+ * return sites below, which was fine while nothing else needed them — the
+ * score page now prints the thresholds beside the figure, and a second copy of
+ * them would eventually disagree with the first.
+ */
+export const ALTMAN_ZONES: Record<
+  AltmanVariant,
+  { safeAbove: number; distressBelow: number }
+> = {
+  manufacturing: { safeAbove: 2.99, distressBelow: 1.81 },
+  "manufacturing-book": { safeAbove: 2.9, distressBelow: 1.23 },
+  "non-manufacturing": { safeAbove: 2.6, distressBelow: 1.1 },
+};
+
+/** Which zone a score falls in, and the rating that follows from it. */
+export function altmanZone(
+  z: number,
+  variant: AltmanVariant,
+): { zone: AltmanResult["zone"]; rating: Rating } {
+  const { safeAbove, distressBelow } = ALTMAN_ZONES[variant];
+  if (z > safeAbove) return { zone: "safe", rating: "good" };
+  if (z >= distressBelow) return { zone: "grey", rating: "fair" };
+  return { zone: "distress", rating: "poor" };
+}
 
 /**
  * Altman Z-Score — distance from bankruptcy.
@@ -79,8 +109,7 @@ export function altmanZScore(
         value: {
           z: round(z),
           variant: "manufacturing-book",
-          zone: z > 2.9 ? "safe" : z >= 1.23 ? "grey" : "distress",
-          rating: z > 2.9 ? "good" : z >= 1.23 ? "fair" : "poor",
+          ...altmanZone(z, "manufacturing-book"),
         },
         applicable: true,
       };
@@ -91,8 +120,7 @@ export function altmanZScore(
       value: {
         z: round(z),
         variant: "manufacturing",
-        zone: z > 2.99 ? "safe" : z >= 1.81 ? "grey" : "distress",
-        rating: z > 2.99 ? "good" : z >= 1.81 ? "fair" : "poor",
+        ...altmanZone(z, "manufacturing"),
       },
       applicable: true,
     };
@@ -103,8 +131,7 @@ export function altmanZScore(
     value: {
       z: round(z),
       variant: "non-manufacturing",
-      zone: z > 2.6 ? "safe" : z >= 1.1 ? "grey" : "distress",
-      rating: z > 2.6 ? "good" : z >= 1.1 ? "fair" : "poor",
+      ...altmanZone(z, "non-manufacturing"),
     },
     applicable: true,
   };

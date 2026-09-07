@@ -274,6 +274,31 @@ body {
 }
 
 /*
+  How much air `main` puts above and below a page.
+
+  A token rather than a Tailwind literal because `.flush-top` below has to
+  cancel exactly this value, and the two drifting apart would silently reopen
+  the gap it exists to close.
+*/
+:root {
+  --main-pad-y: 2rem;
+}
+
+/*
+  A bleeding band that also meets the header.
+
+  `.full-bleed` takes a section out to the window edges left and right, but the
+  first one on a page still began `--main-pad-y` below the header — a strip of
+  bare canvas between two full-width bands, so the header rule and the hero
+  top edge read as two borders with a gap between them rather than as one
+  continuous surface. Cancelling main's top padding closes it. Only correct
+  on the first visible child of `main`.
+*/
+.flush-top {
+  margin-top: calc(-1 * var(--main-pad-y));
+}
+
+/*
   A band that runs the full width of the window from inside a centred column.
 
   The header and footer are laid out at the top level and already span edge to
@@ -415,6 +440,85 @@ body {
 */
 html {
   scroll-padding-top: 7rem;
+}
+
+/* ---------------------------------------------------------------------------
+   "Explain this number".
+
+   Every figure in this app already carries a plain-English explanation, and
+   until now every one of them was delivered through `title` — which appears
+   on hover and nowhere else. On a phone there is no hover, so the entire
+   explanatory layer of an app whose slogan is "understand before you invest"
+   was invisible to the majority of its readers; a sighted keyboard user could
+   not reach it either, since `title` does not open on focus.
+
+   A native `<details>` fixes that with no JavaScript: it opens on tap, click,
+   Enter and Space, it is announced as an expandable group, and it needs no
+   popover positioning that could be clipped by a card's `overflow-hidden`.
+
+   The summary sits inline so the marker reads as part of the figure it
+   explains; the body is a block, so opening it lays the sentence out on its
+   own line underneath rather than stretching the row.
+   --------------------------------------------------------------------------- */
+.explain {
+  display: inline;
+}
+
+.explain > summary {
+  /*
+    `inline-block`, not `inline`, purely so the box below can take a size: an
+    inline box ignores width and height, and this control needs a minimum of
+    both. It still sits in the run of text either way.
+  */
+  display: inline-block;
+  list-style: none;
+  cursor: help;
+  /*
+    The bare glyph is about a 10px target — small enough that a click aimed at
+    it lands on the number instead. The padding takes it past the 24px minimum
+    for a pointer target, and the negative margins stop that padding pushing
+    the figure it sits beside out of line.
+  */
+  min-width: 24px;
+  min-height: 24px;
+  padding: 6px;
+  margin: -6px -6px -6px calc(0.25em - 6px);
+  color: var(--faint);
+  font-size: 0.9em;
+  line-height: 1;
+  text-align: center;
+  /* The figure beside it is semibold and tabular; the marker is neither. */
+  font-weight: 400;
+  font-variant-numeric: normal;
+}
+
+/* Safari draws its own triangle unless both of these are cleared. */
+.explain > summary::-webkit-details-marker,
+.explain > summary::marker {
+  display: none;
+  content: "";
+}
+
+.explain > summary:hover,
+.explain[open] > summary {
+  color: var(--accent);
+}
+
+.explain-body {
+  display: block;
+  margin-top: 0.5rem;
+  /* The value this sits under is `tnum font-semibold`, and an explanation
+     rendered in the number's own weight reads as more data rather than as
+     prose. */
+  font-weight: 400;
+  font-variant-numeric: normal;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--muted);
+  border-left: 2px solid var(--border);
+  padding-left: 0.625rem;
 }
 
 /* Wide content scrolls inside its own container so the page body never scrolls

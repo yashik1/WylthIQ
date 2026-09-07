@@ -8,8 +8,13 @@ import {
 import { add, div, round, sub } from "./math";
 import type { BeneishResult, ScoreResult } from "./types";
 
-/** Above this threshold, Beneish (1999) flags a company as a likely manipulator. */
-const MANIPULATION_THRESHOLD = -1.78;
+/**
+ * Above this threshold, Beneish (1999) flags a company as a likely manipulator.
+ *
+ * Exported so the score page can print the threshold beside the figure rather
+ * than carrying its own copy of the number.
+ */
+export const MANIPULATION_THRESHOLD = -1.78;
 
 /**
  * Beneish M-Score — the probability that reported earnings have been manipulated.

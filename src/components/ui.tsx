@@ -232,10 +232,40 @@ export function Badge({
 }
 
 /**
+ * An explanation a reader can actually open.
+ *
+ * Everything about this app's positioning rests on the explanatory writing
+ * attached to its figures, and all of it used to be delivered through `title`
+ * — which only appears on hover. The comment that used to sit above `Metric`
+ * claimed the hint reached "screen readers and keyboard users": half true. A
+ * screen reader did read the visually hidden copy, but a sighted keyboard user
+ * had no way to open a `title`, and on a touchscreen there is no hover at all,
+ * so on the device most of this is read on the explanations did not exist.
+ *
+ * A native `<details>` needs no JavaScript, no popover positioning, and no
+ * client boundary — this file stays a server component — while opening on tap,
+ * click, Enter and Space alike. Styling lives in `globals.css` under `.explain`.
+ */
+export function Explain({ term, children }: { term: string; children: ReactNode }) {
+  return (
+    <details className="explain">
+      {/*
+        The label is spoken rather than left as a bare symbol: a page carries
+        a dozen of these, and "ⓘ, ⓘ, ⓘ" in a screen reader's element list
+        names none of them.
+      */}
+      <summary aria-label={`Explain ${term}`}>ⓘ</summary>
+      <span className="explain-body">{children}</span>
+    </details>
+  );
+}
+
+/**
  * A labelled figure with an always-available plain-language explanation.
  *
- * The hint is exposed as `title` and as visually hidden text so it reaches
- * screen readers and keyboard users, not only people who can hover.
+ * The explanation opens from the figure itself rather than the label, because
+ * "explain this number" is what a reader wants and the number is what they are
+ * looking at.
  */
 export function Metric({
   label,
@@ -260,16 +290,8 @@ export function Metric({
       {/* The same eyebrow every other measure label in the app uses, so a
           figure reads identically whether it sits on the dashboard strip, a
           backtest panel or a company page. */}
-      <dt className="eyebrow flex items-center gap-1 text-[0.625rem]" title={hint}>
+      <dt className="eyebrow text-[0.625rem]">
         <span className="truncate">{label}</span>
-        {hint && (
-          <>
-            <span aria-hidden className="cursor-help text-faint">
-              ⓘ
-            </span>
-            <span className="sr-only">{hint}</span>
-          </>
-        )}
       </dt>
       <dd
         className={cn(
@@ -282,6 +304,7 @@ export function Metric({
         )}
       >
         {value}
+        {hint && <Explain term={label}>{hint}</Explain>}
       </dd>
     </div>
   );

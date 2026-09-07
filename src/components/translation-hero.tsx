@@ -19,7 +19,7 @@ import { SLOGAN } from "@/lib/brand";
 
 export function TranslationHero() {
   return (
-    <section className="full-bleed relative overflow-hidden border-b border-border pt-[52px] pb-11">
+    <section className="full-bleed flush-top relative overflow-hidden border-b border-border pt-[52px] pb-11">
       {/* A soft wash of the two brand hues behind the fold — the one place
           in the app that reaches for a gradient, so it stays a signature
           rather than becoming wallpaper. Purely decorative. */}

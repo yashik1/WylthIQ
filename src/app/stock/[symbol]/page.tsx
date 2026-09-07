@@ -5,6 +5,7 @@ import { BalanceSheetVisual } from "@/components/stock/balance-sheet";
 import { FundamentalsChart, type TrendSeries } from "@/components/stock/fundamentals-chart";
 import { FilingsList, NewsList, PeersList, ResearchLinks } from "@/components/stock/links";
 import { QuestionCard, QuestionSummary, VerdictCard } from "@/components/stock/verdict";
+import { Scorecard } from "@/components/stock/scorecard";
 import { PricePanel } from "@/components/stock/peer-chart";
 import { RecordVisit, WatchButton } from "@/components/watchlist";
 import { StrengthsAndRisks, WhatItDoes } from "@/components/stock/orientation";
@@ -410,10 +411,16 @@ async function StockBody({
       {/* ---- verdict ---- */}
       <Section id="health">
       {report ? (
-        <VerdictCard
-          report={report}
-          companyName={profile?.name ?? unsupported?.name ?? upper}
-        />
+        <div className="space-y-5">
+          <VerdictCard
+            report={report}
+            companyName={profile?.name ?? unsupported?.name ?? upper}
+          />
+          {/* The working behind the headline, directly under it. The three
+              model figures in the card above are the summary; this is what
+              they are made of. */}
+          <Scorecard report={report} />
+        </div>
       ) : data.assetClass === "crypto" ||
         data.assetClass === "commodity" ||
         data.assetClass === "future" ? (
