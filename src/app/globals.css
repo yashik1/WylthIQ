@@ -639,18 +639,21 @@ body {
     their contents up with `main` by hand. It was the literal 1360px in all
     four, which is three copies too many of a number that has to match.
 
-    1700 rather than 1360 because the navigation moved into a rail. At 1920px
-    the column beside the rail is 1688px, and a 1360px box centred in it left
-    164px of dead space on each side — content that was neither aligned to
-    the rail nor filling the room it had. At this value the column is filled
-    outright up to roughly a 1930px window, and merely bounded beyond it,
-    which is the point where a table row stops being scannable.
+    `none`, so the content fills the column beside the rail at every width
+    rather than stopping at a cap and centring inside it. It was 1360px,
+    which at a 1920px window left 164px of dead space on each side of a
+    column that was already inset by a 232px rail — content neither aligned
+    to the rail nor filling the room it had. A cap of 1700px moved that
+    problem to wider screens rather than removing it.
 
-    Running prose does not rely on this: Learn and Terms cap themselves at
-    `max-w-3xl`, Account at `2xl`, and individual paragraphs carry their own
-    measure.
+    The cost is real and deliberate: on a very wide monitor a table row is
+    now as wide as the window, and a long row is harder to track across than
+    a capped one. Running prose is unaffected either way — Learn and Terms
+    cap themselves at `max-w-3xl`, Account at `2xl`, and individual
+    paragraphs carry their own measure — so this only ever stretches the
+    cards, tables and figure grids, which is what the room was wanted for.
   */
-  --content-max: 1700px;
+  --content-max: none;
 }
 
 @media (min-width: 1024px) {
