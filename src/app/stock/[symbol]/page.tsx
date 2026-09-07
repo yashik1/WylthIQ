@@ -6,6 +6,7 @@ import { FundamentalsChart, type TrendSeries } from "@/components/stock/fundamen
 import { FilingsList, NewsList, PeersList, ResearchLinks } from "@/components/stock/links";
 import { QuestionCard, QuestionSummary, VerdictCard } from "@/components/stock/verdict";
 import { Scorecard } from "@/components/stock/scorecard";
+import { WhatChanged } from "@/components/stock/what-changed";
 import { PricePanel } from "@/components/stock/peer-chart";
 import { RecordVisit, WatchButton } from "@/components/watchlist";
 import { StrengthsAndRisks, WhatItDoes } from "@/components/stock/orientation";
@@ -34,6 +35,7 @@ import { auth } from "@/lib/auth";
 import { listWatchlist } from "@/lib/watchlist/actions";
 import { KeyFiguresPanel } from "@/components/stock/key-figures";
 import { buildKeyFigures } from "@/lib/scoring/key-figures";
+import { buildChangeReport } from "@/lib/scoring/changes";
 import { MarketExpects, hasMarketExpectations } from "@/components/stock/market-expects";
 import { Section, SectionNav, type StockSection } from "@/components/stock/section-nav";
 
@@ -243,6 +245,17 @@ async function StockBody({
   const keyFigures = fundamentals && filesAccounts
     ? buildKeyFigures(fundamentals, marketCap)
     : null;
+
+  /*
+    What moved since the previous annual filing.
+
+    Null rather than empty for a company with only one year on file: one
+    period is not a comparison, and a panel saying "nothing changed" would be
+    a claim about the company rather than about the data.
+  */
+  const changes = fundamentals && filesAccounts
+    ? buildChangeReport(fundamentals, currency)
+    : null;
   const nextDividend =
     data.earlySignals.upcoming.find((e) => e.kind === "dividend") ?? null;
 
@@ -272,6 +285,7 @@ async function StockBody({
   const sections: StockSection[] = [
     warnings.length > 0 && { id: "warning-signs", label: "Warnings" },
     { id: "health", label: "Health" },
+    changes && { id: "what-changed", label: "What changed" },
     { id: "price", label: "Price" },
     hasMarketExpectations(data) && { id: "expectations", label: "Market expects" },
     report && { id: "questions", label: "Five questions" },
@@ -460,6 +474,12 @@ async function StockBody({
         </Card>
       )}
 
+      </Section>
+
+      {/* Directly under the score, because "it scores 9 out of 10" and "its
+          margin fell four points" are the same reader's next two questions. */}
+      <Section id="what-changed">
+        {changes && <WhatChanged report={changes} />}
       </Section>
 
       <Section id="strengths">

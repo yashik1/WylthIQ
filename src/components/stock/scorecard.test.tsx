@@ -166,3 +166,11 @@ describe("score transparency", () => {
     expect(html).not.toMatch(/is manipulating|has manipulated|fraud/i);
   });
 });
+
+describe("markup validity", () => {
+  // See the note in what-changed.test.tsx: a <details> inside a <p> is closed
+  // early by the parser and fails hydration.
+  it("never nests a disclosure inside a paragraph", () => {
+    expect(render(report())).not.toMatch(/<p\b[^>]*>(?:(?!<\/p>)[\s\S])*<details/);
+  });
+});

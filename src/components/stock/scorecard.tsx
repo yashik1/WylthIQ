@@ -159,13 +159,15 @@ function SignalRow({ signal }: { signal: Signal }) {
         {mark.glyph}
       </span>
       <span className="sr-only">{mark.label}: </span>
-      <span className={cn("min-w-0", state === "unknown" && "text-faint")}>
+      {/* A div, for the reason what-changed.tsx sets out: this holds a
+          <details>, which is flow content and does not belong inside a span. */}
+      <div className={cn("min-w-0", state === "unknown" && "text-faint")}>
         {signal.label}
         {state === "unknown" ? (
           <span className="ml-1 text-xs text-faint">(not reported)</span>
         ) : null}
         <Explain term={signal.label}>{signal.detail}</Explain>
-      </span>
+      </div>
     </li>
   );
 }
