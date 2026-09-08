@@ -107,10 +107,22 @@ export function ActionForm({
   action,
   submitLabel,
   children,
+  onSuccess,
 }: {
   action: (prev: ActionResult | null, form: FormData) => Promise<ActionResult>;
   submitLabel: string;
   children: React.ReactNode;
+  /**
+   * Called once when the action reports success, with what was submitted —
+   * the same snapshot the refusal path re-fills from, so passwords are not
+   * in it.
+   *
+   * Exists so a form can trigger something beyond its own message without
+   * this component learning what that something is. Sign-up uses it to offer
+   * the newsletter; nothing here knows that, which is what keeps the message
+   * rendering below the single place it is written.
+   */
+  onSuccess?: (values: Record<string, string>) => void;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const submitted = useRef<Record<string, string>>({});
@@ -136,6 +148,21 @@ export function ActionForm({
   }
 
   const [state, formAction, pending] = useActionState(run, null);
+
+  /*
+    Fired once per success, not once per render.
+
+    `useActionState` hands back the same object until the next submission, so
+    the guard is the state object itself rather than a boolean — a second
+    successful submit is a new object and gets its own call, while a re-render
+    caused by anything else gets none.
+  */
+  const announced = useRef<ActionResult | null>(null);
+  useEffect(() => {
+    if (!state?.ok || announced.current === state) return;
+    announced.current = state;
+    onSuccess?.(submitted.current);
+  }, [state, onSuccess]);
 
   useEffect(() => {
     // Only after a refusal — a successful sign-up should leave a clean form.

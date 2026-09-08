@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { useFormStatus } from "react-dom";
 import { subscribeToNewsletter, type NewsletterResult } from "@/lib/newsletter/actions";
 
@@ -16,24 +16,49 @@ import { subscribeToNewsletter, type NewsletterResult } from "@/lib/newsletter/a
  * can send mail at all, and that is the action's business. It also means this
  * component cannot accidentally claim an email was sent.
  */
-export function NewsletterSubscribeForm() {
+export function NewsletterSubscribeForm({
+  defaultEmail,
+  className = "mt-2.5",
+}: {
+  /**
+   * Pre-fills the address, for the one caller that already knows it.
+   *
+   * The sign-up prompt has just watched somebody type their email; asking
+   * for it a second time is the kind of small friction that loses the
+   * subscription. Still an editable field rather than a fixed value — a
+   * reader may well want their newsletter somewhere other than their login.
+   */
+  defaultEmail?: string;
+  className?: string;
+} = {}) {
   const [result, action] = useActionState<NewsletterResult | null, FormData>(
     subscribeToNewsletter,
     null,
   );
 
+  /*
+    The id is generated rather than written, because this form is no longer
+    rendered once per page. The footer carries one on every route, and the
+    sign-up prompt renders a second — two elements sharing `newsletter-email`
+    would point both labels at whichever came first, so clicking the label in
+    the dialog would focus the input behind it and a screen reader would
+    announce the wrong field.
+  */
+  const id = useId();
+
   return (
-    <form action={action} className="mt-2.5">
+    <form action={action} className={className}>
       <div className="flex flex-wrap gap-2">
-        <label htmlFor="newsletter-email" className="sr-only">
+        <label htmlFor={id} className="sr-only">
           Email address
         </label>
         <input
-          id="newsletter-email"
+          id={id}
           type="email"
           name="email"
           required
           autoComplete="email"
+          defaultValue={defaultEmail}
           placeholder="you@example.com"
           className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 text-[0.8125rem] outline-none transition-colors placeholder:text-faint focus:border-accent focus:ring-4 focus:ring-accent/10"
         />
