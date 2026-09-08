@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { ActionForm, AuthShell, AuthFooterLink, Field } from "@/components/auth/auth-form";
-import { signUp } from "@/lib/auth/actions";
-import { MIN_PASSWORD_LENGTH } from "@/lib/auth/password";
+import { AuthShell, AuthFooterLink } from "@/components/auth/auth-form";
+import { SignUpForm } from "@/components/auth/signup-form";
+import { isEmailConfigured } from "@/lib/email";
 
 export const metadata: Metadata = { title: "Create an account" };
 
@@ -12,27 +12,13 @@ export default function SignUpPage() {
       subtitle="For backtesting and the trade journal. The screener, company pages and charts stay free."
       footer={<AuthFooterLink href="/signin">Already have an account? Sign in</AuthFooterLink>}
     >
-      <ActionForm action={signUp} submitLabel="Create account">
-        {/* Still optional, and still the `name` field — but presented as a
-            username, because that is what a uniqueness rule makes it. Two
-            people called John Smith both have a claim on that display name;
-            neither has a claim on the same identifier. */}
-        <Field
-          label="Username (optional)"
-          name="name"
-          autoComplete="username"
-          hint="Shown in the header and on your account. Letters, numbers, dots, dashes and underscores — no spaces."
-        />
-        <Field label="Email" name="email" type="email" autoComplete="email" required />
-        <Field
-          label="Password"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          required
-          hint={`At least ${MIN_PASSWORD_LENGTH} characters. Length matters more than symbols.`}
-        />
-      </ActionForm>
+      {/*
+        Whether mail can be sent is a fact about the deployment, read here on
+        the server and handed down — the fields and the newsletter offer that
+        follows them are one client component, and it has no business reading
+        environment variables.
+      */}
+      <SignUpForm canOfferNewsletter={isEmailConfigured()} />
     </AuthShell>
   );
 }
