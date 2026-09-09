@@ -149,7 +149,7 @@ export function EquityChart({
     });
 
     const targetSeries = chart.addSeries(LineSeries, {
-      color: cssVar("--series-1", "#2563eb"),
+      color: cssVar("--series-1", "#2a78d6"),
       lineWidth: 2,
       title: target.label,
       priceLineVisible: false,
