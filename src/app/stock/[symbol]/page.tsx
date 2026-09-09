@@ -23,6 +23,8 @@ import { resolveUnsupported, type UnsupportedSymbol } from "@/lib/symbol-resolve
 import { cikForSymbol } from "@/lib/providers/sec-edgar";
 import { ASSET_CLASS_LABEL, classify, findInstrument } from "@/lib/instruments";
 import { NotACompany } from "@/components/stock/not-a-company";
+import { FundProfile } from "@/components/stock/fund-profile";
+import { getFundReport } from "@/lib/etf/fund-filings";
 import { EarlySignals } from "@/components/stock/early-signals";
 import { displayName } from "@/lib/company-name";
 import { breadcrumbLd, corporationLd } from "@/lib/structured-data";
@@ -172,6 +174,32 @@ async function StockBody({
     auth().catch(() => null),
     listWatchlist(),
   ]);
+
+  /*
+    A fund's portfolio, and the thing that decides a fund is a fund.
+
+    Not gated on `instrumentType === "etf"`, which was the obvious gate and the
+    wrong one: that classification comes from a price provider's search index,
+    and it is frequently absent. VOO — the largest index fund in the world —
+    came back unclassified, so the page offered it "no financial data
+    available" and stopped, which is the exact hole this is meant to close.
+
+    The SEC's own fund ticker file is the better authority and it is free: a
+    symbol listed in it *is* a registered fund, by definition, because that is
+    what the file is. So membership of it decides, and the provider's opinion
+    is only a fallback for a fund too new or too obscure to have filed yet.
+
+    Skipped for the instruments that are definitionally not funds, and for
+    anything that filed real company accounts — a ticker cannot be both, and
+    the accounts are the stronger evidence. For an ordinary company page this
+    costs one lookup in a map that is already in memory.
+  */
+  const notAFund =
+    data.assetClass === "crypto" ||
+    data.assetClass === "commodity" ||
+    data.assetClass === "future" ||
+    Boolean(data.fundamentals?.annual.length);
+  const fund = notAFund ? null : await getFundReport(upper);
   const signedIn = Boolean(session?.user?.id);
   const alreadySaved = saved.some((s) => s.symbol === upper);
 
@@ -443,28 +471,49 @@ async function StockBody({
           assetClass={data.assetClass}
           instrument={data.instrument}
         />
-      ) : data.instrumentType === "etf" ? (
-        // A fund holds other assets rather than running a business, so there is
-        // no balance sheet to score. Saying that plainly is more useful than an
-        // empty card implying the data merely failed to load.
-        <Card className="p-5">
-          <h2 className="text-base font-semibold">This is a fund, not a company</h2>
-          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted">
-            {profile?.name ?? upper} is an ETF or trust — a basket of other holdings. It has
-            no revenue, no balance sheet and files no annual report, so the profitability,
-            debt and accounting scores used for companies have nothing to measure here.
-          </p>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
-            Price history below still applies, and{" "}
-            <Link
-              href={`/compare?symbols=${encodeURIComponent(upper)},SPY`}
-              className="text-accent underline"
-            >
-              comparing its performance
-            </Link>{" "}
-            against other funds or the wider market is a meaningful way to judge it.
-          </p>
-        </Card>
+      ) : data.instrumentType === "etf" || fund ? (
+        /*
+          A fund holds other assets rather than running a business, so there is
+          no balance sheet to score. Saying that plainly is more useful than an
+          empty card implying the data merely failed to load — but on its own
+          it was still a dead end, telling a reader what the page could not do
+          and nothing about the thing they looked up. A fund is not
+          unanalysable, only analysable differently, so when its own portfolio
+          filing can be read it goes directly underneath.
+        */
+        <div className="space-y-5">
+          <Card className="p-5">
+            <h2 className="text-base font-semibold">This is a fund, not a company</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted">
+              {profile?.name ?? upper} is an ETF or trust — a basket of other holdings. It
+              has no revenue, no balance sheet and files no annual report, so the
+              profitability, debt and accounting scores used for companies have nothing to
+              measure here.{" "}
+              {fund
+                ? "What it owns is a matter of public record, and it is below."
+                : "Price history below still applies."}
+            </p>
+            {!fund && (
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
+                <Link
+                  href={`/compare?symbols=${encodeURIComponent(upper)},SPY`}
+                  className="text-accent underline"
+                >
+                  Comparing its performance
+                </Link>{" "}
+                against other funds or the wider market is a meaningful way to judge it.
+              </p>
+            )}
+          </Card>
+
+          {fund && (
+            <FundProfile
+              symbol={upper}
+              portfolio={fund.portfolio}
+              filing={fund.filing}
+            />
+          )}
+        </div>
       ) : (
         <Card>
           <EmptyState
