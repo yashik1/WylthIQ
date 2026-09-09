@@ -24,7 +24,9 @@ import { cikForSymbol } from "@/lib/providers/sec-edgar";
 import { ASSET_CLASS_LABEL, classify, findInstrument } from "@/lib/instruments";
 import { NotACompany } from "@/components/stock/not-a-company";
 import { FundProfile } from "@/components/stock/fund-profile";
+import { FundFacts } from "@/components/stock/fund-facts";
 import { getFundReport } from "@/lib/etf/fund-filings";
+import { alphaVantage } from "@/lib/providers/alphavantage";
 import { EarlySignals } from "@/components/stock/early-signals";
 import { displayName } from "@/lib/company-name";
 import { breadcrumbLd, corporationLd } from "@/lib/structured-data";
@@ -200,6 +202,21 @@ async function StockBody({
     data.assetClass === "future" ||
     Boolean(data.fundamentals?.annual.length);
   const fund = notAFund ? null : await getFundReport(upper);
+
+  /*
+    The commercial facts, asked for only once the page knows it is a fund.
+
+    Sequential on purpose. Alpha Vantage allows 25 requests a day, and asking
+    it about every ticker that happens to have no SEC accounts would spend the
+    lot on companies. Either signal is enough to ask: the N-PORT filing proves
+    it is a registered fund, and `instrumentType` covers the ones that file
+    under another form — SPY is a unit investment trust and has no N-PORT, but
+    it certainly has an expense ratio.
+  */
+  const isFund = Boolean(fund) || data.instrumentType === "etf";
+  const fundProfile = isFund
+    ? await alphaVantage.getEtfProfile(upper).catch(() => null)
+    : null;
   const signedIn = Boolean(session?.user?.id);
   const alreadySaved = saved.some((s) => s.symbol === upper);
 
@@ -505,6 +522,8 @@ async function StockBody({
               </p>
             )}
           </Card>
+
+          {fundProfile && <FundFacts profile={fundProfile} quote={quote} />}
 
           {fund && (
             <FundProfile
