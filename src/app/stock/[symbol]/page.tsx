@@ -26,10 +26,12 @@ import { ASSET_CLASS_LABEL, classify, findInstrument } from "@/lib/instruments";
 import { NotACompany } from "@/components/stock/not-a-company";
 import { FundProfile } from "@/components/stock/fund-profile";
 import { FundFacts } from "@/components/stock/fund-facts";
+import { Subsidiaries } from "@/components/stock/subsidiaries";
 import { getFundReport, loadFundMap } from "@/lib/etf/fund-filings";
 import { getEtfProfile, yahoo } from "@/lib/providers";
 import { isSameListing, summariseIncome } from "@/lib/etf/income";
 import { getFundAnalytics } from "@/lib/etf/fund-analytics";
+import { getSubsidiaries } from "@/lib/company/subsidiaries";
 import { EarlySignals } from "@/components/stock/early-signals";
 import { displayName } from "@/lib/company-name";
 import { breadcrumbLd, corporationLd, investmentFundLd } from "@/lib/structured-data";
@@ -353,6 +355,17 @@ async function StockBody({
     section is not neutral; it makes a claim about what is missing.
   */
   const filesAccounts = data.assetClass === "equity" || data.assetClass === "etf";
+
+  /*
+    The companies this one owns, out of Exhibit 21 of the annual report that
+    is already in the filings list — no second trip to EDGAR to find a filing
+    the page has already fetched. Only for operating companies: a fund holds
+    securities rather than subsidiaries and files no such exhibit.
+  */
+  const subsidiaries =
+    filesAccounts && !isFund
+      ? await getSubsidiaries(upper, data.filings, profile?.name ?? null).catch(() => null)
+      : null;
 
   // Orientation before analysis: what the business is, then what the filings
   // show going well and going badly.
@@ -802,6 +815,8 @@ async function StockBody({
             : "There are no filings to trace back to, but the market still gets written about."
         }
       />
+      {subsidiaries && <Subsidiaries report={subsidiaries} />}
+
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
         {filesAccounts && <FilingsList filings={data.filings} />}
         <div className="space-y-4">

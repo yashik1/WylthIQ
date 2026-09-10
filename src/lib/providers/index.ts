@@ -483,6 +483,52 @@ export async function getEtfProfile(symbol: string) {
   return alphaVantage.getEtfProfile(symbol).catch(() => null);
 }
 
+/**
+ * The company's identity, from every source that has a piece of it.
+ *
+ * Merged rather than taken from whichever provider is primary, and that is a
+ * correction. `getProvider()` returns EODHD whole when a key is set, so
+ * turning that key on silently replaced the profile that EDGAR and Finnhub
+ * had been building together — and each of them carries something the others
+ * do not. EDGAR has the SIC code, which is not decoration: it drives the
+ * sector gating in the scoring engine, and EODHD does not carry one at all.
+ * Finnhub has the website and the logo. The result was a company page with no
+ * industry, no logo and no link to the company's own site, on a deployment
+ * that had just gained a provider rather than lost one.
+ *
+ * Each field takes the most authoritative source that has it, and any source
+ * failing costs only the fields it alone supplies.
+ */
+export async function getCompanyProfile(symbol: string): Promise<CompanyProfile | null> {
+  const [sec, fin, eod] = await Promise.all([
+    secEdgar.getProfile(symbol).catch(() => null),
+    finnhub.isConfigured() ? finnhub.getProfile(symbol).catch(() => null) : null,
+    eodhd.isConfigured() ? eodhd.getProfile(symbol).catch(() => null) : null,
+  ]);
+
+  if (!sec && !fin && !eod) return null;
+
+  return {
+    symbol: symbol.toUpperCase(),
+    // EDGAR wins on identity: it is the filing of record.
+    name: sec?.name ?? eod?.name ?? fin?.name ?? symbol,
+    exchange: fin?.exchange ?? eod?.exchange ?? sec?.exchange ?? null,
+    country: fin?.country ?? eod?.country ?? sec?.country ?? null,
+    currency: fin?.currency ?? eod?.currency ?? null,
+    // Only EDGAR has this, and the scoring engine needs it.
+    sicCode: sec?.sicCode ?? null,
+    sicDescription: sec?.sicDescription ?? null,
+    industry: fin?.industry ?? eod?.industry ?? sec?.sicDescription ?? null,
+    website: fin?.website ?? eod?.website ?? null,
+    logo: fin?.logo ?? eod?.logo ?? null,
+    marketCap: fin?.marketCap ?? eod?.marketCap ?? null,
+    sharesOutstanding: fin?.sharesOutstanding ?? eod?.sharesOutstanding ?? null,
+    cik: sec?.cik ?? eod?.cik ?? null,
+    description: fin?.description ?? eod?.description ?? null,
+    entityType: sec?.entityType ?? null,
+  };
+}
+
 export function providerStatus() {
   const global = eodhd.isConfigured();
   return {

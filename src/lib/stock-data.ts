@@ -3,6 +3,7 @@ import type { NormalizedFundamentals } from "./fundamentals/types";
 import {
   getFundamentalsWithSource,
   getAnalystView,
+  getCompanyProfile,
   getInstrumentType,
   getNewsWithSource,
   getPeers,
@@ -159,7 +160,7 @@ export async function getStockPageData(symbol: string): Promise<StockPageData> {
     rawShortInterest,
     analysts,
   ] = await Promise.all([
-      provider.getProfile(upper).catch(() => null),
+      getCompanyProfile(upper).catch(() => null),
       getFundamentalsWithSource(upper).catch(() => ({
         fundamentals: null,
         currency: null,
