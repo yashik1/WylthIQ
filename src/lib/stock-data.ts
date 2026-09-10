@@ -4,6 +4,7 @@ import {
   getFundamentalsWithSource,
   getAnalystView,
   getCompanyProfile,
+  getCompanyFilings,
   getInstrumentType,
   getNewsWithSource,
   getPeers,
@@ -175,7 +176,7 @@ export async function getStockPageData(symbol: string): Promise<StockPageData> {
           error: err instanceof Error ? err : new Error(String(err)),
         }),
       ),
-      provider.getFilings(upper, 20).catch(() => []),
+      getCompanyFilings(upper, 20).catch(() => []),
       getPeers(upper).catch(() => []),
       getInstrumentType(upper).catch(() => "unknown" as InstrumentType),
       getInsiderActivity(upper).catch(
