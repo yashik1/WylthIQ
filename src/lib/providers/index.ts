@@ -440,13 +440,22 @@ export function hasAnyPriceProvider(): boolean {
  * Funds file no financial statements, so balance-sheet scoring cannot apply.
  */
 export async function getInstrumentType(symbol: string): Promise<InstrumentType> {
-  if (eodhd.isConfigured()) return "unknown";
+  /*
+    Asked of the source that can answer, rather than skipped.
+
+    This used to return "unknown" outright whenever EODHD was configured,
+    which is not a cheaper answer — it is no answer, and this one decides
+    whether a page is scored as a company or described as a fund. Turning on a
+    provider therefore stopped the app recognising an ETF, which is exactly
+    backwards. Twelve Data still answers, so it is still asked.
+  */
   return freeStack.getInstrumentType(symbol);
 }
 
 /** Peers come from Finnhub and are optional, so they have their own accessor. */
 export async function getPeers(symbol: string): Promise<string[]> {
-  if (eodhd.isConfigured()) return [];
+  // Peers come from Finnhub, which does not stop working because another
+  // provider was configured. Returning nothing was a choice, not a limit.
   return freeStack.getPeers(symbol);
 }
 
@@ -481,6 +490,20 @@ export async function getEtfProfile(symbol: string) {
     if (fromEodhd) return fromEodhd;
   }
   return alphaVantage.getEtfProfile(symbol).catch(() => null);
+}
+
+/**
+ * The company's own filings, always from EDGAR.
+ *
+ * These are SEC filings; there is no second opinion about them, and EODHD
+ * carries none — its `getFilings` returns an empty array. So on a deployment
+ * with an EODHD key, `getProvider()` handed back that empty array and every
+ * company page reported "no recent filings indexed on EDGAR", which is a
+ * false statement about Apple rather than a missing feature. It also removed
+ * the annual report the subsidiary list is read out of.
+ */
+export async function getCompanyFilings(symbol: string, limit?: number): Promise<Filing[]> {
+  return secEdgar.getFilings(symbol, limit).catch(() => []);
 }
 
 /**
