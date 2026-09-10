@@ -66,6 +66,33 @@ export class AlphaVantageProvider {
     return json as T;
   }
 
+  /**
+   * The commercial facts about a fund, which no filing carries.
+   *
+   * N-PORT says what a fund owns; it does not say what it charges to own it,
+   * when it opened, or whether it is leveraged. Those live in the prospectus,
+   * as prose in an HTML fee table, and are not extractable at any sensible
+   * cost — so the one number every fund reader looks for first was the one
+   * thing the fund pages could not show.
+   *
+   * Alpha Vantage is used for the same reason it is used for foreign
+   * fundamentals above: a documented API with a published free tier, rather
+   * than an undocumented endpoint whose terms forbid automated access. Its
+   * daily allowance is 25 requests, which `call` caches hard against — a fund
+   * profile changes about once a year, so a repeat view must never spend one.
+   *
+   * Returns null when unconfigured, unknown, or over the limit, and the panel
+   * omits what it did not get rather than showing a blank.
+   */
+  async getEtfProfile(symbol: string): Promise<EtfProfile | null> {
+    const json = await this.call<AvEtfProfile>({
+      function: "ETF_PROFILE",
+      symbol: symbol.toUpperCase(),
+    }).catch(() => null);
+
+    return mapEtfProfile(json);
+  }
+
   /** Finds the exchange-suffixed symbol for a company, e.g. ATZ -> ATZ.TRT. */
   async search(query: string, limit = 8): Promise<SymbolSearchResult[]> {
     const json = await this.call<{ bestMatches?: Record<string, string>[] }>({
@@ -204,9 +231,77 @@ interface AvStatement {
   annualReports?: AvReport[];
 }
 
+/**
+ * The fund facts a filing does not carry.
+ *
+ * Ratios are fractions, as the provider sends them: 0.0018 is 0.18%.
+ */
+export interface EtfProfile {
+  /** Net expense ratio, as a fraction. The number a fund is judged on. */
+  expenseRatio: number | null;
+  dividendYield: number | null;
+  /** Portfolio turnover, as a fraction. Often absent for an index fund. */
+  turnover: number | null;
+  inceptionDate: string | null;
+  leveraged: boolean;
+  /** Weights as fractions, largest first. */
+  sectors: { sector: string; weight: number }[];
+}
+
+interface AvEtfProfile {
+  net_expense_ratio?: string;
+  dividend_yield?: string;
+  portfolio_turnover?: string;
+  inception_date?: string;
+  leveraged?: string;
+  sectors?: { sector?: string; weight?: string }[];
+}
+
+/**
+ * Maps the provider's payload onto the app's shape.
+ *
+ * Separate from the fetch so it can be tested against a real recorded payload
+ * without a network or a key — everything interesting here is in the mapping,
+ * not the request.
+ *
+ * Returns null when the response describes no fund. An equity ticker answers
+ * this endpoint with an empty object rather than an error, so "no fee and no
+ * launch date" is what a non-fund looks like and is the test for one.
+ */
+export function mapEtfProfile(json: AvEtfProfile | null): EtfProfile | null {
+  if (!json) return null;
+
+  const expenseRatio = toNumber(json.net_expense_ratio);
+  const inception =
+    json.inception_date && json.inception_date !== "n/a" ? json.inception_date : null;
+  if (expenseRatio === null && !inception) return null;
+
+  return {
+    expenseRatio,
+    dividendYield: toNumber(json.dividend_yield),
+    turnover: toNumber(json.portfolio_turnover),
+    inceptionDate: inception,
+    // Anything but an explicit "YES" is treated as not leveraged: this drives a
+    // warning on the page, and inventing one is worse than missing one.
+    leveraged: typeof json.leveraged === "string" ? json.leveraged.toUpperCase() === "YES" : false,
+    sectors: (json.sectors ?? [])
+      .map((s) => ({ sector: titleCase(s.sector ?? ""), weight: toNumber(s.weight) }))
+      .filter((s): s is { sector: string; weight: number } => Boolean(s.sector) && s.weight !== null)
+      .sort((a, b) => b.weight - a.weight),
+  };
+}
+
+/** The provider shouts its sector names; the rest of the app does not. */
+function titleCase(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\b[a-z]/g, (c) => c.toUpperCase())
+    .trim();
+}
+
 /** Alpha Vantage returns numbers as strings, and "None" for absent values. */
 function toNumber(raw: string | undefined): number | null {
-  if (raw == null || raw === "None" || raw === "-" || raw === "") return null;
+  if (raw == null || raw === "None" || raw === "-" || raw === "" || raw === "n/a") return null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
 }
