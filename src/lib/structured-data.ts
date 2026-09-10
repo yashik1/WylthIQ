@@ -67,6 +67,54 @@ export function corporationLd(input: {
   return ld;
 }
 
+/**
+ * A fund, which is not a company.
+ *
+ * The fund pages emitted `Corporation` because they share a route with the
+ * company pages, and it is wrong in the way this module's header warns about:
+ * confident, machine-readable and false. A fund runs no business, employs
+ * nobody and has no revenue — a crawler told it is a corporation has been
+ * given a worse answer than one told nothing, because it cannot tell that it
+ * is wrong.
+ *
+ * `InvestmentFund` is schema.org's own type for this, under FinancialProduct.
+ * Deliberately fewer properties than the corporation above: `tickerSymbol` is
+ * defined on Organization and not on this type, so the ticker goes in the
+ * name where it is true rather than into a property that does not exist here.
+ *
+ * `feesAndCommissionsSpecification` is the one place the expense ratio has a
+ * defined home, and it is only emitted when the figure is actually known.
+ */
+export function investmentFundLd(input: {
+  symbol: string;
+  name: string;
+  /** Net expense ratio as a fraction, when known. */
+  expenseRatio?: number | null;
+  holdingCount?: number | null;
+}): JsonLd {
+  const ld: JsonLd = {
+    "@context": "https://schema.org",
+    "@type": "InvestmentFund",
+    name: `${input.name} (${input.symbol})`,
+    url: `${siteUrl()}/stock/${encodeURIComponent(input.symbol)}`,
+  };
+
+  if (typeof input.expenseRatio === "number" && Number.isFinite(input.expenseRatio)) {
+    // Written as a percentage because that is how a fee is quoted everywhere
+    // a reader will have seen one.
+    ld.feesAndCommissionsSpecification = `Net expense ratio ${(input.expenseRatio * 100).toFixed(2)}% a year`;
+  }
+
+  if (typeof input.holdingCount === "number" && input.holdingCount > 0) {
+    ld.description =
+      `${input.name} (${input.symbol}) is an exchange-traded fund holding ` +
+      `${input.holdingCount.toLocaleString("en-US")} positions, listed here from its own ` +
+      `Form N-PORT filing with the SEC.`;
+  }
+
+  return ld;
+}
+
 /** Where this page sits, so a result can show a path rather than a bare URL. */
 export function breadcrumbLd(trail: { name: string; path: string }[]): JsonLd {
   const base = siteUrl();

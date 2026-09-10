@@ -246,6 +246,16 @@ export interface EtfProfile {
   leveraged: boolean;
   /** Weights as fractions, largest first. */
   sectors: { sector: string; weight: number }[];
+  /**
+   * Holdings as ticker and weight.
+   *
+   * The display list comes from the fund's N-PORT filing, which is richer —
+   * it carries countries, bond terms and a link to the filing itself. This
+   * one exists because it carries the thing N-PORT does not: a ticker. That
+   * is what lets a holding be matched against this site's own scored
+   * companies, which is what makes a portfolio valuation possible at all.
+   */
+  holdings: { symbol: string; weight: number }[];
 }
 
 interface AvEtfProfile {
@@ -255,6 +265,7 @@ interface AvEtfProfile {
   inception_date?: string;
   leveraged?: string;
   sectors?: { sector?: string; weight?: string }[];
+  holdings?: { symbol?: string; description?: string; weight?: string }[];
 }
 
 /**
@@ -287,6 +298,12 @@ export function mapEtfProfile(json: AvEtfProfile | null): EtfProfile | null {
     sectors: (json.sectors ?? [])
       .map((s) => ({ sector: titleCase(s.sector ?? ""), weight: toNumber(s.weight) }))
       .filter((s): s is { sector: string; weight: number } => Boolean(s.sector) && s.weight !== null)
+      .sort((a, b) => b.weight - a.weight),
+    holdings: (json.holdings ?? [])
+      .map((h) => ({ symbol: (h.symbol ?? "").toUpperCase().trim(), weight: toNumber(h.weight) }))
+      // A cash line and an untradeable position both come through with an
+      // empty symbol; neither can be matched to a scored company.
+      .filter((h): h is { symbol: string; weight: number } => Boolean(h.symbol) && h.weight !== null)
       .sort((a, b) => b.weight - a.weight),
   };
 }

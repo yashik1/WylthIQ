@@ -25,13 +25,14 @@ import { ASSET_CLASS_LABEL, classify, findInstrument } from "@/lib/instruments";
 import { NotACompany } from "@/components/stock/not-a-company";
 import { FundProfile } from "@/components/stock/fund-profile";
 import { FundFacts } from "@/components/stock/fund-facts";
-import { getFundReport } from "@/lib/etf/fund-filings";
+import { getFundReport, loadFundMap } from "@/lib/etf/fund-filings";
 import { alphaVantage } from "@/lib/providers/alphavantage";
 import { yahoo } from "@/lib/providers";
 import { summariseIncome } from "@/lib/etf/income";
+import { getFundAnalytics } from "@/lib/etf/fund-analytics";
 import { EarlySignals } from "@/components/stock/early-signals";
 import { displayName } from "@/lib/company-name";
-import { breadcrumbLd, corporationLd } from "@/lib/structured-data";
+import { breadcrumbLd, corporationLd, investmentFundLd } from "@/lib/structured-data";
 import { StructuredData } from "@/components/structured-data";
 import { buildWarnings } from "@/lib/scoring/warnings";
 import { buildDividendReport } from "@/lib/scoring/dividends";
@@ -87,12 +88,36 @@ export async function generateMetadata({
   const subject = name ? `${name} (${upper})` : upper;
   const shortSubject = name ?? upper;
 
+  /*
+    A fund gets a fund's title.
+
+    This page was headed "financial health in plain English" and described as
+    "Is Invesco QQQ Trust profitable, growing, or carrying too much debt?" —
+    for a page whose own first card says the health scores do not apply to it.
+    That sentence is what a search engine shows, so the one line most readers
+    saw was the one thing the page had already refused to claim.
+
+    The SEC's fund ticker file answers it, and answers it cheaply: the map is
+    memoised for the life of the process, so after the first fund page this is
+    a lookup rather than a request. Metadata runs before any data is fetched,
+    which is why nothing already on the page could be used here.
+  */
+  const isFund = instrument
+    ? false
+    : await loadFundMap()
+        .then((map) => map.has(upper))
+        .catch(() => false);
+
   const title = instrument
     ? `${subject} — price history and backtesting`
-    : `${subject} — financial health in plain English`;
+    : isFund
+      ? `${subject} — holdings, fees and performance`
+      : `${subject} — financial health in plain English`;
   const description = instrument
     ? `Live price, long-run history and backtesting for ${shortSubject}. It files no accounts, so the company health scores do not apply.`
-    : `Is ${shortSubject} profitable, growing, or carrying too much debt? Plain-English answers, taken straight from its regulatory filings.`;
+    : isFund
+      ? `What ${shortSubject} holds, what it charges and what it pays out — holdings taken straight from its own filings with the SEC.`
+      : `Is ${shortSubject} profitable, growing, or carrying too much debt? Plain-English answers, taken straight from its regulatory filings.`;
 
   return {
     title,
@@ -233,6 +258,15 @@ async function StockBody({
   const income = fundIncome
     ? summariseIncome(fundIncome.dividends, data.quote?.price ?? null)
     : null;
+
+  /*
+    The two figures the app can work out for itself, from the holdings it just
+    read and the price history it already fetches. Last, because the valuation
+    needs the holdings list the profile above carries.
+  */
+  const analytics = isFund
+    ? await getFundAnalytics(upper, fundProfile?.holdings ?? []).catch(() => null)
+    : null;
   const signedIn = Boolean(session?.user?.id);
   const alreadySaved = saved.some((s) => s.symbol === upper);
 
@@ -368,18 +402,33 @@ async function StockBody({
       */}
       <StructuredData
         data={[
-          ...(filesAccounts
+          /*
+            A fund and a company are different things, and were being
+            described as the same thing: `filesAccounts` covers both, so every
+            ETF was published to crawlers as a Corporation — with no revenue,
+            no employees and no business, because it has none.
+          */
+          ...(fund || fundProfile
             ? [
-                corporationLd({
+                investmentFundLd({
                   symbol: upper,
                   name: companyName,
-                  exchange: profile?.exchange,
-                  website: profile?.website,
-                  cik: profile?.cik,
-                  industry: profile?.industry,
+                  expenseRatio: fundProfile?.expenseRatio,
+                  holdingCount: fund?.portfolio.holdingCount ?? null,
                 }),
               ]
-            : []),
+            : filesAccounts
+              ? [
+                  corporationLd({
+                    symbol: upper,
+                    name: companyName,
+                    exchange: profile?.exchange,
+                    website: profile?.website,
+                    cik: profile?.cik,
+                    industry: profile?.industry,
+                  }),
+                ]
+              : []),
           breadcrumbLd([
             { name: "WylthIQ", path: "/" },
             { name: companyName, path: `/stock/${encodeURIComponent(upper)}` },
@@ -545,6 +594,7 @@ async function StockBody({
               quote={quote}
               income={income}
               range={fundIncome}
+              analytics={analytics}
             />
           )}
 
