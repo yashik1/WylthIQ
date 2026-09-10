@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
+import { parseExchangeSuffix } from "@/lib/exchange-suffix";
 import { BalanceSheetVisual } from "@/components/stock/balance-sheet";
 import { FundamentalsChart, type TrendSeries } from "@/components/stock/fundamentals-chart";
 import { FilingsList, NewsList, PeersList, ResearchLinks } from "@/components/stock/links";
@@ -145,6 +146,31 @@ export async function generateMetadata({
 export default async function StockPage({ params }: PageProps<"/stock/[symbol]">) {
   const { symbol } = await params;
   const upper = decodeURIComponent(symbol).toUpperCase();
+
+  /*
+    An exchange-suffixed ticker is an alias for the bare one.
+
+    People type the ticker they were given, and outside the US that ticker
+    carries its exchange — VCN.TO, XIC.TO, RIO.L. This app resolves bare
+    tickers, because its symbol search returns "VCN" with the exchange in a
+    separate field and never "VCN.TO", so a suffixed ticker matched nothing
+    and answered 404 on a page that loads perfectly well one keystroke
+    shorter. /stock/VCN worked; /stock/VCN.TO did not.
+
+    Redirected rather than resolved in place, and permanently, because there
+    is one page per security here and it is reached by the bare ticker. Two
+    live URLs for one fund is exactly what the canonical tags on this page
+    exist to prevent, so the alias resolves to the canonical form instead of
+    competing with it.
+
+    `parseExchangeSuffix` only strips suffixes it recognises as exchanges,
+    which is what keeps BRK.B and BF.B — share classes, not venues — out of
+    this entirely.
+  */
+  const suffixed = parseExchangeSuffix(upper);
+  if (suffixed) {
+    permanentRedirect(`/stock/${encodeURIComponent(suffixed.base)}`);
+  }
 
   /*
     Commodities, contracts and coins skip the EDGAR existence check entirely.
