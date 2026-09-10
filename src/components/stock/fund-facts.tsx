@@ -1,6 +1,8 @@
 import { Card, CardHeader, Metric } from "@/components/ui";
-import { count, percent, price } from "@/lib/format";
+import { count, num, percent, price } from "@/lib/format";
 import { feeOn, type IncomeSummary } from "@/lib/etf/income";
+import { describeBeta } from "@/lib/etf/beta";
+import type { FundAnalytics } from "@/lib/etf/fund-analytics";
 import type { EtfProfile } from "@/lib/providers/alphavantage";
 import type { Quote } from "@/lib/providers/types";
 
@@ -27,11 +29,13 @@ export function FundFacts({
   quote,
   income,
   range: yearRange,
+  analytics,
 }: {
   profile: EtfProfile | null;
   quote: Quote | null;
   income: IncomeSummary | null;
   range: { fiftyTwoWeekLow: number | null; fiftyTwoWeekHigh: number | null } | null;
+  analytics: FundAnalytics | null;
 }) {
   const range = dayRange(quote);
   const currency = quote?.currency ?? "USD";
@@ -146,6 +150,43 @@ export function FundFacts({
         </dl>
       )}
 
+      {(analytics?.valuation || analytics?.beta) && (
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-t border-border px-5 py-4 sm:grid-cols-4">
+          <Metric
+            label="P/E of its holdings"
+            value={analytics.valuation ? num(analytics.valuation.peRatio, 1) : "—"}
+            size="sm"
+            hint={
+              analytics.valuation
+                ? `Weighted across the ${analytics.valuation.priced} holdings this site scores from their own filings — ${percent(analytics.valuation.coverage, 0)} of the fund. Weighted the way a portfolio's multiple actually works, as total price over total earnings, so one expensive holding cannot drag the figure up beyond its share of the earnings. Loss-makers are left out rather than counted as cheap.`
+                : undefined
+            }
+          />
+          <Metric
+            label="Priced from"
+            value={analytics.valuation ? percent(analytics.valuation.coverage, 0) : "—"}
+            size="sm"
+            hint="How much of the fund that P/E covers. The rest is held in companies this site does not score."
+          />
+          <Metric
+            label="Beta"
+            value={analytics.beta ? num(analytics.beta.beta, 2) : "—"}
+            size="sm"
+            hint={
+              analytics.beta
+                ? `Five years of monthly returns against ${analytics.benchmark}, computed here so the basis is stated — providers each pick their own window and rarely say which. This fund ${describeBeta(analytics.beta.beta)}.`
+                : undefined
+            }
+          />
+          <Metric
+            label="Explained by market"
+            value={analytics.beta ? percent(analytics.beta.rSquared, 0) : "—"}
+            size="sm"
+            hint="How much of this fund's movement the benchmark accounts for. A beta near 1 means little when this is low — the slope fits, but the fund is not really tracking the market."
+          />
+        </dl>
+      )}
+
       {profile && sectorsAreComplete(profile.sectors) && (
         <div className="border-t border-border px-5 py-4">
           <p className="eyebrow text-[0.625rem]">What it is invested in</p>
@@ -165,11 +206,12 @@ export function FundFacts({
         The holdings panel below can point at a filing; none of this can.
       */}
       <p className="border-t border-border px-5 py-3 text-xs leading-relaxed text-faint">
-        Fee, launch date and turnover from Alpha Vantage. What it paid, how often, and the
-        year&rsquo;s range are computed here from the fund&rsquo;s own payment history and
-        price — so the yield is trailing rather than forecast. Check the fund&rsquo;s
-        factsheet before acting on a fee: that one is a provider&rsquo;s figure, not the
-        prospectus.
+        Fee, launch date and turnover from Alpha Vantage. Everything else on this card is
+        computed here — the payout and the year&rsquo;s range from the fund&rsquo;s own
+        payment history, the beta from five years of returns against{" "}
+        {analytics?.benchmark ?? "the market"}, and the P/E from this site&rsquo;s own
+        scores for the companies it holds. Check the fund&rsquo;s factsheet before acting
+        on a fee: that one is a provider&rsquo;s figure, not the prospectus.
       </p>
     </Card>
   );
