@@ -7,6 +7,7 @@ import { tiingo } from "./tiingo";
 import { yahoo, yahooSymbol } from "./yahoo";
 import { searchGlobalSymbols, twelveData } from "./twelvedata";
 import { isUsListing, listingForBareTicker } from "../exchange-suffix";
+import { getCanadianIssuerProfile } from "../etf/issuers";
 import {
   fetchBarsWithFailover,
   fetchQuoteWithFailover,
@@ -612,6 +613,16 @@ export async function getAnalystView(symbol: string): Promise<AnalystView | null
  * calls a day, which is the other reason not to spend one when EODHD is there.
  */
 export async function getEtfProfile(symbol: string) {
+  /*
+    The manager's own figures first, for a Canadian fund whose manager
+    publishes them. Free, and better than any feed: the fee on iShares' fund
+    list or Vanguard's product list is the fee. A Toronto fund files nothing
+    with the SEC, so without this its page had no fee unless a paid EODHD plan
+    supplied one.
+  */
+  const fromManager = await getCanadianIssuerProfile(symbol).catch(() => null);
+  if (fromManager) return fromManager;
+
   if (eodhd.isConfigured()) {
     const fromEodhd = await eodhd.getEtfProfile(symbol).catch(() => null);
     if (fromEodhd) return fromEodhd;

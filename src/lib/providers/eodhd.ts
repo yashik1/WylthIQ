@@ -580,6 +580,13 @@ export function mapEodhdEtfProfile(data: EodhdEtfData | null | undefined): EtfPr
     leveraged: false,
     sectors,
     holdings,
+    // A US fund's page lists its positions and size from its N-PORT filing,
+    // so they are not repeated from here.
+    topHoldings: [],
+    holdingCount: null,
+    netAssets: null,
+    netAssetsCurrency: null,
+    source: { name: "EODHD", url: null, asOf: null, publishedByManager: false },
   };
 }
 

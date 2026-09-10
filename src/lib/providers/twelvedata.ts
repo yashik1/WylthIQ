@@ -11,6 +11,7 @@ import type {
   Timeframe,
 } from "./types";
 import { ProviderNotConfiguredError } from "./types";
+import { listingForBareTicker, matchesListing, parseExchangeSuffix } from "../exchange-suffix";
 
 const BASE = "https://api.twelvedata.com";
 
@@ -183,9 +184,21 @@ export class TwelveDataProvider implements MarketDataProvider {
    * "unknown" rather than guessing when the provider gives no answer.
    */
   async getInstrumentType(symbol: string): Promise<InstrumentType> {
-    const results = await this.searchSymbols(symbol, 10).catch(() => []);
-    const exact = results.find((r) => r.symbol.toUpperCase() === symbol.toUpperCase());
-    return exact?.type ?? "unknown";
+    /*
+      The directory lists tickers bare, with the exchange beside them, so a
+      suffixed ticker has to be looked up by its base. Searching "VCN.TO" as
+      typed matched nothing, every Toronto fund came back "unknown", and its
+      page was laid out as a company with no fund card at all.
+    */
+    const suffixed = parseExchangeSuffix(symbol);
+    const ticker = suffixed ? suffixed.base : symbol.trim().toUpperCase();
+    const results = await this.searchSymbols(ticker, 10).catch(() => []);
+    const sameTicker = results.filter((r) => r.symbol.toUpperCase() === ticker);
+
+    const listing = suffixed
+      ? sameTicker.find((r) => matchesListing(suffixed, r))
+      : listingForBareTicker(ticker, sameTicker);
+    return listing?.type ?? "unknown";
   }
 
   // ---- Not served by Twelve Data on the free plan ----

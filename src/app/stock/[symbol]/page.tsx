@@ -308,7 +308,14 @@ async function StockBody({
     under another form — SPY is a unit investment trust and has no N-PORT, but
     it certainly has an expense ratio.
   */
-  const isFund = Boolean(fund) || data.instrumentType === "etf";
+  /*
+    And for a foreign listing, the symbol directory's own word. A Toronto fund
+    files no N-PORT and its provider classification is usually absent, so
+    VCN.TO and XEQT.TO rendered no fund card at all — not even the note saying
+    why a fee was missing.
+  */
+  const isFund =
+    Boolean(fund) || data.instrumentType === "etf" || unsupported?.type === "etf";
   const [fundProfile, fundIncome] = isFund
     ? await Promise.all([
         getEtfProfile(upper),
@@ -651,7 +658,7 @@ async function StockBody({
           assetClass={data.assetClass}
           instrument={data.instrument}
         />
-      ) : data.instrumentType === "etf" || fund ? (
+      ) : isFund ? (
         /*
           A fund holds other assets rather than running a business, so there is
           no balance sheet to score. Saying that plainly is more useful than an
