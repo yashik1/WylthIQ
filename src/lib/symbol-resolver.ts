@@ -1,6 +1,7 @@
 import { loadTickerMap } from "./providers/sec-edgar";
 import { searchGlobalSymbols } from "./providers/twelvedata";
 import type { SymbolSearchResult } from "./providers/types";
+import { matchesListing, parseExchangeSuffix } from "./exchange-suffix";
 
 /**
  * Works out what an unrecognised ticker actually is.
@@ -102,9 +103,33 @@ export async function findUsEquivalent(
  */
 export async function resolveUnsupported(symbol: string): Promise<UnsupportedSymbol | null> {
   const upper = symbol.toUpperCase();
-  const matches = await searchGlobalSymbols(upper, 12);
 
-  const exact = matches.filter((m) => m.symbol.toUpperCase() === upper);
+  /*
+    An exchange suffix is a question about which listing, not part of the name.
+
+    Symbol search answers in bare tickers with the exchange in its own field —
+    "VCN" on TSX, never "VCN.TO" — so requiring an exact string match found
+    nothing for a suffixed ticker and produced a 404 for a fund the site could
+    otherwise show. Searching the base and filtering by exchange asks the
+    question the suffix was actually asking.
+
+    It also settles an ambiguity a bare ticker cannot. QQC is a US fund and
+    QQC.TO a Canadian one; searching "QQC" returns both, and only the suffix
+    says which was meant.
+  */
+  const suffixed = parseExchangeSuffix(upper);
+  const query = suffixed ? suffixed.base : upper;
+  const matches = await searchGlobalSymbols(query, 12);
+
+  const sameTicker = matches.filter((m) => m.symbol.toUpperCase() === query);
+  if (sameTicker.length === 0) return null;
+
+  const exact = suffixed
+    ? sameTicker.filter((m) => matchesListing(suffixed, m))
+    : sameTicker;
+
+  // A suffix naming an exchange this ticker does not trade on is a dead end,
+  // not an invitation to return a different listing.
   if (exact.length === 0) return null;
 
   // Prefer the primary listing over a secondary venue for the same company.

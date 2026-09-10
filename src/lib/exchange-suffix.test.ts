@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseExchangeSuffix } from "./exchange-suffix";
+import { matchesListing, parseExchangeSuffix } from "./exchange-suffix";
 
 /**
  * The dangerous half of this is what it must NOT strip.
@@ -11,10 +11,11 @@ import { parseExchangeSuffix } from "./exchange-suffix";
 
 describe("exchange suffixes it recognises", () => {
   it("splits a Toronto listing", () => {
-    expect(parseExchangeSuffix("VCN.TO")).toEqual({
+    expect(parseExchangeSuffix("VCN.TO")).toMatchObject({
       base: "VCN",
       suffix: "TO",
       exchange: "Toronto Stock Exchange",
+      country: "Canada",
     });
   });
 
@@ -28,6 +29,11 @@ describe("exchange suffixes it recognises", () => {
     expect(parseExchangeSuffix("BHP.AX")?.exchange).toBe("Australian Securities Exchange");
     expect(parseExchangeSuffix("7203.T")?.exchange).toBe("Tokyo Stock Exchange");
     expect(parseExchangeSuffix("ZSP.NE")?.exchange).toBe("Cboe Canada");
+  });
+
+  it("carries the country, which providers agree on more than exchange names", () => {
+    expect(parseExchangeSuffix("VCN.TO")?.country).toBe("Canada");
+    expect(parseExchangeSuffix("BHP.AX")?.country).toBe("Australia");
   });
 });
 
@@ -62,5 +68,34 @@ describe("what it refuses to touch", () => {
     // untouched; neither carries a dot, but the guard is worth stating.
     expect(parseExchangeSuffix("BTC-USD")).toBeNull();
     expect(parseExchangeSuffix("GC=F")).toBeNull();
+  });
+});
+
+describe("picking the listing a suffix asked for", () => {
+  const toronto = parseExchangeSuffix("QQC.TO")!;
+
+  it("matches however the provider spells the exchange", () => {
+    // The same venue arrives under three names depending who is asked.
+    for (const exchange of ["TSX", "TSE", "Toronto", "TSX Exchange"]) {
+      expect(matchesListing(toronto, { exchange, country: null })).toBe(true);
+    }
+  });
+
+  it("falls back to the country when the exchange name is unfamiliar", () => {
+    expect(matchesListing(toronto, { exchange: "Some Venue", country: "Canada" })).toBe(true);
+  });
+
+  it("rejects the listing somewhere else entirely", () => {
+    /*
+      The failure this exists to stop. Searching "QQC" returns a US Simplify
+      fund and a Canadian CI Invesco one; answering the US fund to somebody
+      who asked for QQC.TO gives them the wrong security without saying so.
+    */
+    expect(matchesListing(toronto, { exchange: "NASDAQ", country: "United States" })).toBe(false);
+    expect(matchesListing(toronto, { exchange: null, country: null })).toBe(false);
+  });
+
+  it("does not accept a near-miss country", () => {
+    expect(matchesListing(toronto, { exchange: "LSE", country: "United Kingdom" })).toBe(false);
   });
 });
