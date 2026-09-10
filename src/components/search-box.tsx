@@ -208,7 +208,8 @@ export function SearchBox({
                   i === active ? "bg-surface-2" : "hover:bg-surface-2",
                 )}
               >
-                <span className="w-16 shrink-0 font-semibold">{r.symbol}</span>
+                {/* Wide enough for a suffixed ticker such as XEQT.TO. */}
+                <span className="w-20 shrink-0 font-semibold">{r.symbol}</span>
                 <span className="min-w-0 flex-1 truncate text-muted">{r.name}</span>
                 {/* Naming the exchange up front explains why a foreign listing
                     will not carry scores, before the click rather than after. */}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { parseExchangeSuffix } from "@/lib/exchange-suffix";
 import { BalanceSheetVisual } from "@/components/stock/balance-sheet";
@@ -93,16 +93,21 @@ export async function generateMetadata({
     src/lib/company-name.ts for why that constraint shapes the whole helper.
   */
   /*
-    A foreign listing is named by its base ticker.
+    A foreign listing is named from the symbol directory, never from EDGAR.
 
-    Every tier of `displayName` is EDGAR-backed, and a `.TO` ticker is not in
-    EDGAR — so the suffixed form resolved to no name at all and the title read
-    "VCN.TO on the Toronto Stock Exchange", which is what a search result
-    would have shown. The base ticker names the same security.
+    Every tier of `displayName` is EDGAR-backed, and EDGAR knows US securities
+    only. Asked about a `.TO` listing's base ticker it usually knows nothing —
+    the title read "VGRO.TO on the Toronto Stock Exchange" — and where it does
+    know the ticker, it names a different security: CASH.TO, Global X's savings
+    ETF, was titled after Pathward Financial, which is CASH in New York. The
+    directory names the listing the suffix asked for, and the page body makes
+    the same cached request.
   */
   const name = instrument
     ? instrument.name
-    : await displayName(listing ? listing.base : upper);
+    : listing
+      ? ((await resolveUnsupported(upper).catch(() => null))?.name ?? null)
+      : await displayName(upper);
   const subject = name ? `${name} (${upper})` : upper;
   const shortSubject = name ?? upper;
 
@@ -212,6 +217,27 @@ export default async function StockPage({ params }: PageProps<"/stock/[symbol]">
     if (!cik) {
       unsupported = await resolveUnsupported(upper).catch(() => null);
       if (!unsupported) notFound();
+
+      /*
+        A bare ticker that trades nowhere in the US opens the listing it names.
+
+        See `address` in symbol-resolver.ts for what the bare page got wrong.
+        The SEC's fund file is consulted as well, because a US fund can be
+        missing from the symbol directory and must not be sent to a Toronto
+        fund that shares its ticker; if the file cannot be read, the page stays
+        where it is.
+
+        Temporary rather than permanent: the directory can gain a US listing
+        for the same ticker, and a cached 308 would go on sending readers to
+        Toronto after it did. The destination's canonical tag already tells
+        search engines which address is the page.
+      */
+      if (!listing && unsupported.address) {
+        const usFund = await loadFundMap()
+          .then((map) => map.has(upper))
+          .catch(() => true);
+        if (!usFund) redirect(`/stock/${encodeURIComponent(unsupported.address)}`);
+      }
     }
   }
 

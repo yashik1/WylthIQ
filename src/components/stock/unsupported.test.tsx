@@ -26,6 +26,7 @@ const listing = (over: Partial<UnsupportedSymbol> = {}): UnsupportedSymbol => ({
   type: "etf",
   otherListings: [],
   usEquivalent: null,
+  address: null,
   ...over,
 });
 

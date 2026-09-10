@@ -168,8 +168,14 @@ async function resolveYahooSymbol(symbol: string): Promise<string | null> {
   if (cached !== undefined) return cached;
 
   const { searchGlobalSymbols } = await import("./twelvedata");
+  const { listingForBareTicker } = await import("../exchange-suffix");
   const listings = await searchGlobalSymbols(upper, 6).catch(() => []);
-  const listing = listings.find((l) => l.symbol.toUpperCase() === upper);
+  /*
+    The US listing whenever the ticker has one. A bare ticker names the US
+    security on this site, and taking whichever row the directory lists first
+    resolved TEC — a US fund — to TEC.TO, a different fund in Toronto.
+  */
+  const listing = listingForBareTicker(upper, listings);
 
   const resolved = listing ? yahooSymbol(upper, listing.exchange) : null;
   symbolCache.set(upper, resolved);

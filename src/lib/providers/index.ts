@@ -6,6 +6,7 @@ import { cikForSymbol, secEdgar } from "./sec-edgar";
 import { tiingo } from "./tiingo";
 import { yahoo, yahooSymbol } from "./yahoo";
 import { searchGlobalSymbols, twelveData } from "./twelvedata";
+import { isUsListing, listingForBareTicker } from "../exchange-suffix";
 import {
   fetchBarsWithFailover,
   fetchQuoteWithFailover,
@@ -120,16 +121,37 @@ class FreeStackProvider implements MarketDataProvider {
   async searchSymbols(query: string, limit = 10): Promise<SymbolSearchResult[]> {
     const fromEdgar = await secEdgar.searchSymbols(query, limit).catch(() => []);
 
-    // Only skip the worldwide lookup when EDGAR already holds this exact
-    // ticker. Skipping merely because EDGAR filled the page would hide a
+    // Only narrow the worldwide lookup when EDGAR already holds this exact
+    // ticker. Narrowing merely because EDGAR filled the page would hide a
     // foreign listing behind loose name matches — searching a TSX ticker can
     // return eight unrelated US companies whose names happen to contain it.
     const q = query.trim().toUpperCase();
     const edgarHasExact = fromEdgar.some((r) => r.symbol.toUpperCase() === q);
     if (edgarHasExact) {
-      return fromEdgar
-        .map((r) => ({ ...r, supported: true, type: r.type ?? ("stock" as const) }))
-        .slice(0, limit);
+      /*
+        The same ticker on another exchange is not a loose name match, though.
+
+        Returning EDGAR alone made any foreign listing that shares a US ticker
+        unreachable: searching CASH offered Pathward Financial and never Global
+        X's savings ETF on the TSX. So the directory is still asked, and only
+        its rows for this exact ticker outside the US are kept — placed
+        straight after EDGAR's own exact match, ahead of its prefix and name
+        hits.
+      */
+      const scored = fromEdgar.map((r) => ({
+        ...r,
+        supported: true,
+        type: r.type ?? ("stock" as const),
+      }));
+      const elsewhere = await searchGlobalSymbols(query, limit)
+        .then((rows) => rows.filter((r) => r.symbol.toUpperCase() === q && !isUsListing(r)))
+        .catch(() => [] as SymbolSearchResult[]);
+
+      return [
+        ...scored.filter((r) => r.symbol.toUpperCase() === q),
+        ...elsewhere.map((r) => ({ ...r, supported: false })),
+        ...scored.filter((r) => r.symbol.toUpperCase() !== q),
+      ].slice(0, limit);
     }
 
     const seen = new Set(fromEdgar.map((r) => r.symbol.toUpperCase()));
@@ -275,7 +297,8 @@ export async function getFundamentalsWithSource(symbol: string): Promise<{
     // Yahoo keys foreign listings by suffix — Aritzia is ATZ.TO, and the bare
     // ticker returns nothing — so the exchange has to be resolved first.
     const listings = await searchGlobalSymbols(upper, 6).catch(() => []);
-    const listing = listings.find((l) => l.symbol.toUpperCase() === upper);
+    // The US listing when there is one, as in Yahoo's own suffix lookup.
+    const listing = listingForBareTicker(upper, listings);
     const candidate = yahooSymbol(upper, listing?.exchange);
 
     let fromYahoo = await yahoo.getFundamentals(candidate).catch(() => null);

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { matchesListing, parseExchangeSuffix } from "./exchange-suffix";
+import {
+  addressSearchResults,
+  listingForBareTicker,
+  listingSymbol,
+  matchesListing,
+  parseExchangeSuffix,
+  suffixForListing,
+} from "./exchange-suffix";
 
 /**
  * The dangerous half of this is what it must NOT strip.
@@ -97,5 +104,134 @@ describe("picking the listing a suffix asked for", () => {
 
   it("does not accept a near-miss country", () => {
     expect(matchesListing(toronto, { exchange: "LSE", country: "United Kingdom" })).toBe(false);
+  });
+});
+
+describe("the suffix a search result is addressed by", () => {
+  it.each([
+    ["TSX", "Canada", "TO"],
+    ["TSE", "Canada", "TO"],
+    ["Toronto Stock Exchange", "Canada", "TO"],
+    ["TSXV", "Canada", "V"],
+    ["TSX Venture", "Canada", "V"],
+    ["NEO", "Canada", "NE"],
+    ["LSE", "United Kingdom", "L"],
+    ["TSE", "Japan", "T"],
+    ["XETR", "Germany", "DE"],
+    ["BME", "Spain", "MC"],
+  ])("places %s in %s as .%s", (exchange, country, suffix) => {
+    expect(suffixForListing({ exchange, country })).toBe(suffix);
+  });
+
+  it("gives a US listing no suffix", () => {
+    expect(suffixForListing({ exchange: "NYSE", country: "United States" })).toBeNull();
+    expect(suffixForListing({ exchange: "NASDAQ", country: null })).toBeNull();
+    // An SEC EDGAR hit carries neither field.
+    expect(suffixForListing({ exchange: null, country: null })).toBeNull();
+  });
+
+  it("refuses to guess between venues that fit equally well", () => {
+    // Without a country, "TSE" is Toronto or Tokyo.
+    expect(suffixForListing({ exchange: "TSE", country: null })).toBeNull();
+    // Both German venues answer to "FSX".
+    expect(suffixForListing({ exchange: "FSX", country: "Germany" })).toBeNull();
+  });
+
+  it("leaves a venue it does not know unplaced", () => {
+    expect(suffixForListing({ exchange: "Munich", country: "Germany" })).toBeNull();
+    expect(suffixForListing({ exchange: "IDX", country: "Indonesia" })).toBeNull();
+  });
+});
+
+describe("linking a search result to its listing", () => {
+  it("suffixes a Canadian row", () => {
+    expect(listingSymbol({ symbol: "VGRO", exchange: "TSX", country: "Canada" })).toBe("VGRO.TO");
+  });
+
+  it("leaves a US row, and a share class, exactly as they were", () => {
+    expect(listingSymbol({ symbol: "VGRO", exchange: "NYSE", country: "United States" })).toBe("VGRO");
+    expect(listingSymbol({ symbol: "BRK.B", exchange: "NYSE", country: "United States" })).toBe("BRK.B");
+  });
+
+  it("does not suffix a symbol twice", () => {
+    expect(listingSymbol({ symbol: "VCN.TO", exchange: "TO", country: null })).toBe("VCN.TO");
+  });
+});
+
+describe("search results, each opening the listing it names", () => {
+  const row = (symbol: string, exchange: string | null, country: string | null) => ({
+    symbol,
+    name: `${symbol} on ${exchange}`,
+    exchange,
+    country,
+  });
+
+  it("opens the Toronto fund rather than the US ticker of the same name", () => {
+    // The reported failure: choosing "VGRO — TSX" opened /stock/VGRO, a US
+    // fund, priced in US dollars.
+    const results = addressSearchResults([
+      row("VGRO", "TSX", "Canada"),
+      row("VGRO", "NYSE", "United States"),
+    ]);
+    expect(results.map((r) => r.symbol)).toEqual(["VGRO.TO", "VGRO"]);
+  });
+
+  it("shows a fund cross-listed on Cboe Canada once, as its Toronto listing", () => {
+    const results = addressSearchResults([row("VCN", "TSX", "Canada"), row("VCN", "NEO", "Canada")]);
+    expect(results.map((r) => r.symbol)).toEqual(["VCN.TO"]);
+  });
+
+  it("keeps a fund listed only on Cboe Canada", () => {
+    const results = addressSearchResults([row("ABCD", "NEO", "Canada")]);
+    expect(results.map((r) => r.symbol)).toEqual(["ABCD.NE"]);
+  });
+
+  it("drops a row it cannot place when the bare ticker belongs to a US listing", () => {
+    // CASH, in the order the directory returns it. The Indonesian row cannot
+    // be given a suffix, and following it bare would open Pathward Financial.
+    const results = addressSearchResults([
+      row("CASH", "IDX", "Indonesia"),
+      row("CASH", "NASDAQ", "United States"),
+      row("CASH", "TSX", "Canada"),
+      row("CASH", "NEO", "Canada"),
+      row("CASH", "BME", "Spain"),
+      row("CASH", "IEX", "United States"),
+    ]);
+    expect(results.map((r) => r.symbol)).toEqual(["CASH", "CASH.TO", "CASH.MC"]);
+  });
+
+  it("keeps a row it cannot place when nothing else answers to that ticker", () => {
+    const results = addressSearchResults([row("QQC0", "Munich", "Germany")]);
+    expect(results.map((r) => r.symbol)).toEqual(["QQC0"]);
+  });
+
+  it("leaves an SEC EDGAR hit untouched", () => {
+    const edgar = { symbol: "AAPL", name: "Apple Inc.", exchange: null, cik: "0000320193" };
+    expect(addressSearchResults([edgar])).toEqual([edgar]);
+  });
+});
+
+describe("the listing a bare ticker names", () => {
+  it("is the US one when the ticker trades in the US", () => {
+    // The directory lists TEC in Toronto first; TEC on its own is the US fund.
+    const listings = [
+      { symbol: "TEC", exchange: "TSX", country: "Canada" },
+      { symbol: "TEC", exchange: "NEO", country: "Canada" },
+      { symbol: "TEC", exchange: "NYSE", country: "United States" },
+    ];
+    expect(listingForBareTicker("tec", listings)?.exchange).toBe("NYSE");
+  });
+
+  it("is the first listing when none is in the US", () => {
+    const listings = [
+      { symbol: "QQC", exchange: "TSX", country: "Canada" },
+      { symbol: "QQC", exchange: "NEO", country: "Canada" },
+    ];
+    expect(listingForBareTicker("QQC", listings)?.exchange).toBe("TSX");
+  });
+
+  it("ignores listings of other tickers", () => {
+    const listings = [{ symbol: "QQCC", exchange: "NASDAQ", country: "United States" }];
+    expect(listingForBareTicker("QQC", listings)).toBeNull();
   });
 });
