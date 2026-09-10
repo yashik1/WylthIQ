@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { refuseIfRateLimited } from "@/lib/security/guard";
 import { getProvider } from "@/lib/providers";
 import { ASSET_CLASS_LABEL, searchInstruments } from "@/lib/instruments";
+import { addressSearchResults } from "@/lib/exchange-suffix";
 import type { SymbolSearchResult } from "@/lib/providers/types";
 
 /**
@@ -51,7 +52,19 @@ export async function GET(request: Request) {
   const remaining = Math.max(0, 8 - local.length);
 
   try {
-    const upstream = remaining > 0 ? await getProvider().searchSymbols(query, remaining) : [];
+    /*
+      Each row linked to the listing it names: VGRO on the TSX is VGRO.TO, not
+      the US fund at VGRO. Twice as many are asked for as are shown, because
+      collapsing cross-listed duplicates — most Toronto ETFs also trade on Cboe
+      Canada — can halve what comes back.
+    */
+    const upstream =
+      remaining > 0
+        ? addressSearchResults(await getProvider().searchSymbols(query, remaining * 2)).slice(
+            0,
+            remaining,
+          )
+        : [];
     const seen = new Set(local.map((r) => r.symbol.toUpperCase()));
     const results = [...local, ...upstream.filter((r) => !seen.has(r.symbol.toUpperCase()))];
 

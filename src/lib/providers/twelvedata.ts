@@ -226,6 +226,32 @@ export async function searchGlobalSymbols(
   const trimmed = query.trim();
   if (!trimmed) return [];
 
+  /*
+    Bounded, because this sits in front of the search box.
+
+    The directory once closed a connection mid-response and search waited a
+    full minute before giving up — and every search for a ticker EDGAR also
+    holds now asks the directory too. It normally answers in well under a
+    second, so five is generous.
+
+    A race rather than an abort signal: Next stops deduplicating a fetch that
+    carries a signal, and a foreign listing's page makes this same lookup for
+    its title and again for its body. The abandoned request carries on in the
+    background and may still fill the cache for the next search.
+  */
+  return settleWithin(lookupDirectory(trimmed, limit), 5000, []);
+}
+
+/** Resolves with `fallback` if `work` has not settled within `ms`. `work` must not reject. */
+function settleWithin<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([work, expiry]).finally(() => clearTimeout(timer));
+}
+
+async function lookupDirectory(trimmed: string, limit: number): Promise<SymbolSearchResult[]> {
   try {
     const res = await fetch(
       `${BASE}/symbol_search?symbol=${encodeURIComponent(trimmed)}&outputsize=${Math.min(limit * 3, 30)}`,

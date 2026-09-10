@@ -1,7 +1,13 @@
 import { loadTickerMap } from "./providers/sec-edgar";
 import { searchGlobalSymbols } from "./providers/twelvedata";
 import type { SymbolSearchResult } from "./providers/types";
-import { matchesListing, parseExchangeSuffix } from "./exchange-suffix";
+import {
+  isUsListing,
+  listingForBareTicker,
+  listingSymbol,
+  matchesListing,
+  parseExchangeSuffix,
+} from "./exchange-suffix";
 
 /**
  * Works out what an unrecognised ticker actually is.
@@ -39,6 +45,12 @@ export interface UnsupportedSymbol {
   otherListings: SymbolSearchResult[];
   /** A US-listed ticker for the same company that does file with the SEC. */
   usEquivalent: { symbol: string; name: string } | null;
+  /**
+   * The suffixed ticker this listing is addressed by — "VCN.TO" for "VCN" —
+   * when a bare ticker was asked for and nothing in the US trades under it.
+   * Null otherwise, including whenever the ticker also trades in the US.
+   */
+  address: string | null;
 }
 
 /** Words that carry no identity when matching one company name to another. */
@@ -132,8 +144,27 @@ export async function resolveUnsupported(symbol: string): Promise<UnsupportedSym
   // not an invitation to return a different listing.
   if (exact.length === 0) return null;
 
-  // Prefer the primary listing over a secondary venue for the same company.
-  const primary = exact[0];
+  /*
+    Which listing the page is about.
+
+    For a suffix, the one it named. For a bare ticker, the US listing when
+    there is one — bare tickers are US tickers on this site — and otherwise
+    the primary venue, which the directory lists first. Taking the first row
+    unconditionally gave TEC, a US fund, the name of TD's Toronto fund with the
+    same ticker, because the directory happens to list Toronto first.
+  */
+  const primary = suffixed ? exact[0] : (listingForBareTicker(query, exact) ?? exact[0]);
+
+  /*
+    Where a bare ticker with no US listing actually lives.
+
+    Search links to the suffixed form, but a bare ticker still arrives by typed
+    address and old links, and its page could only guess which listing each
+    provider meant: bare VRE showed a Toronto price under a US company's name,
+    and bare QQC a dollar price under a Canadian fund's. Naming the suffixed
+    ticker lets the page send the reader to the one unambiguous address.
+  */
+  const address = suffixed || exact.some((m) => isUsListing(m)) ? null : listingSymbol(primary);
 
   const usEquivalent = primary.name ? await findUsEquivalent(primary.name) : null;
 
@@ -143,11 +174,12 @@ export async function resolveUnsupported(symbol: string): Promise<UnsupportedSym
     exchange: primary.exchange ?? null,
     country: primary.country ?? null,
     type: primary.type === "etf" || primary.type === "stock" ? primary.type : "unknown",
-    otherListings: exact
-      .slice(1)
-      .filter((m) => m.exchange && m.exchange !== primary.exchange),
+    otherListings: exact.filter(
+      (m) => m !== primary && m.exchange && m.exchange !== primary.exchange,
+    ),
     // Never point at the same ticker we already failed to find.
     usEquivalent:
       usEquivalent && usEquivalent.symbol !== upper ? usEquivalent : null,
+    address: address && address !== upper ? address : null,
   };
 }
