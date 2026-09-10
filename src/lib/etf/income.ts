@@ -109,6 +109,27 @@ function daysBetween(from: string, to: string): number {
 }
 
 /**
+ * Whether two answers describe the same listing.
+ *
+ * A bare ticker can be a real security in more than one country, and the
+ * quote and the payment history are resolved independently — so "QQC" can
+ * return a US fund's price and a Canadian fund's dividends, which the page
+ * then prints side by side as though they were one thing, both in "$".
+ *
+ * Currency is the check because it is the one fact both sides carry. Unknown
+ * on either side is treated as agreement rather than as conflict: refusing to
+ * show a figure because nobody stated a currency would drop the many ordinary
+ * cases to catch the rare bad one.
+ */
+export function isSameListing(
+  quoteCurrency: string | null | undefined,
+  dataCurrency: string | null | undefined,
+): boolean {
+  if (!quoteCurrency || !dataCurrency) return true;
+  return quoteCurrency.toUpperCase() === dataCurrency.toUpperCase();
+}
+
+/**
  * What a fee costs in money, on a round sum.
  *
  * The single most useful thing this app can do with an expense ratio. "0.03%"

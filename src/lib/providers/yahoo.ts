@@ -508,6 +508,19 @@ export class YahooProvider {
     dividends: { date: string; amount: number }[];
     fiftyTwoWeekLow: number | null;
     fiftyTwoWeekHigh: number | null;
+    /**
+     * What this answer is actually about.
+     *
+     * Returned so the caller can check it is the same security it asked
+     * about, which is not a given. `resolveYahooSymbol` tries exchange
+     * suffixes to find a match, and a bare ticker can be a real listing in
+     * two places: "QQC" is a US fund from Simplify and QQC.TO is a Canadian
+     * one from CI Invesco. Resolving independently of whichever provider
+     * answered for the quote put one fund's price beside the other's
+     * dividends and 52-week range on the same card, both printed as "$".
+     */
+    currency: string | null;
+    resolvedSymbol: string;
   } | null> {
     if (!this.isConfigured()) return null;
 
@@ -532,7 +545,12 @@ export class YahooProvider {
       const json = (await res.json()) as {
         chart?: {
           result?: {
-            meta?: { fiftyTwoWeekLow?: number; fiftyTwoWeekHigh?: number };
+            meta?: {
+              fiftyTwoWeekLow?: number;
+              fiftyTwoWeekHigh?: number;
+              currency?: string;
+              symbol?: string;
+            };
             events?: { dividends?: Record<string, { date?: number; amount?: number }> };
           }[];
         };
@@ -553,6 +571,8 @@ export class YahooProvider {
         dividends,
         fiftyTwoWeekLow: result.meta?.fiftyTwoWeekLow ?? null,
         fiftyTwoWeekHigh: result.meta?.fiftyTwoWeekHigh ?? null,
+        currency: result.meta?.currency ?? null,
+        resolvedSymbol: result.meta?.symbol ?? resolved,
       };
     } catch {
       return null;
