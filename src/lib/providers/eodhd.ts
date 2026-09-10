@@ -21,11 +21,43 @@ import type { EtfProfile } from "./alphavantage";
 const BASE = "https://eodhd.com/api";
 
 /**
+ * Says, once, why EODHD refused a request.
+ *
+ * Every call here treats a non-OK response as "no data" and returns null,
+ * which is right for the page and useless for whoever runs it: a wrong key, a
+ * plan without the endpoint and a symbol EODHD does not cover all look alike
+ * from outside. That silence is how a failing key took every price off the
+ * live site with nothing in the logs to say why.
+ *
+ * Once per endpoint and status for the life of the process, so a bad key does
+ * not write a line per page view. The URL is never logged: it carries the API
+ * token as a query parameter.
+ */
+const reported = new Set<string>();
+
+function reportRefusal(endpoint: string, status: number): void {
+  const key = `${endpoint}:${status}`;
+  if (reported.has(key)) return;
+  reported.add(key);
+  const hint =
+    status === 401 || status === 403
+      ? "check EODHD_API_KEY is valid and that the plan includes this endpoint"
+      : status === 404
+        ? "the symbol is not covered"
+        : status === 429
+          ? "rate or daily limit reached"
+          : "unexpected response";
+  console.warn(`[eodhd] ${endpoint} refused with HTTP ${status} — ${hint}.`);
+}
+
+/**
  * EODHD — the worldwide upgrade path.
  *
- * Dormant until `EODHD_API_KEY` is set, at which point it replaces the free
- * US/Canada stack and the app covers 60+ exchanges and 150,000+ tickers with
- * global fundamentals, without any other code change.
+ * Dormant until `EODHD_API_KEY` is set, at which point it is layered behind the
+ * free US/Canada stack: every method still asks the free sources first and
+ * consults EODHD only where they come up empty — see `LayeredProvider` in
+ * index.ts. It once replaced the stack outright, and a key it would not serve
+ * took every price off the site.
  *
  * Freshness note: EODHD's WebSocket feed is genuinely real time for US
  * equities, forex and crypto, but international exchanges are 15-20 minutes
@@ -111,7 +143,10 @@ export class EodhdProvider implements MarketDataProvider {
     const res = await fetch(this.url(`/real-time/${this.qualify(symbol)}`), {
       next: { revalidate: 30 },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      reportRefusal("/real-time", res.status);
+      return null;
+    }
 
     const q = (await res.json()) as {
       close?: number; previousClose?: number; change?: number;
@@ -166,7 +201,10 @@ export class EodhdProvider implements MarketDataProvider {
     const res = await fetch(this.url(`/fundamentals/${this.qualify(symbol)}`), {
       next: { revalidate: 60 * 60 * 12 },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      reportRefusal("/fundamentals", res.status);
+      return null;
+    }
     return (await res.json()) as EodhdFundamentals;
   }
 
