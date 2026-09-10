@@ -1,7 +1,11 @@
 import { Card, CardHeader, Metric } from "@/components/ui";
 import { count, percent, price } from "@/lib/format";
+import { feeOn, type IncomeSummary } from "@/lib/etf/income";
 import type { EtfProfile } from "@/lib/providers/alphavantage";
 import type { Quote } from "@/lib/providers/types";
+
+/** The sum a fee is quoted against. Round, so the arithmetic stays visible. */
+const FEE_BASIS = 10_000;
 
 /**
  * What a fund costs, and how it trades.
@@ -18,8 +22,20 @@ import type { Quote } from "@/lib/providers/types";
  * Ratios arrive as fractions: 0.0018 is 0.18%. That is what `percent()`
  * expects, so unlike the N-PORT panel next door nothing is divided here.
  */
-export function FundFacts({ profile, quote }: { profile: EtfProfile; quote: Quote | null }) {
+export function FundFacts({
+  profile,
+  quote,
+  income,
+  range: yearRange,
+}: {
+  profile: EtfProfile | null;
+  quote: Quote | null;
+  income: IncomeSummary | null;
+  range: { fiftyTwoWeekLow: number | null; fiftyTwoWeekHigh: number | null } | null;
+}) {
   const range = dayRange(quote);
+  const currency = quote?.currency ?? "USD";
+  const yearly = feeOn(profile?.expenseRatio ?? null, FEE_BASIS);
 
   return (
     <Card>
@@ -28,7 +44,7 @@ export function FundFacts({ profile, quote }: { profile: EtfProfile; quote: Quot
         subtitle="The fee is the one figure under your control — it is charged whether the fund rises or falls, every year you hold it."
       />
 
-      {profile.leveraged && (
+      {profile?.leveraged && (
         /*
           Stated before the numbers, not after them.
 
@@ -46,26 +62,75 @@ export function FundFacts({ profile, quote }: { profile: EtfProfile; quote: Quot
         </p>
       )}
 
+      {/*
+        The fee in money, said before the table rather than inside it.
+
+        This is the one line on the card most likely to change what somebody
+        does. A reader compares 0.03% and 0.75% and sees two small numbers;
+        they are a factor of twenty-five apart, and nobody holds a percentage.
+        Stating it as a yearly sum on a round amount makes the comparison the
+        arithmetic a person would actually do.
+      */}
+      {yearly !== null && (
+        <p className="border-b border-border px-5 py-3.5 text-[0.9375rem] leading-relaxed">
+          Holding {plainMoney(FEE_BASIS, currency)} of this fund costs about{" "}
+          <span className="font-semibold">{plainMoney(yearly, currency)} a year</span> in fees,
+          taken out of the fund&rsquo;s value rather than billed to you
+          {income?.trailingTwelveMonths ? (
+            <>
+              . It paid {price(income.trailingTwelveMonths, currency)} per share over the
+              last year
+              {income.frequency ? `, ${income.frequency.toLowerCase()}` : ""}.
+            </>
+          ) : (
+            "."
+          )}
+        </p>
+      )}
+
       <dl className="grid grid-cols-2 gap-x-4 gap-y-4 px-5 py-4 sm:grid-cols-4">
         <Metric
           label="Expense ratio"
-          value={profile.expenseRatio == null ? "—" : percent(profile.expenseRatio, 2)}
+          value={profile?.expenseRatio == null ? "—" : percent(profile.expenseRatio, 2)}
           size="lg"
-          hint="Charged annually as a share of what you hold, taken out of the fund's value rather than billed. On £10,000 held for ten years, the difference between 0.03% and 0.75% is roughly £750 before any effect on compounding."
+          hint="Charged annually as a share of what you hold, taken out of the fund's value rather than billed."
         />
         <Metric
           label="Dividend yield"
-          value={profile.dividendYield == null ? "—" : percent(profile.dividendYield, 2)}
+          value={income?.yield == null ? "—" : percent(income.yield, 2)}
           size="lg"
+          hint="What it paid out over the last twelve months, against today's price. Computed from the fund's own payment history rather than taken from a provider's summary, so the basis is known: trailing, not forecast."
         />
-        <Metric label="Launched" value={launched(profile.inceptionDate)} size="lg" />
+        <Metric label="Launched" value={launched(profile?.inceptionDate ?? null)} size="lg" />
         <Metric
           label="Turnover"
-          value={profile.turnover == null ? "—" : percent(profile.turnover, 0)}
+          value={profile?.turnover == null ? "—" : percent(profile.turnover, 0)}
           size="lg"
           hint="How much of the portfolio was replaced over a year. A low figure is what an index fund should show; a high one means trading costs the expense ratio does not include."
         />
       </dl>
+
+      {income && (income.trailingTwelveMonths !== null || income.lastExDate) && (
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-t border-border px-5 py-4 sm:grid-cols-4">
+          <Metric
+            label="Paid last 12 months"
+            value={income.trailingTwelveMonths == null ? "—" : price(income.trailingTwelveMonths, currency)}
+            size="sm"
+            hint={
+              income.paymentsCounted > 0
+                ? `Per share, from ${income.paymentsCounted} payment${income.paymentsCounted === 1 ? "" : "s"}.`
+                : undefined
+            }
+          />
+          <Metric label="Pays" value={income.frequency ?? "—"} size="sm" />
+          <Metric label="Last ex-dividend" value={launched(income.lastExDate, true)} size="sm" />
+          <Metric
+            label="52-week range"
+            value={yearRangeText(yearRange, currency)}
+            size="sm"
+          />
+        </dl>
+      )}
 
       {quote && (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-t border-border px-5 py-4 sm:grid-cols-4">
@@ -81,7 +146,7 @@ export function FundFacts({ profile, quote }: { profile: EtfProfile; quote: Quot
         </dl>
       )}
 
-      {sectorsAreComplete(profile.sectors) && (
+      {profile && sectorsAreComplete(profile.sectors) && (
         <div className="border-t border-border px-5 py-4">
           <p className="eyebrow text-[0.625rem]">What it is invested in</p>
           <ul className="mt-2.5 grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-1.5 sm:grid-cols-2">
@@ -95,10 +160,16 @@ export function FundFacts({ profile, quote }: { profile: EtfProfile; quote: Quot
         </div>
       )}
 
+      {/*
+        Three sources on one card, so the card says which is which.
+        The holdings panel below can point at a filing; none of this can.
+      */}
       <p className="border-t border-border px-5 py-3 text-xs leading-relaxed text-faint">
-        Figures on this card come from Alpha Vantage; the holdings below come from the
-        fund&rsquo;s own SEC filing. Check the fund&rsquo;s factsheet before acting on a fee
-        — this one is a provider&rsquo;s figure, not the prospectus.
+        Fee, launch date and turnover from Alpha Vantage. What it paid, how often, and the
+        year&rsquo;s range are computed here from the fund&rsquo;s own payment history and
+        price — so the yield is trailing rather than forecast. Check the fund&rsquo;s
+        factsheet before acting on a fee: that one is a provider&rsquo;s figure, not the
+        prospectus.
       </p>
     </Card>
   );
@@ -111,15 +182,39 @@ export function FundFacts({ profile, quote }: { profile: EtfProfile; quote: Quot
  * `1999-03-10` in a row of percentages reads as a serial number. Formatted
  * from the string's own parts, so no timezone can move it.
  */
-function launched(date: string | null): string {
+function launched(date: string | null, withDay = false): string {
   if (!date) return "—";
-  const [y, m] = date.split("-").map(Number);
+  const [y, m, d] = date.split("-").map(Number);
   if (!y || !m) return date;
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", {
+  return new Date(Date.UTC(y, m - 1, withDay ? (d || 1) : 1)).toLocaleDateString("en-US", {
     timeZone: "UTC",
+    ...(withDay ? { day: "numeric" as const } : {}),
     month: "short",
     year: "numeric",
   });
+}
+
+/**
+ * A round sum, written the way a person writes one.
+ *
+ * `money()` abbreviates to "$10.0K" and `price()` insists on pence, and this
+ * sentence wants neither — "$10000.00 costs $18.00 a year" reads like machine
+ * output in the one line on the card written to be read as a sentence.
+ */
+function plainMoney(value: number, currency: string): string {
+  const symbol = currency === "USD" ? "$" : currency === "GBP" ? "£" : currency === "EUR" ? "€" : "";
+  const rounded = Math.round(value);
+  const text = rounded.toLocaleString("en-US");
+  return symbol ? `${symbol}${text}` : `${text} ${currency}`;
+}
+
+/** "578.46 – 716.39", the year's low and high. */
+function yearRangeText(
+  range: { fiftyTwoWeekLow: number | null; fiftyTwoWeekHigh: number | null } | null,
+  currency: string,
+): string {
+  if (!range || range.fiftyTwoWeekLow == null || range.fiftyTwoWeekHigh == null) return "—";
+  return `${price(range.fiftyTwoWeekLow, currency)} – ${price(range.fiftyTwoWeekHigh, currency)}`;
 }
 
 /**
