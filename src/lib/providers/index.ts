@@ -465,6 +465,24 @@ export async function getAnalystView(symbol: string): Promise<AnalystView | null
 }
 
 /** Reports which capabilities are available, for setup messaging in the UI. */
+/**
+ * A fund's commercial facts, from whichever provider can answer.
+ *
+ * EODHD first when it is configured, for two reasons. It reaches beyond the
+ * SEC — a Toronto-listed ETF files with the CSA and appears nowhere in EDGAR,
+ * so this is the only route to a fee for one — and it costs no extra request,
+ * because the fundamentals payload it reads is already fetched and cached for
+ * the company pages. Alpha Vantage answers otherwise, and its allowance is 25
+ * calls a day, which is the other reason not to spend one when EODHD is there.
+ */
+export async function getEtfProfile(symbol: string) {
+  if (eodhd.isConfigured()) {
+    const fromEodhd = await eodhd.getEtfProfile(symbol).catch(() => null);
+    if (fromEodhd) return fromEodhd;
+  }
+  return alphaVantage.getEtfProfile(symbol).catch(() => null);
+}
+
 export function providerStatus() {
   const global = eodhd.isConfigured();
   return {
