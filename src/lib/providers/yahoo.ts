@@ -488,6 +488,77 @@ export class YahooProvider {
     }
   }
 
+  /**
+   * What a holding paid out, and the year's trading range.
+   *
+   * One call for both because the chart endpoint returns them together: the
+   * dividend events in `events`, the 52-week high and low in `meta`. Asking
+   * twice would be two requests for one page.
+   *
+   * This exists for the fund pages, where neither figure is available any
+   * other way. A company's dividends come out of its own filings and a fund
+   * files none — N-PORT reports what a fund owns, not what it distributes —
+   * so without this a fund page could show what it holds and what it charges
+   * but not what it pays.
+   *
+   * Two years rather than one, deliberately: a payout schedule cannot be read
+   * from four dates. Eight tells you it is quarterly and that none was missed.
+   */
+  async getIncomeAndRange(symbol: string): Promise<{
+    dividends: { date: string; amount: number }[];
+    fiftyTwoWeekLow: number | null;
+    fiftyTwoWeekHigh: number | null;
+  } | null> {
+    if (!this.isConfigured()) return null;
+
+    const resolved = symbol.includes(".") ? symbol : ((await resolveYahooSymbol(symbol)) ?? symbol);
+    const now = Math.floor(Date.now() / 1000);
+    const params = new URLSearchParams({
+      interval: "1d",
+      period1: String(now - 60 * 60 * 24 * 730),
+      period2: String(now),
+      events: "div",
+    });
+
+    try {
+      const res = await fetch(`${CHART}/${encodeURIComponent(resolved)}?${params}`, {
+        headers: HEADERS,
+        // A dividend lands quarterly and the range moves daily; six hours is
+        // far more often than either matters on a page like this.
+        next: { revalidate: 60 * 60 * 6 },
+      });
+      if (!res.ok) return null;
+
+      const json = (await res.json()) as {
+        chart?: {
+          result?: {
+            meta?: { fiftyTwoWeekLow?: number; fiftyTwoWeekHigh?: number };
+            events?: { dividends?: Record<string, { date?: number; amount?: number }> };
+          }[];
+        };
+      };
+
+      const result = json.chart?.result?.[0];
+      if (!result) return null;
+
+      const dividends = Object.values(result.events?.dividends ?? {})
+        .filter((d): d is { date: number; amount: number } =>
+          typeof d.date === "number" && typeof d.amount === "number" && d.amount > 0)
+        // Epoch seconds to a plain date. These are ex-dividend dates, which are
+        // calendar dates rather than moments, so no zone is carried forward.
+        .map((d) => ({ date: new Date(d.date * 1000).toISOString().slice(0, 10), amount: d.amount }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      return {
+        dividends,
+        fiftyTwoWeekLow: result.meta?.fiftyTwoWeekLow ?? null,
+        fiftyTwoWeekHigh: result.meta?.fiftyTwoWeekHigh ?? null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async getQuote(symbol: string): Promise<Quote | null> {
     if (!this.isConfigured()) return null;
 

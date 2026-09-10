@@ -27,6 +27,8 @@ import { FundProfile } from "@/components/stock/fund-profile";
 import { FundFacts } from "@/components/stock/fund-facts";
 import { getFundReport } from "@/lib/etf/fund-filings";
 import { alphaVantage } from "@/lib/providers/alphavantage";
+import { yahoo } from "@/lib/providers";
+import { summariseIncome } from "@/lib/etf/income";
 import { EarlySignals } from "@/components/stock/early-signals";
 import { displayName } from "@/lib/company-name";
 import { breadcrumbLd, corporationLd } from "@/lib/structured-data";
@@ -214,8 +216,22 @@ async function StockBody({
     it certainly has an expense ratio.
   */
   const isFund = Boolean(fund) || data.instrumentType === "etf";
-  const fundProfile = isFund
-    ? await alphaVantage.getEtfProfile(upper).catch(() => null)
+  const [fundProfile, fundIncome] = isFund
+    ? await Promise.all([
+        alphaVantage.getEtfProfile(upper).catch(() => null),
+        /*
+          What it paid, and the year's range, from the endpoint the price
+          chart's dividend markers already come from. A fund files no accounts,
+          so the sequence of payments is the only public record of its income —
+          and the same call carries the 52-week high and low, so this is one
+          request for both.
+        */
+        yahoo.getIncomeAndRange(upper).catch(() => null),
+      ])
+    : [null, null];
+
+  const income = fundIncome
+    ? summariseIncome(fundIncome.dividends, data.quote?.price ?? null)
     : null;
   const signedIn = Boolean(session?.user?.id);
   const alreadySaved = saved.some((s) => s.symbol === upper);
@@ -523,7 +539,14 @@ async function StockBody({
             )}
           </Card>
 
-          {fundProfile && <FundFacts profile={fundProfile} quote={quote} />}
+          {(fundProfile || income) && (
+            <FundFacts
+              profile={fundProfile}
+              quote={quote}
+              income={income}
+              range={fundIncome}
+            />
+          )}
 
           {fund && (
             <FundProfile
