@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { parseExchangeSuffix } from "@/lib/exchange-suffix";
 import { BalanceSheetVisual } from "@/components/stock/balance-sheet";
@@ -76,6 +76,12 @@ export async function generateMetadata({
   const instrument = findInstrument(upper);
 
   /*
+    A suffixed ticker names a foreign listing, which the SEC fund file will
+    never contain — asking it is a request to be told no.
+  */
+  const listing = parseExchangeSuffix(upper);
+
+  /*
     The name leads, the ticker follows.
 
     This page used to be titled "AAPL — financial health in plain English",
@@ -85,7 +91,17 @@ export async function generateMetadata({
     what it is about. displayName resolves it without a new round trip — see
     src/lib/company-name.ts for why that constraint shapes the whole helper.
   */
-  const name = instrument ? instrument.name : await displayName(upper);
+  /*
+    A foreign listing is named by its base ticker.
+
+    Every tier of `displayName` is EDGAR-backed, and a `.TO` ticker is not in
+    EDGAR — so the suffixed form resolved to no name at all and the title read
+    "VCN.TO on the Toronto Stock Exchange", which is what a search result
+    would have shown. The base ticker names the same security.
+  */
+  const name = instrument
+    ? instrument.name
+    : await displayName(listing ? listing.base : upper);
   const subject = name ? `${name} (${upper})` : upper;
   const shortSubject = name ?? upper;
 
@@ -103,22 +119,26 @@ export async function generateMetadata({
     a lookup rather than a request. Metadata runs before any data is fetched,
     which is why nothing already on the page could be used here.
   */
-  const isFund = instrument
-    ? false
+  const isFund = instrument || listing
+    ? Boolean(listing)
     : await loadFundMap()
         .then((map) => map.has(upper))
         .catch(() => false);
 
   const title = instrument
     ? `${subject} — price history and backtesting`
-    : isFund
-      ? `${subject} — holdings, fees and performance`
-      : `${subject} — financial health in plain English`;
+    : listing
+      ? `${subject} on the ${listing.exchange}`
+      : isFund
+        ? `${subject} — holdings, fees and performance`
+        : `${subject} — financial health in plain English`;
   const description = instrument
     ? `Live price, long-run history and backtesting for ${shortSubject}. It files no accounts, so the company health scores do not apply.`
-    : isFund
-      ? `What ${shortSubject} holds, what it charges and what it pays out — holdings taken straight from its own filings with the SEC.`
-      : `Is ${shortSubject} profitable, growing, or carrying too much debt? Plain-English answers, taken straight from its regulatory filings.`;
+    : listing
+      ? `Price history and fund details for ${shortSubject}, the ${listing.exchange} listing — a different security from any same-named ticker elsewhere.`
+      : isFund
+        ? `What ${shortSubject} holds, what it charges and what it pays out — holdings taken straight from its own filings with the SEC.`
+        : `Is ${shortSubject} profitable, growing, or carrying too much debt? Plain-English answers, taken straight from its regulatory filings.`;
 
   return {
     title,
@@ -149,29 +169,19 @@ export default async function StockPage({ params }: PageProps<"/stock/[symbol]">
   const upper = decodeURIComponent(symbol).toUpperCase();
 
   /*
-    An exchange-suffixed ticker is an alias for the bare one.
+    A suffixed ticker is its own listing, and keeps its own page.
 
-    People type the ticker they were given, and outside the US that ticker
-    carries its exchange — VCN.TO, XIC.TO, RIO.L. This app resolves bare
-    tickers, because its symbol search returns "VCN" with the exchange in a
-    separate field and never "VCN.TO", so a suffixed ticker matched nothing
-    and answered 404 on a page that loads perfectly well one keystroke
-    shorter. /stock/VCN worked; /stock/VCN.TO did not.
+    An earlier version redirected VCN.TO to VCN, which fixed the 404 and lost
+    the only thing the suffix was for. QQC is a US fund from Simplify and
+    QQC.TO a Canadian one from CI Invesco — different funds, different
+    currencies, different holdings — and a bare ticker can only ever resolve
+    to one of them. Collapsing the suffixed form meant the other fund had no
+    address at all.
 
-    Redirected rather than resolved in place, and permanently, because there
-    is one page per security here and it is reached by the bare ticker. Two
-    live URLs for one fund is exactly what the canonical tags on this page
-    exist to prevent, so the alias resolves to the canonical form instead of
-    competing with it.
-
-    `parseExchangeSuffix` only strips suffixes it recognises as exchanges,
-    which is what keeps BRK.B and BF.B — share classes, not venues — out of
-    this entirely.
+    So the suffix survives, the page resolves the listing it names, and the
+    canonical tag points at the suffixed URL rather than at the bare one.
   */
-  const suffixed = parseExchangeSuffix(upper);
-  if (suffixed) {
-    permanentRedirect(`/stock/${encodeURIComponent(suffixed.base)}`);
-  }
+  const listing = parseExchangeSuffix(upper);
 
   /*
     Commodities, contracts and coins skip the EDGAR existence check entirely.
@@ -186,7 +196,12 @@ export default async function StockPage({ params }: PageProps<"/stock/[symbol]">
 
   let unsupported: UnsupportedSymbol | null = null;
   if (!assetClass) {
-    const cik = await cikForSymbol(upper).catch(() => null);
+    /*
+      A foreign listing is never in EDGAR, so asking costs a round trip to be
+      told what the suffix already said. `.TO` is a statement that this files
+      in Canada.
+    */
+    const cik = listing ? null : await cikForSymbol(upper).catch(() => null);
 
     // Absent from EDGAR. Resolve it here, before streaming, so a genuine typo
     // can still answer 404 — but do not decide the page from that alone. A
