@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { searchGlobalSymbols } from "./twelvedata";
+import { searchGlobalSymbols, twelveData } from "./twelvedata";
 
 /**
  * Search must not wait on a directory that has stopped answering.
@@ -59,5 +59,38 @@ describe("the worldwide symbol directory", () => {
         type: "etf",
       },
     ]);
+  });
+});
+
+describe("what kind of instrument a listing is", () => {
+  const directory = (data: Record<string, string>[]) =>
+    vi.fn(async () => new Response(JSON.stringify({ data })));
+
+  it("classifies a Toronto listing by the bare ticker the directory lists", async () => {
+    // Searched as typed, "VCN.TO" matched no row, and the fund's page was laid
+    // out as a company.
+    vi.stubGlobal(
+      "fetch",
+      directory([
+        { symbol: "VCN", instrument_name: "Vanguard FTSE Canada All Cap Index ETF", exchange: "TSX", instrument_type: "ETF", country: "Canada" },
+        { symbol: "VCN", instrument_name: "Vanguard FTSE Canada All Cap ETF", exchange: "NEO", instrument_type: "ETF", country: "Canada" },
+      ]),
+    );
+
+    expect(await twelveData.getInstrumentType("VCN.TO")).toBe("etf");
+  });
+
+  it("classifies a bare ticker as its US listing", async () => {
+    // CASH is a savings ETF in Toronto and Pathward Financial in New York.
+    vi.stubGlobal(
+      "fetch",
+      directory([
+        { symbol: "CASH", instrument_name: "Global X High Interest Savings ETF", exchange: "TSX", instrument_type: "ETF", country: "Canada" },
+        { symbol: "CASH", instrument_name: "Pathward Financial Inc", exchange: "NASDAQ", instrument_type: "Common Stock", country: "United States" },
+      ]),
+    );
+
+    expect(await twelveData.getInstrumentType("CASH")).toBe("stock");
+    expect(await twelveData.getInstrumentType("CASH.TO")).toBe("etf");
   });
 });

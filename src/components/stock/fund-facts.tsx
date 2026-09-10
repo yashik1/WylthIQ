@@ -1,9 +1,9 @@
 import { Card, CardHeader, Metric } from "@/components/ui";
-import { count, num, percent, price } from "@/lib/format";
+import { count, money, num, percent, price } from "@/lib/format";
 import { feeOn, type IncomeSummary } from "@/lib/etf/income";
 import { describeBeta } from "@/lib/etf/beta";
 import type { FundAnalytics } from "@/lib/etf/fund-analytics";
-import type { EtfProfile } from "@/lib/providers/alphavantage";
+import type { EtfProfile, EtfProfileSource } from "@/lib/providers/alphavantage";
 import type { Quote } from "@/lib/providers/types";
 
 /** The sum a fee is quoted against. Round, so the arithmetic stays visible. */
@@ -175,6 +175,30 @@ export function FundFacts({
         />
       </dl>
 
+      {/*
+        Size and breadth, where the source states them.
+
+        A US fund's page shows both from its N-PORT filing in the holdings
+        panel, so the providers that cover US funds leave these empty and the
+        row does not appear twice.
+      */}
+      {profile && (profile.netAssets != null || profile.holdingCount != null) && (
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-t border-border px-5 py-4 sm:grid-cols-4">
+          <Metric
+            label="Net assets"
+            value={money(profile.netAssets, profile.netAssetsCurrency ?? currency)}
+            size="sm"
+            hint="The whole fund's size, across every unit class, as its manager reports it."
+          />
+          <Metric
+            label="Positions"
+            value={count(profile.holdingCount)}
+            size="sm"
+            hint="Everything the fund holds directly, cash left out. A fund that holds other funds counts each of them once."
+          />
+        </dl>
+      )}
+
       {income &&
         (income.trailingTwelveMonths !== null || income.lastExDate) && (
           <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-t border-border px-5 py-4 sm:grid-cols-4">
@@ -299,20 +323,94 @@ export function FundFacts({
       )}
 
       {/*
-        Three sources on one card, so the card says which is which.
+        The largest positions, for a fund whose own filing is not on this page.
+
+        A US fund lists every position in the N-PORT panel below, so this only
+        fills for a fund this site cannot read a filing for — a Toronto fund
+        whose manager publishes its holdings. Names are printed as the manager
+        files them rather than re-cased, because re-casing "ISHARES CORE S&P
+        TOTAL U.S. COM" gets the initialisms wrong.
+      */}
+      {profile && profile.topHoldings.length > 0 && (
+        <div className="border-t border-border px-5 py-4">
+          <p className="eyebrow text-[0.625rem]">
+            Largest holdings
+            {profile.source.asOf ? `, ${launched(profile.source.asOf, true)}` : ""}
+          </p>
+          <ul className="mt-2.5 grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-1.5 sm:grid-cols-2">
+            {profile.topHoldings.map((h, i) => (
+              <li
+                key={`${h.symbol ?? h.name}-${i}`}
+                className="flex items-baseline justify-between gap-4 text-sm"
+              >
+                <span className="min-w-0 truncate text-muted-strong">
+                  {h.name}
+                  {h.detail && <span className="text-faint"> · {h.detail}</span>}
+                </span>
+                <span className="tnum shrink-0 font-medium">
+                  {percent(h.weight, 1)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/*
+        Several sources on one card, so the card says which is which.
         The holdings panel below can point at a filing; none of this can.
       */}
       <p className="border-t border-border px-5 py-3 text-xs leading-relaxed text-faint">
-        Fee, launch date and turnover from Alpha Vantage. Everything else on
-        this card is computed here — the payout and the year&rsquo;s range from
-        the fund&rsquo;s own payment history, the beta from five years of
-        returns against {analytics?.benchmark ?? "the market"}, and the P/E from
-        this site&rsquo;s own scores for the companies it holds. Check the
-        fund&rsquo;s factsheet before acting on a fee: that one is a
-        provider&rsquo;s figure, not the prospectus.
+        {profile && <FigureSource source={profile.source} />}
+        Everything else on this card is computed here — the payout and the
+        year&rsquo;s range from the fund&rsquo;s own payment history, the beta
+        from five years of returns against {analytics?.benchmark ?? "the market"},
+        and the P/E from this site&rsquo;s own scores for the companies it
+        holds.
+        {profile && !profile.source.publishedByManager && (
+          <>
+            {" "}
+            Check the fund&rsquo;s factsheet before acting on a fee: that one is
+            a provider&rsquo;s figure, not the prospectus.
+          </>
+        )}
       </p>
     </Card>
   );
+}
+
+/**
+ * Whose fee this is, as the opening of the card's footer.
+ *
+ * The fee used to be credited to Alpha Vantage whichever source supplied it.
+ * A figure from the fund's own manager is also worth saying so, and linking:
+ * it is the number a reader would find on the factsheet.
+ */
+function FigureSource({ source }: { source: EtfProfileSource }) {
+  const name = source.url ? (
+    <a
+      href={source.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-accent underline"
+    >
+      {source.name}
+    </a>
+  ) : (
+    source.name
+  );
+
+  if (source.publishedByManager) {
+    return (
+      <>
+        The fee, size and holdings are the fund manager&rsquo;s own figures,
+        from {name}
+        {source.asOf ? `, as of ${launched(source.asOf, true)}` : ""}.{" "}
+      </>
+    );
+  }
+
+  return <>Fee, launch date and turnover from {name}. </>;
 }
 
 /**

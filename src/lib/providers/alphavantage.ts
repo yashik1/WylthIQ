@@ -256,6 +256,39 @@ export interface EtfProfile {
    * companies, which is what makes a portfolio valuation possible at all.
    */
   holdings: { symbol: string; weight: number }[];
+  /**
+   * The largest positions by name, for the card to list.
+   *
+   * Separate from `holdings` because the two do different jobs. That list
+   * feeds the portfolio valuation, so it holds only tickers that can be
+   * matched to a scored company; this one is for a reader, and a bond or a
+   * Toronto-only stock belongs in it all the same. Empty where the fund's own
+   * N-PORT filing already lists every position further down the page.
+   */
+  topHoldings: { name: string; symbol: string | null; weight: number; detail: string | null }[];
+  /** Positions held, cash lines excluded. Null where the source does not say. */
+  holdingCount: number | null;
+  /** The whole fund's net assets, in `netAssetsCurrency`. */
+  netAssets: number | null;
+  netAssetsCurrency: string | null;
+  /** Where these figures came from, so the card can say so. */
+  source: EtfProfileSource;
+}
+
+export interface EtfProfileSource {
+  name: string;
+  /** A page a reader can check the figures against. */
+  url: string | null;
+  /** The date the figures describe, when the source states one. */
+  asOf: string | null;
+  /**
+   * Whether the fund's own manager published them.
+   *
+   * Decides what the card tells a reader to do before acting on a fee: a data
+   * provider's figure is worth checking against the factsheet, and the
+   * manager's own figure is what the factsheet says.
+   */
+  publishedByManager: boolean;
 }
 
 interface AvEtfProfile {
@@ -305,6 +338,13 @@ export function mapEtfProfile(json: AvEtfProfile | null): EtfProfile | null {
       // empty symbol; neither can be matched to a scored company.
       .filter((h): h is { symbol: string; weight: number } => Boolean(h.symbol) && h.weight !== null)
       .sort((a, b) => b.weight - a.weight),
+    // A US fund's page lists its positions and size from its N-PORT filing,
+    // so they are not repeated from here.
+    topHoldings: [],
+    holdingCount: null,
+    netAssets: null,
+    netAssetsCurrency: null,
+    source: { name: "Alpha Vantage", url: null, asOf: null, publishedByManager: false },
   };
 }
 
