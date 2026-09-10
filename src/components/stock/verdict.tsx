@@ -1,6 +1,7 @@
 import type { HealthReport, Question } from "@/lib/scoring/health";
 import type { Rating } from "@/lib/scoring/types";
 import { Card, MeterBar, Metric, RatingBadge } from "@/components/ui";
+import { MetricGuideBody } from "@/components/metric-guide-body";
 import { cn } from "@/lib/utils";
 
 /** Where a score sits on the rating scale. */
@@ -64,7 +65,12 @@ export function VerdictCard({
                   ? `${report.piotroski.score}/${report.piotroski.maxScore}`
                   : "—"
               }
-              hint="Nine yes-or-no checks of whether the finances improved this year. More is better."
+              hint={
+                <MetricGuideBody
+                  id="piotroski"
+                  note="Nine yes-or-no checks of whether the finances improved this year. More is better."
+                />
+              }
             />
             <Metric
               label={
@@ -74,18 +80,22 @@ export function VerdictCard({
               }
               value={report.altman.value ? report.altman.value.z.toFixed(2) : "n/a"}
               hint={
-                report.altman.value
-                  ? altmanHint(report.altman.value.variant)
-                  : report.altman.reason
+                report.altman.value ? (
+                  <MetricGuideBody id="altman" note={altmanHint(report.altman.value.variant)} />
+                ) : (
+                  report.altman.reason
+                )
               }
             />
             <Metric
               label="Beneish M"
               value={report.beneish.value ? report.beneish.value.m.toFixed(2) : "n/a"}
               hint={
-                report.beneish.value
-                  ? "Screens for unusual accounting. Below −1.78 is normal."
-                  : report.beneish.reason
+                report.beneish.value ? (
+                  <MetricGuideBody id="beneish" note="Screens for unusual accounting. Below −1.78 is normal." />
+                ) : (
+                  report.beneish.reason
+                )
               }
             />
           </dl>
@@ -162,7 +172,9 @@ function ScoreDial({ score, tone }: { score: number | null; tone: Rating }) {
  * One of the five plain-English questions.
  *
  * The answer leads and the figures sit beneath it, each with a meter so a
- * reader can judge the shape before reading a single number.
+ * reader can judge the shape before reading a single number. A figure the
+ * shared metric guide covers opens that guide, led by the question's own
+ * plain-language hint.
  */
 export function QuestionCard({ question }: { question: Question }) {
   const accentBar: Record<Rating, string> = {
@@ -193,7 +205,13 @@ export function QuestionCard({ question }: { question: Question }) {
 
       <dl className="mt-auto grid grid-cols-[minmax(0,1fr)] gap-x-4 gap-y-3 border-t border-border bg-surface-2/40 px-5 py-3.5 sm:grid-cols-3">
         {question.metrics.map((m) => (
-          <Metric key={m.label} label={m.label} value={m.value} hint={m.hint} size="sm" />
+          <Metric
+            key={m.label}
+            label={m.label}
+            value={m.value}
+            hint={m.guide ? <MetricGuideBody id={m.guide} note={m.hint} /> : m.hint}
+            size="sm"
+          />
         ))}
       </dl>
     </Card>

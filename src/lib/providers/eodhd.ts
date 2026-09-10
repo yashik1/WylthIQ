@@ -88,10 +88,6 @@ export class EodhdProvider implements MarketDataProvider {
     return symbol.includes(".") ? symbol : `${symbol}.US`;
   }
 
-  private isUs(symbol: string): boolean {
-    return this.qualify(symbol).endsWith(".US");
-  }
-
   async getBars(symbol: string, timeframe: Timeframe, from: Date, to: Date): Promise<Bar[]> {
     const s = this.qualify(symbol);
 
@@ -163,8 +159,13 @@ export class EodhdProvider implements MarketDataProvider {
       dayHigh: q.high ?? null,
       dayLow: q.low ?? null,
       volume: q.volume ?? null,
-      // Only US equities are genuinely live on this feed.
-      freshness: this.isUs(symbol) ? "realtime-iex" : "delayed-15min",
+      /*
+        Delayed, US listings included. This is EODHD's "Live (Delayed)"
+        endpoint, which its own documentation puts 15–20 minutes behind for
+        stocks. It was labelled live for US equities, so the page printed
+        "live" beside a price a quarter of an hour old.
+      */
+      freshness: "delayed-15min",
       asOf: q.timestamp ? new Date(q.timestamp * 1000).toISOString() : null,
     };
   }

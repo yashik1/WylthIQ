@@ -4,6 +4,7 @@ import {
   DURATION_CONCEPTS,
   DURATION_FIELDS,
   MUST_BE_POSITIVE,
+  QUARTERLY_FORMS,
 } from "./concept-map";
 import type {
   CanonicalField,
@@ -18,9 +19,28 @@ import type {
 /** Max years of annual history retained per company. */
 const MAX_YEARS = 12;
 
+/**
+ * Quarters retained per company.
+ *
+ * Two years: enough to find the same quarter a year earlier for the latest
+ * one, with room for a filer that skipped or amended a quarter along the way.
+ */
+const MAX_QUARTERS = 8;
+
 /** A duration fact counts as annual when it spans roughly a year. */
 const MIN_ANNUAL_DAYS = 340;
 const MAX_ANNUAL_DAYS = 400;
+
+/**
+ * A duration counts as one quarter when it spans roughly three months.
+ *
+ * A 10-Q reports each flow twice — for the quarter and for the year to date —
+ * and a second-quarter filing's six-month figure is not a quarter. Retail
+ * calendars run 13-week quarters and a few filers run 14, so the band is wide
+ * enough for both and far too narrow for any year-to-date span.
+ */
+const MIN_QUARTER_DAYS = 80;
+const MAX_QUARTER_DAYS = 100;
 
 const MS_PER_DAY = 86_400_000;
 
@@ -64,7 +84,7 @@ function pickUnit(units: Record<string, SecFactEntry[]>): [string, SecFactEntry[
 }
 
 /**
- * Chooses between two observations of the same field in the same fiscal year.
+ * Chooses between two observations of the same field in the same period.
  * The most recently filed value wins so that restatements supersede originals.
  */
 function isBetter(candidate: SecFactEntry, incumbent: SecFactEntry): boolean {
@@ -73,29 +93,72 @@ function isBetter(candidate: SecFactEntry, incumbent: SecFactEntry): boolean {
   return (candidate.end ?? "").localeCompare(incumbent.end ?? "") > 0;
 }
 
+/** Which observations a set of periods is built from, and how they are grouped. */
+interface PeriodSpec {
+  forms: ReadonlySet<string>;
+  minDays: number;
+  maxDays: number;
+  /** The period an observation belongs to, or null when it cannot be placed. */
+  periodKey: (entry: SecFactEntry) => string | null;
+  /**
+   * Whether to label each fact with the fiscal year and period of the filing
+   * that first reported it.
+   *
+   * `fy`/`fp` describe the filing a fact appeared in, not the period it
+   * covers — so a quarter repeated as a comparative in the next year's 10-Q
+   * would otherwise carry that later filing's label. The first filing to
+   * report a quarter is the one that was about it. Annual periods keep their
+   * established calendar-year keying and are left as they were.
+   */
+  labelFromFirstFiling: boolean;
+}
+
+const ANNUAL: PeriodSpec = {
+  forms: ANNUAL_FORMS,
+  minDays: MIN_ANNUAL_DAYS,
+  maxDays: MAX_ANNUAL_DAYS,
+  periodKey: (entry) => {
+    const year = Number(entry.end.slice(0, 4));
+    return Number.isFinite(year) ? String(year) : null;
+  },
+  labelFromFirstFiling: false,
+};
+
+const QUARTERLY: PeriodSpec = {
+  forms: QUARTERLY_FORMS,
+  minDays: MIN_QUARTER_DAYS,
+  maxDays: MAX_QUARTER_DAYS,
+  // Keyed on the exact period end: two quarters never share one, and the
+  // calendar year alone would merge four of them.
+  periodKey: (entry) => (/^\d{4}-\d{2}-\d{2}$/.test(entry.end) ? entry.end : null),
+  labelFromFirstFiling: true,
+};
+
 /**
- * Extracts the best annual observation of one canonical field per fiscal year.
+ * Extracts the best observation of one canonical field per period.
  *
  * Note: `fy`/`fp` in the SEC payload describe the *filing* a fact appeared in,
  * not the period the fact covers, so periods are keyed off the `end` date
- * instead. Duration facts are additionally length-checked so that quarterly
- * figures reported inside an annual filing are not mistaken for full-year ones.
+ * instead. Duration facts are additionally length-checked so that a quarter
+ * reported inside an annual filing is not mistaken for a full year, and a
+ * year-to-date figure inside a 10-Q is not mistaken for a quarter.
  */
 function extractField(
   facts: SecCompanyFacts["facts"],
   cik: number,
   field: CanonicalField,
-): Map<number, Fact> {
+  spec: PeriodSpec,
+): Map<string, Fact> {
   const fieldIsDuration = DURATION_FIELDS.has(field);
-  /** Year -> best observation so far, plus the preference rank that supplied it. */
-  const byYear = new Map<number, { entry: SecFactEntry; fact: Fact; rank: number }>();
+  /** Period -> best observation so far, plus the preference rank that supplied it. */
+  const byPeriod = new Map<string, { entry: SecFactEntry; fact: Fact; rank: number }>();
 
   const concepts = CONCEPT_MAP[field];
   for (let rank = 0; rank < concepts.length; rank++) {
     const concept = concepts[rank];
     // Shape is decided per concept, not per field: a share count is a
     // point-in-time measure, but a dual-class filer may only publish the
-    // consolidated figure as an average across the year.
+    // consolidated figure as an average across the period.
     const isDuration = fieldIsDuration || DURATION_CONCEPTS.has(concept);
 
     // Every entry seen for this concept, across both taxonomies, so the true
@@ -103,8 +166,8 @@ function extractField(
     // though later filings re-tag it.
     const entriesThisRank: SecFactEntry[] = [];
 
-    for (const [taxonomy, concepts] of Object.entries(facts)) {
-      const node = concepts[concept];
+    for (const [taxonomy, conceptNodes] of Object.entries(facts)) {
+      const node = conceptNodes[concept];
       if (!node?.units) continue;
 
       const picked = pickUnit(node.units);
@@ -112,7 +175,7 @@ function extractField(
       const [unit, entries] = picked;
 
       for (const entry of entries) {
-        if (!entry.form || !ANNUAL_FORMS.has(entry.form)) continue;
+        if (!entry.form || !spec.forms.has(entry.form)) continue;
         if (typeof entry.val !== "number" || !Number.isFinite(entry.val)) continue;
         // Discard filing errors such as a reported share count of zero.
         if (MUST_BE_POSITIVE.has(field) && entry.val <= 0) continue;
@@ -120,7 +183,7 @@ function extractField(
         if (isDuration) {
           if (!entry.start) continue;
           const span = daysBetween(entry.start, entry.end);
-          if (span < MIN_ANNUAL_DAYS || span > MAX_ANNUAL_DAYS) continue;
+          if (span < spec.minDays || span > spec.maxDays) continue;
         } else if (entry.start) {
           // Instant concepts must not carry a start date.
           continue;
@@ -128,16 +191,16 @@ function extractField(
 
         entriesThisRank.push(entry);
 
-        const year = Number(entry.end.slice(0, 4));
-        if (!Number.isFinite(year)) continue;
+        const key = spec.periodKey(entry);
+        if (key === null) continue;
 
-        const existing = byYear.get(year);
-        // A higher-preference concept already supplied this year; leave it alone.
+        const existing = byPeriod.get(key);
+        // A higher-preference concept already supplied this period; leave it alone.
         if (existing && existing.rank < rank) continue;
         // Same concept, competing observations: keep the most recently filed.
         if (existing && existing.rank === rank && !isBetter(entry, existing.entry)) continue;
 
-        byYear.set(year, {
+        byPeriod.set(key, {
           entry,
           rank,
           fact: {
@@ -145,7 +208,7 @@ function extractField(
             unit,
             end: entry.end,
             start: entry.start,
-            fiscalYear: year,
+            fiscalYear: Number(entry.end.slice(0, 4)),
             fiscalPeriod: entry.fp ?? "FY",
             form: entry.form,
             sourceConcept: `${taxonomy}:${concept}`,
@@ -157,7 +220,7 @@ function extractField(
     }
 
     /*
-      Fix up the filed date on whichever years this rank just won, to the
+      Fix up the filed date on whichever periods this rank just won, to the
       *earliest* filing that reported the winning value — not the winning
       entry's own filed date.
 
@@ -177,28 +240,41 @@ function extractField(
       disclosure. A genuine restatement carries a different value, so no
       earlier entry matches it and its own later filed date stands.
     */
-    for (const winner of byYear.values()) {
+    for (const winner of byPeriod.values()) {
       if (winner.rank !== rank) continue;
 
       let earliest = winner.entry.filed;
+      let firstEntry = winner.entry;
       for (const e of entriesThisRank) {
         if (e.end !== winner.entry.end || e.val !== winner.entry.val) continue;
-        if (e.filed && (!earliest || e.filed < earliest)) earliest = e.filed;
+        if (e.filed && (!earliest || e.filed < earliest)) {
+          earliest = e.filed;
+          firstEntry = e;
+        }
       }
 
-      if (earliest !== winner.fact.filed) {
-        winner.fact = { ...winner.fact, filed: earliest };
+      let fact = winner.fact;
+      if (earliest !== fact.filed) fact = { ...fact, filed: earliest };
+
+      if (spec.labelFromFirstFiling) {
+        const fiscalYear = typeof firstEntry.fy === "number" ? firstEntry.fy : fact.fiscalYear;
+        const fiscalPeriod = firstEntry.fp ?? fact.fiscalPeriod;
+        if (fiscalYear !== fact.fiscalYear || fiscalPeriod !== fact.fiscalPeriod) {
+          fact = { ...fact, fiscalYear, fiscalPeriod };
+        }
       }
+
+      winner.fact = fact;
     }
 
     // Deliberately no early exit. Filers migrate between concepts over time —
     // Shopify tagged revenue as `RevenueFromContractWithCustomerExcludingAssessedTax`
     // through FY2023 and `Revenues` from FY2024 — so stopping at the first
     // concept that returned anything would silently drop the most recent years.
-    // Preference is instead resolved per year via `rank` above.
+    // Preference is instead resolved per period via `rank` above.
   }
 
-  return new Map([...byYear].map(([year, v]) => [year, v.fact]));
+  return new Map([...byPeriod].map(([key, v]) => [key, v.fact]));
 }
 
 /** Detects the taxonomy a filer predominantly reports under. */
@@ -206,6 +282,89 @@ function detectTaxonomy(facts: SecCompanyFacts["facts"]): Taxonomy {
   const usGaap = Object.keys(facts["us-gaap"] ?? {}).length;
   const ifrs = Object.keys(facts["ifrs-full"] ?? {}).length;
   return ifrs > usGaap ? "ifrs-full" : "us-gaap";
+}
+
+type Extracted = Map<CanonicalField, Map<string, Fact>>;
+
+function extractAll(raw: SecCompanyFacts, fields: CanonicalField[], spec: PeriodSpec): Extracted {
+  const extracted: Extracted = new Map();
+  for (const field of fields) {
+    extracted.set(field, extractField(raw.facts, raw.cik, field, spec));
+  }
+  return extracted;
+}
+
+/** Every period in which at least one of the anchor fields was reported. */
+function periodKeys(extracted: Extracted, anchors: CanonicalField[]): Set<string> {
+  const keys = new Set<string>();
+  for (const anchor of anchors) {
+    for (const key of extracted.get(anchor)?.keys() ?? []) keys.add(key);
+  }
+  return keys;
+}
+
+/** One period's facts, with the two figures that can be safely derived. */
+function periodFacts(
+  extracted: Extracted,
+  fields: CanonicalField[],
+  key: string,
+): Partial<Record<CanonicalField, Fact>> {
+  const facts: Partial<Record<CanonicalField, Fact>> = {};
+  for (const field of fields) {
+    const fact = extracted.get(field)?.get(key);
+    if (fact) facts[field] = fact;
+  }
+
+  // Derived: total liabilities. Many us-gaap filers (Shopify among them)
+  // report assets and equity but never tag `Liabilities`.
+  if (!facts.liabilities && facts.assets && facts.equity) {
+    facts.liabilities = {
+      ...facts.assets,
+      value: facts.assets.value - facts.equity.value,
+      sourceConcept: "derived:Assets-Equity",
+      derived: true,
+    };
+  }
+
+  // Derived: gross profit, when revenue and cost of revenue are both present.
+  if (!facts.grossProfit && facts.revenue && facts.costOfRevenue) {
+    facts.grossProfit = {
+      ...facts.revenue,
+      value: facts.revenue.value - facts.costOfRevenue.value,
+      sourceConcept: "derived:Revenue-CostOfRevenue",
+      derived: true,
+    };
+  }
+
+  return facts;
+}
+
+/**
+ * The date a period as a whole became public.
+ *
+ * The period was not knowable until every one of its own facts had been
+ * filed, so the latest of them — not the earliest — is the date to test a
+ * rebalance date against. A derived fact carries no filed date of its own; it
+ * is computed from facts that do, and those already contribute to this max.
+ *
+ * Deliberately taken over every field, not just the core anchors that decide
+ * whether a period exists at all. A minor line item can genuinely have no
+ * earlier XBRL tag to find — Shopify's FY2023 10-K never separately tagged
+ * `InventoryNet`, so the first disclosure of that figure, by this data, is the
+ * FY2024 10-K's comparative column over a year later. That may only mean the
+ * original filing folded inventory into a broader line on the face financials
+ * rather than that the number was truly unknown, but this module has no way to
+ * tell the two apart from the XBRL facts alone. Erring toward the later, more
+ * conservative date matches the currency-conversion principle used elsewhere
+ * in this app: an honest "not yet known" beats a guess that happens to be
+ * flattering.
+ */
+function latestFiled(facts: Partial<Record<CanonicalField, Fact>>): string | null {
+  let filedAt: string | null = null;
+  for (const fact of Object.values(facts)) {
+    if (fact?.filed && (!filedAt || fact.filed > filedAt)) filedAt = fact.filed;
+  }
+  return filedAt;
 }
 
 /**
@@ -220,76 +379,19 @@ function detectTaxonomy(facts: SecCompanyFacts["facts"]): Taxonomy {
 export function normalizeCompanyFacts(raw: SecCompanyFacts): NormalizedFundamentals {
   const cik = String(raw.cik).padStart(10, "0");
   const taxonomy = detectTaxonomy(raw.facts);
-
   const fields = Object.keys(CONCEPT_MAP) as CanonicalField[];
-  const extracted = new Map<CanonicalField, Map<number, Fact>>();
-  for (const field of fields) {
-    extracted.set(field, extractField(raw.facts, raw.cik, field));
-  }
+
+  // ---- annual ----
+  const annualFacts = extractAll(raw, fields, ANNUAL);
 
   // A year is only a real period if the core anchors are present.
-  const years = new Set<number>();
-  for (const anchor of ["assets", "revenue", "netIncome"] as CanonicalField[]) {
-    for (const year of extracted.get(anchor)?.keys() ?? []) years.add(year);
-  }
-
-  const annual: FinancialPeriod[] = [...years]
-    .sort((a, b) => b - a)
+  const annual: FinancialPeriod[] = [...periodKeys(annualFacts, ["assets", "revenue", "netIncome"])]
+    .sort((a, b) => Number(b) - Number(a))
     .slice(0, MAX_YEARS)
-    .map((year) => {
-      const facts: Partial<Record<CanonicalField, Fact>> = {};
-      for (const field of fields) {
-        const fact = extracted.get(field)?.get(year);
-        if (fact) facts[field] = fact;
-      }
-
-      // Derived: total liabilities. Many us-gaap filers (Shopify among them)
-      // report assets and equity but never tag `Liabilities`.
-      if (!facts.liabilities && facts.assets && facts.equity) {
-        facts.liabilities = {
-          ...facts.assets,
-          value: facts.assets.value - facts.equity.value,
-          sourceConcept: "derived:Assets-Equity",
-          derived: true,
-        };
-      }
-
-      // Derived: gross profit, when revenue and cost of revenue are both present.
-      if (!facts.grossProfit && facts.revenue && facts.costOfRevenue) {
-        facts.grossProfit = {
-          ...facts.revenue,
-          value: facts.revenue.value - facts.costOfRevenue.value,
-          sourceConcept: "derived:Revenue-CostOfRevenue",
-          derived: true,
-        };
-      }
-
+    .map((key) => {
+      const year = Number(key);
+      const facts = periodFacts(annualFacts, fields, key);
       const anchor = facts.assets ?? facts.revenue ?? facts.netIncome;
-
-      /*
-        The period as a whole was not knowable until every one of its own
-        facts had been filed, so the latest of them — not the earliest — is
-        the date to test a rebalance date against. A derived fact (see above)
-        carries no filed date of its own; it is computed from facts that do,
-        and those already contribute to this max.
-
-        Deliberately taken over every field, not just the core anchors
-        (assets/revenue/netIncome) that decide whether a year exists at all.
-        A minor line item can genuinely have no earlier XBRL tag to find —
-        Shopify's FY2023 10-K never separately tagged `InventoryNet`, so the
-        first disclosure of that figure, by this data, is the FY2024 10-K's
-        comparative column over a year later. That may only mean the original
-        filing folded inventory into a broader line on the face financials
-        rather than that the number was truly unknown, but this module has no
-        way to tell the two apart from the XBRL facts alone. Erring toward the
-        later, more conservative date matches the currency-conversion
-        principle used elsewhere in this app: an honest "not yet known" beats
-        a guess that happens to be flattering.
-      */
-      let filedAt: string | null = null;
-      for (const fact of Object.values(facts)) {
-        if (fact?.filed && (!filedAt || fact.filed > filedAt)) filedAt = fact.filed;
-      }
 
       return {
         fiscalYear: year,
@@ -297,7 +399,31 @@ export function normalizeCompanyFacts(raw: SecCompanyFacts): NormalizedFundament
         end: anchor?.end ?? `${year}-12-31`,
         form: anchor?.form ?? "10-K",
         facts,
-        filedAt,
+        filedAt: latestFiled(facts),
+      };
+    });
+
+  // ---- quarterly ----
+  /*
+    A quarter needs a flow of its own to exist. A 10-Q also carries the
+    balance sheet at the prior year end as a comparative, which alone would
+    look like an extra quarter with no revenue and no profit in it.
+  */
+  const quarterFacts = extractAll(raw, fields, QUARTERLY);
+  const quarterly: FinancialPeriod[] = [...periodKeys(quarterFacts, ["revenue", "netIncome"])]
+    .sort((a, b) => b.localeCompare(a))
+    .slice(0, MAX_QUARTERS)
+    .map((end) => {
+      const facts = periodFacts(quarterFacts, fields, end);
+      const anchor = facts.revenue ?? facts.netIncome;
+
+      return {
+        fiscalYear: anchor?.fiscalYear ?? Number(end.slice(0, 4)),
+        fiscalPeriod: anchor?.fiscalPeriod ?? "Q",
+        end,
+        form: anchor?.form ?? "10-Q",
+        facts,
+        filedAt: latestFiled(facts),
       };
     });
 
@@ -311,6 +437,7 @@ export function normalizeCompanyFacts(raw: SecCompanyFacts): NormalizedFundament
     entityName: raw.entityName,
     taxonomy,
     annual,
+    quarterly,
     missingFields,
   };
 }

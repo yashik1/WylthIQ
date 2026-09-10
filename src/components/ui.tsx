@@ -334,7 +334,8 @@ export function Metric({
 }: {
   label: string;
   value: string;
-  hint?: string;
+  /** Plain text, or a structured explanation such as `MetricGuideBody` — phrasing content only. */
+  hint?: ReactNode;
   size?: "sm" | "md" | "lg";
   tone?: "up" | "down" | "muted";
 }) {

@@ -40,7 +40,7 @@ export default function ErrorBoundary({
       <p className="mt-3 text-base leading-relaxed text-muted">
         {rateLimited
           ? "The free data plans allow a limited number of requests per minute, and we've reached it. Waiting a moment and trying again usually clears it."
-          : "Something went wrong fetching this page. The data comes from SEC EDGAR and live price feeds, so this is often a temporary upstream problem rather than anything you did."}
+          : "Something went wrong fetching this page. The data comes from SEC EDGAR and outside price providers, so this is often a temporary upstream problem rather than anything you did."}
       </p>
 
       <div className="mt-6 flex flex-wrap gap-3">

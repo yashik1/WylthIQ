@@ -15,7 +15,7 @@ import { buildBusinessSummary } from "@/lib/scoring/business";
 import { buildHighlights } from "@/lib/scoring/highlights";
 import { Badge, Card, CardHeader, EmptyState, RatingBadge, SectionHeading } from "@/components/ui";
 import { fieldValue } from "@/lib/fundamentals/normalize";
-import { money, price as fmtPrice, signedPercent } from "@/lib/format";
+import { calendarDate, money, price as fmtPrice, signedPercent } from "@/lib/format";
 import { getStockPageData, yearlySeries } from "@/lib/stock-data";
 import { Suspense } from "react";
 import { StockSkeleton } from "@/components/stock/skeleton";
@@ -45,6 +45,10 @@ import { listWatchlist } from "@/lib/watchlist/actions";
 import { KeyFiguresPanel } from "@/components/stock/key-figures";
 import { buildKeyFigures } from "@/lib/scoring/key-figures";
 import { buildChangeReport } from "@/lib/scoring/changes";
+import { buildInvestorBrief } from "@/lib/scoring/investor-brief";
+import { InvestorBriefCard } from "@/components/stock/investor-brief";
+import { LocalTime } from "@/components/local-time";
+import { describeQuoteTime } from "@/lib/quote-time";
 import { MarketExpects, hasMarketExpectations } from "@/components/stock/market-expects";
 import { Section, SectionNav, type StockSection } from "@/components/stock/section-nav";
 
@@ -60,7 +64,9 @@ export const revalidate = 900;
  */
 const FRESHNESS_WORD: Record<string, string> = {
   "realtime-iex": "live",
-  "delayed-15min": "delayed 15 min",
+  // Approximate on purpose: the delay varies by provider and exchange, and
+  // one of them documents 15 to 20 minutes.
+  "delayed-15min": "delayed ~15 min",
   "end-of-day": "at close",
   unknown: "timing unknown",
 };
@@ -247,6 +253,50 @@ export default async function StockPage({ params }: PageProps<"/stock/[symbol]">
     >
       <StockBody symbol={upper} unsupported={unsupported} />
     </Suspense>
+  );
+}
+
+/**
+ * When the price was last updated, only as precisely as the provider said.
+ *
+ * A zoned timestamp becomes a time in the reader's own zone; a bare date stays
+ * a date; a time with no zone is left out rather than shown in the wrong one —
+ * see describeQuoteTime.
+ */
+function QuoteAsOf({ asOf }: { asOf: string | null }) {
+  const time = describeQuoteTime(asOf);
+  if (!time) return null;
+
+  return (
+    <p className="tnum mt-0.5 text-xs text-faint">
+      {time.kind === "instant" ? (
+        <>
+          Updated <LocalTime value={time.iso} mode="datetime" showZone />
+        </>
+      ) : (
+        <>Last price from {calendarDate(time.date)}</>
+      )}
+    </p>
+  );
+}
+
+/**
+ * Said, not left blank, when no price came back.
+ *
+ * An empty space where the price belongs reads as a page still loading. The
+ * filings do not depend on a price, so when there are some the reader is told
+ * the analysis below still stands.
+ */
+function PriceUnavailable({ hasFilings }: { hasFilings: boolean }) {
+  return (
+    <div className="max-w-xs text-left sm:text-right">
+      <p className="text-sm font-medium">Price data temporarily unavailable.</p>
+      {hasFilings && (
+        <p className="mt-0.5 text-xs text-muted">
+          Financial analysis is still available using the latest SEC filing.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -472,6 +522,35 @@ async function StockBody({
     profile?.name ?? unsupported?.name ?? fundamentals?.entityName ?? upper;
 
   /*
+    The filing everything accounts-based on this page came from, named once so
+    every panel that cites it cites the same document the same way.
+  */
+  const filingLabel = latest
+    ? `${companyName}'s FY${latest.fiscalYear} ${latest.form}${latest.filedAt ? `, filed ${calendarDate(latest.filedAt)}` : ""}`
+    : null;
+
+  /*
+    The summary at the top, assembled from the panels already built above
+    rather than computed afresh, so the brief and the detail beneath it can
+    never disagree. Operating companies only: a fund, a coin and a contract
+    have no health report to summarise, and keep the plain description.
+  */
+  const brief =
+    report && latest && filesAccounts
+      ? buildInvestorBrief({
+          name: companyName,
+          business,
+          report,
+          changes,
+          warnings,
+          highlights,
+          keyFigures,
+          latest,
+          marketCap,
+        })
+      : null;
+
+  /*
     Jump links, in the order the sections appear.
 
     Built from the same conditions that decide whether each panel renders, so
@@ -483,17 +562,20 @@ async function StockBody({
     a reader nothing.
   */
   const sections: StockSection[] = [
-    warnings.length > 0 && { id: "warning-signs", label: "Warnings" },
+    brief && { id: "overview", label: "Overview" },
+    warnings.length > 0 && { id: "warning-signs", label: "Risks" },
     { id: "health", label: "Health" },
     changes && { id: "what-changed", label: "What changed" },
     { id: "price", label: "Price" },
-    hasMarketExpectations(data) && { id: "expectations", label: "Market expects" },
+    hasMarketExpectations(data) && { id: "expectations", label: "Expectations" },
     report && { id: "questions", label: "Five questions" },
     keyFigures && { id: "key-figures", label: "Key figures" },
-    dividends && { id: "dividend", label: "Dividend" },
+    dividends && { id: "dividend", label: "Dividends" },
     filesAccounts && { id: "financials", label: "Financials" },
     data.assetClass === "equity" && { id: "early-signals", label: "Early signals" },
-    { id: "sources", label: "Sources" },
+    filesAccounts && { id: "filings", label: "Filings" },
+    filesAccounts && data.peers.length > 0 && { id: "peers", label: "Peers" },
+    !filesAccounts && { id: "sources", label: "News" },
   ].filter((s): s is StockSection => Boolean(s));
 
   return (
@@ -590,7 +672,7 @@ async function StockBody({
         </div>
 
         <div className="flex flex-wrap items-end justify-start gap-x-6 gap-y-3 sm:justify-end">
-          {quote?.price != null && (
+          {quote?.price != null ? (
             <div className="text-left sm:text-right">
               <p className="tnum font-display text-[2.375rem] leading-none">
                 {fmtPrice(quote.price, currency)}
@@ -605,6 +687,7 @@ async function StockBody({
                     read aloud and being seen in greyscale. */}
                 <span className="text-muted"> · {FRESHNESS_WORD[quote.freshness]}</span>
               </p>
+              <QuoteAsOf asOf={quote.asOf} />
               {/* Market value follows the price rather than the health score.
                   It is the price multiplied by the share count, so it belongs
                   to the same clock as the figure above it. */}
@@ -614,6 +697,8 @@ async function StockBody({
                 </p>
               )}
             </div>
+          ) : (
+            <PriceUnavailable hasFilings={Boolean(report)} />
           )}
           <WatchButton
             symbol={upper}
@@ -631,7 +716,13 @@ async function StockBody({
         name={profile?.name ?? unsupported?.name ?? fundamentals?.entityName}
       />
 
-      <Section id="what-it-does">{business && <WhatItDoes summary={business} />}</Section>
+      {brief ? (
+        <Section id="overview">
+          <InvestorBriefCard brief={brief} companyName={companyName} />
+        </Section>
+      ) : (
+        <Section id="what-it-does">{business && <WhatItDoes summary={business} />}</Section>
+      )}
 
       <Section id="warning-signs">
         <WarningSigns warnings={warnings} />
@@ -787,7 +878,9 @@ async function StockBody({
       )}
 
       <Section id="key-figures">
-        {keyFigures && <KeyFiguresPanel figures={keyFigures} currency={currency} />}
+        {keyFigures && (
+          <KeyFiguresPanel figures={keyFigures} currency={currency} filing={filingLabel} />
+        )}
       </Section>
 
       {/* ---- what it pays out ---- */}
@@ -851,7 +944,11 @@ async function StockBody({
       {subsidiaries && <Subsidiaries report={subsidiaries} />}
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
-        {filesAccounts && <FilingsList filings={data.filings} />}
+        {filesAccounts && (
+          <div id="filings">
+            <FilingsList filings={data.filings} />
+          </div>
+        )}
         <div className="space-y-4">
           <NewsList
             news={data.news}
@@ -859,7 +956,11 @@ async function StockBody({
             status={data.newsStatus}
             source={data.newsSource}
           />
-          {filesAccounts && <PeersList peers={data.peers} />}
+          {filesAccounts && data.peers.length > 0 && (
+            <div id="peers">
+              <PeersList peers={data.peers} />
+            </div>
+          )}
           {filesAccounts && (
             <ResearchLinks
               symbol={upper}
@@ -875,7 +976,8 @@ async function StockBody({
       {latest && (
         <p className="text-xs text-muted">
           Financial figures are from {upper}&apos;s {latest.form} for fiscal year{" "}
-          {latest.fiscalYear} (period ending {latest.end}), reported under the{" "}
+          {latest.fiscalYear} (period ending {latest.end}
+          {latest.filedAt ? `, filed ${calendarDate(latest.filedAt)}` : ""}), reported under the{" "}
           {fundamentals?.taxonomy === "ifrs-full" ? "IFRS" : "US GAAP"} taxonomy.
           {data.converted && (
             <>

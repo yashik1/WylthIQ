@@ -1,6 +1,7 @@
 import { fieldValue } from "../fundamentals/normalize";
 import type { NormalizedFundamentals } from "../fundamentals/types";
 import { money, multiple, percent } from "../format";
+import type { MetricGuideId } from "../learn/metric-guide";
 import { altmanZScore } from "./altman";
 import { type SectorKind } from "./applicability";
 import { beneishMScore } from "./beneish";
@@ -15,8 +16,12 @@ export interface Question {
   /** One sentence a non-expert can act on, written in plain language. */
   answer: string;
   rating: Rating;
-  /** Supporting figures, each safe to show without further explanation. */
-  metrics: { label: string; value: string; hint: string }[];
+  /**
+   * Supporting figures, each safe to show without further explanation.
+   * `guide` names the shared metric-guide entry that explains the figure in
+   * full, when there is one.
+   */
+  metrics: { label: string; value: string; hint: string; guide?: MetricGuideId }[];
 }
 
 export interface HealthReport {
@@ -170,13 +175,14 @@ function profitabilityQuestion(f: Getter, amount: Amount): Question {
     answer,
     rating,
     metrics: [
-      { label: "Net profit margin", value: percent(margin), hint: "Out of every $100 of sales, this much is left over as profit." },
-      { label: "Return on assets", value: percent(roa), hint: "How hard everything the company owns is working — profit earned per $100 of assets." },
+      { label: "Net profit margin", value: percent(margin), hint: "Out of every $100 of sales, this much is left over as profit.", guide: "net-margin" },
+      { label: "Return on assets", value: percent(roa), hint: "How hard everything the company owns is working — profit earned per $100 of assets.", guide: "roa" },
       { label: "Operating cash flow", value: amount(ocf), hint: "Real money that landed in the bank, after paying bills and wages. Harder to massage than profit." },
       {
         label: "Free cash flow",
         value: amount(freeCashFlow),
         hint: "What is left after also paying for the buildings and equipment the business needs. The cash genuinely available for dividends, buybacks or paying down debt.",
+        guide: "free-cash-flow",
       },
     ],
   };
@@ -229,7 +235,7 @@ function growthQuestion(
     metrics: [
       { label: "Revenue growth (1y)", value: percent(growth), hint: "Whether the company sold more or less than it did a year ago." },
       { label: "Revenue growth (3y avg)", value: percent(cagr), hint: "Average yearly growth over three years — steadier than any single year." },
-      { label: "Revenue", value: amount(revNow), hint: "Everything customers paid it over the year, before any costs come out." },
+      { label: "Revenue", value: amount(revNow), hint: "Everything customers paid it over the year, before any costs come out.", guide: "revenue" },
     ],
   };
 }
@@ -366,6 +372,7 @@ function debtQuestion(
         label: "Net debt",
         value: sector === "financial" ? "n/a for banks" : netDebt == null ? "—" : amount(netDebt),
         hint: "What it would still owe if it spent every dollar of cash on repaying debt.",
+        guide: "net-debt",
       },
       {
         label: "Years of cash flow to repay",
@@ -380,12 +387,13 @@ function debtQuestion(
         hint: "At its current rate of earning cash, how many years to become debt-free.",
       },
       { label: "Assets per $1 of liabilities", value: multiple(coverage), hint: "For every $1 of bills and debts, how many dollars of things it owns." },
-      { label: "Debt to equity", value: multiple(debtToEquity), hint: "How much is funded by borrowing versus by the owners themselves." },
-      { label: "Current ratio", value: multiple(currentRatio), hint: "Whether it can cover the bills due this year with what it can turn into cash this year." },
+      { label: "Debt to equity", value: multiple(debtToEquity), hint: "How much is funded by borrowing versus by the owners themselves.", guide: "debt-to-equity" },
+      { label: "Current ratio", value: multiple(currentRatio), hint: "Whether it can cover the bills due this year with what it can turn into cash this year.", guide: "current-ratio" },
       {
         label: "Interest cover",
         value: interestCover == null ? "no debt costs" : `${multiple(interestCover)}`,
         hint: "How many times over its operating profit covers its interest bill. Below 1 means it is not earning enough to pay the interest.",
+        guide: "interest-cover",
       },
     ],
   };
@@ -437,9 +445,9 @@ function valuationQuestion(f: Getter, marketCap: number | null): Question {
     answer,
     rating,
     metrics: [
-      { label: "Price to earnings", value: multiple(pe), hint: "How many years of current profits it would take to earn back the share price." },
-      { label: "Price to book", value: multiple(pb), hint: "What you pay for each $1 of what the company actually owns, after debts." },
-      { label: "Price to sales", value: multiple(ps), hint: "What you pay for each $1 of yearly sales, regardless of whether those sales make a profit." },
+      { label: "Price to earnings", value: multiple(pe), hint: "How many years of current profits it would take to earn back the share price.", guide: "pe" },
+      { label: "Price to book", value: multiple(pb), hint: "What you pay for each $1 of what the company actually owns, after debts.", guide: "pb" },
+      { label: "Price to sales", value: multiple(ps), hint: "What you pay for each $1 of yearly sales, regardless of whether those sales make a profit.", guide: "ps" },
     ],
   };
 }
@@ -474,6 +482,7 @@ function accountingQuestion(beneish: ScoreResult<BeneishResult>): Question {
         label: "Beneish M-Score",
         value: beneish.value ? beneish.value.m.toFixed(2) : "—",
         hint: "A statistical check for accounting that looks unusual. Below -1.78 is normal.",
+        guide: "beneish",
       },
     ],
   };

@@ -1,4 +1,4 @@
-import type { CanonicalField, Fact, NormalizedFundamentals } from "./types";
+import type { CanonicalField, Fact, FinancialPeriod, NormalizedFundamentals } from "./types";
 
 /**
  * Restates a filer's figures in another currency.
@@ -29,23 +29,28 @@ export function convertFundamentals(
 ): NormalizedFundamentals {
   if (!Number.isFinite(rate) || rate <= 0) return fundamentals;
 
+  const convert = (period: FinancialPeriod): FinancialPeriod => {
+    const facts: Partial<Record<CanonicalField, Fact>> = {};
+
+    for (const [field, fact] of Object.entries(period.facts) as [
+      CanonicalField,
+      Fact | undefined,
+    ][]) {
+      if (!fact) continue;
+      facts[field] = isMoney(fact.unit)
+        ? { ...fact, value: fact.value * rate, unit: target }
+        : fact;
+    }
+
+    return { ...period, facts };
+  };
+
   return {
     ...fundamentals,
-    annual: fundamentals.annual.map((period) => {
-      const facts: Partial<Record<CanonicalField, Fact>> = {};
-
-      for (const [field, fact] of Object.entries(period.facts) as [
-        CanonicalField,
-        Fact | undefined,
-      ][]) {
-        if (!fact) continue;
-        facts[field] = isMoney(fact.unit)
-          ? { ...fact, value: fact.value * rate, unit: target }
-          : fact;
-      }
-
-      return { ...period, facts };
-    }),
+    annual: fundamentals.annual.map(convert),
+    // Quarters are converted at the same rate as the years, or a quarter
+    // compared against its own year would be two currencies side by side.
+    ...(fundamentals.quarterly ? { quarterly: fundamentals.quarterly.map(convert) } : {}),
   };
 }
 

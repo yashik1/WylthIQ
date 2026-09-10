@@ -104,6 +104,15 @@ export interface NormalizedFundamentals {
   /** Annual periods, sorted newest first. */
   annual: FinancialPeriod[];
   /**
+   * Discrete quarters from 10-Q filings, sorted newest first.
+   *
+   * Only quarters a company reported on their own. A fourth quarter is never
+   * filed as one — it lives inside the annual report — and a foreign private
+   * issuer files no 10-Q at all, so both are absent rather than derived.
+   * Optional because the fallback providers supply annual statements only.
+   */
+  quarterly?: FinancialPeriod[];
+  /**
    * Fields the filer never reported and which could not be derived. Surfaced in
    * the UI as "not disclosed" rather than silently rendered as zero.
    */
