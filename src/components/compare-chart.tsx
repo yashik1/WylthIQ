@@ -17,12 +17,21 @@ import { cn } from "@/lib/utils";
  * Categorical slots, read from the theme so dark mode uses hues stepped for the
  * dark surface rather than the light ones reused.
  *
- * Validated with the data-viz palette checker: all four pass the lightness band,
- * chroma floor, adjacent CVD separation (worst ΔE 12.5 protan), the
- * normal-vision floor and 3:1 contrast.
+ * Four hues, not four steps of one. Every theme used to run a blue ramp here —
+ * light was #2563eb, #60a5fa, #a5c4fb, #78849a, which is one colour four times
+ * as far as a reader is concerned — and the palette checker agreed: the closest
+ * adjacent pair scored ΔE 11.9 to normal vision against a floor of 15, and
+ * midnight's cyan pair scored 2.1 to a protan reader. All seven themes failed.
+ *
+ * Now two validated sets, chosen by surface rather than by theme: blue, orange,
+ * green, amber. A chart then reads the same whichever theme it is under, which
+ * is the point of a categorical order — the theme supplies the surface, not the
+ * identity of series two. Re-check with the data-viz palette validator before
+ * changing any of these, and check every theme's surface, not just white:
+ * light and minimal sit on #ffffff, the rest on their own dark grounds.
  */
 const SERIES_VARS = ["--series-1", "--series-2", "--series-3", "--series-4"];
-const SERIES_FALLBACK = ["#2563eb", "#d97706", "#0d9488", "#c026d3"];
+const SERIES_FALLBACK = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"];
 
 function seriesColor(i: number): string {
   return cssVar(SERIES_VARS[i % SERIES_VARS.length], SERIES_FALLBACK[i % SERIES_FALLBACK.length]);
