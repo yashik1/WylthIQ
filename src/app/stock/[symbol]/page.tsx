@@ -28,7 +28,7 @@ import { FundFacts } from "@/components/stock/fund-facts";
 import { getFundReport, loadFundMap } from "@/lib/etf/fund-filings";
 import { alphaVantage } from "@/lib/providers/alphavantage";
 import { yahoo } from "@/lib/providers";
-import { summariseIncome } from "@/lib/etf/income";
+import { isSameListing, summariseIncome } from "@/lib/etf/income";
 import { getFundAnalytics } from "@/lib/etf/fund-analytics";
 import { EarlySignals } from "@/components/stock/early-signals";
 import { displayName } from "@/lib/company-name";
@@ -255,8 +255,27 @@ async function StockBody({
       ])
     : [null, null];
 
-  const income = fundIncome
-    ? summariseIncome(fundIncome.dividends, data.quote?.price ?? null)
+  /*
+    Only if it is the same security.
+
+    A bare ticker can be a real listing in more than one country, and the two
+    are resolved independently: the quote comes from whichever price provider
+    answered, the payments from Yahoo's own suffix search. For QQC those are
+    two different funds — a US one from Simplify and a Canadian one from CI
+    Invesco — and the page printed one's price of $24.31 beside the other's
+    52-week range of $37.80–$51.57, both as "$", as though they described one
+    thing.
+
+    Currency is the check because it is the fact both sides carry. A mismatch
+    means two listings, and there is no way to tell which half is the one the
+    reader asked for, so both are dropped rather than guessed between.
+  */
+  const usableIncome =
+    fundIncome && isSameListing(data.quote?.currency, fundIncome.currency)
+      ? fundIncome
+      : null;
+  const income = usableIncome
+    ? summariseIncome(usableIncome.dividends, data.quote?.price ?? null)
     : null;
 
   /*
@@ -593,8 +612,10 @@ async function StockBody({
               profile={fundProfile}
               quote={quote}
               income={income}
-              range={fundIncome}
+              range={usableIncome}
               analytics={analytics}
+              currency={data.displayCurrency}
+              filesWithSec={Boolean(fund)}
             />
           )}
 

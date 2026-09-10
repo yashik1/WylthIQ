@@ -30,23 +30,74 @@ export function FundFacts({
   income,
   range: yearRange,
   analytics,
+  currency,
+  filesWithSec,
 }: {
   profile: EtfProfile | null;
   quote: Quote | null;
   income: IncomeSummary | null;
-  range: { fiftyTwoWeekLow: number | null; fiftyTwoWeekHigh: number | null } | null;
+  range: {
+    fiftyTwoWeekLow: number | null;
+    fiftyTwoWeekHigh: number | null;
+  } | null;
   analytics: FundAnalytics | null;
+  /**
+   * The currency this listing trades in.
+   *
+   * Passed in rather than read off the quote, because a page that shows money
+   * without saying which money is not showing anything. The app already
+   * resolves this — see `displayCurrency` in stock-data.ts — and the fund
+   * panels were the one place ignoring it and printing a bare "$".
+   */
+  currency: string;
+  /**
+   * Whether an SEC portfolio filing was found for this fund.
+   *
+   * Decides which of two very different silences the card explains. A fund
+   * that files with the SEC and still has no fee here is a gap in a data
+   * feed; one that files in Toronto has none because this page reads US
+   * filings, which is not a gap but a boundary, and saying so is more use
+   * than a dash.
+   */
+  filesWithSec: boolean;
 }) {
-  const range = dayRange(quote);
-  const currency = quote?.currency ?? "USD";
+  const range = dayRange(quote, currency);
   const yearly = feeOn(profile?.expenseRatio ?? null, FEE_BASIS);
 
   return (
     <Card>
       <CardHeader
         title="What it costs, and how it trades"
-        subtitle="The fee is the one figure under your control — it is charged whether the fund rises or falls, every year you hold it."
+        subtitle={
+          <>
+            The fee is the one figure under your control — it is charged whether
+            the fund rises or falls, every year you hold it. Figures below are
+            in {currency}.
+          </>
+        }
       />
+
+      {profile?.expenseRatio == null && (
+        <p className="border-b border-border px-5 py-3 text-sm leading-relaxed text-muted">
+          {filesWithSec ? (
+            <>
+              No expense ratio was available for this fund. It is not in the SEC
+              filing this page reads — a fund reports what it owns there, never
+              what it charges — and the data provider that usually supplies it
+              had nothing for this ticker. The fund&rsquo;s own factsheet will
+              state it.
+            </>
+          ) : (
+            <>
+              This fund is listed outside the United States, so it files its
+              portfolio and its fees with its own regulator rather than with the
+              SEC. That is where the holdings and the expense ratio on this page
+              would otherwise come from, so neither is shown. The fund&rsquo;s
+              own factsheet states both.
+            </>
+          )}
+        </p>
+      )}
 
       {profile?.leveraged && (
         /*
@@ -59,10 +110,10 @@ export function FundFacts({
           from an expense ratio.
         */
         <p className="border-b border-border bg-poor-soft px-5 py-3 text-sm leading-relaxed text-poor-fg">
-          <span className="font-semibold">This is a leveraged fund.</span> It aims to
-          multiply a single day&rsquo;s move and resets daily, so returns over any longer
-          period compound rather than multiply — a leveraged fund can lose money over a
-          period in which its index rose.
+          <span className="font-semibold">This is a leveraged fund.</span> It
+          aims to multiply a single day&rsquo;s move and resets daily, so
+          returns over any longer period compound rather than multiply — a
+          leveraged fund can lose money over a period in which its index rose.
         </p>
       )}
 
@@ -78,12 +129,14 @@ export function FundFacts({
       {yearly !== null && (
         <p className="border-b border-border px-5 py-3.5 text-[0.9375rem] leading-relaxed">
           Holding {plainMoney(FEE_BASIS, currency)} of this fund costs about{" "}
-          <span className="font-semibold">{plainMoney(yearly, currency)} a year</span> in fees,
-          taken out of the fund&rsquo;s value rather than billed to you
+          <span className="font-semibold">
+            {plainMoney(yearly, currency)} a year
+          </span>{" "}
+          in fees, taken out of the fund&rsquo;s value rather than billed to you
           {income?.trailingTwelveMonths ? (
             <>
-              . It paid {price(income.trailingTwelveMonths, currency)} per share over the
-              last year
+              . It paid {price(income.trailingTwelveMonths, currency)} per share
+              over the last year
               {income.frequency ? `, ${income.frequency.toLowerCase()}` : ""}.
             </>
           ) : (
@@ -95,7 +148,11 @@ export function FundFacts({
       <dl className="grid grid-cols-2 gap-x-4 gap-y-4 px-5 py-4 sm:grid-cols-4">
         <Metric
           label="Expense ratio"
-          value={profile?.expenseRatio == null ? "—" : percent(profile.expenseRatio, 2)}
+          value={
+            profile?.expenseRatio == null
+              ? "—"
+              : percent(profile.expenseRatio, 2)
+          }
           size="lg"
           hint="Charged annually as a share of what you hold, taken out of the fund's value rather than billed."
         />
@@ -105,7 +162,11 @@ export function FundFacts({
           size="lg"
           hint="What it paid out over the last twelve months, against today's price. Computed from the fund's own payment history rather than taken from a provider's summary, so the basis is known: trailing, not forecast."
         />
-        <Metric label="Launched" value={launched(profile?.inceptionDate ?? null)} size="lg" />
+        <Metric
+          label="Launched"
+          value={launched(profile?.inceptionDate ?? null)}
+          size="lg"
+        />
         <Metric
           label="Turnover"
           value={profile?.turnover == null ? "—" : percent(profile.turnover, 0)}
@@ -114,38 +175,61 @@ export function FundFacts({
         />
       </dl>
 
-      {income && (income.trailingTwelveMonths !== null || income.lastExDate) && (
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-t border-border px-5 py-4 sm:grid-cols-4">
-          <Metric
-            label="Paid last 12 months"
-            value={income.trailingTwelveMonths == null ? "—" : price(income.trailingTwelveMonths, currency)}
-            size="sm"
-            hint={
-              income.paymentsCounted > 0
-                ? `Per share, from ${income.paymentsCounted} payment${income.paymentsCounted === 1 ? "" : "s"}.`
-                : undefined
-            }
-          />
-          <Metric label="Pays" value={income.frequency ?? "—"} size="sm" />
-          <Metric label="Last ex-dividend" value={launched(income.lastExDate, true)} size="sm" />
-          <Metric
-            label="52-week range"
-            value={yearRangeText(yearRange, currency)}
-            size="sm"
-          />
-        </dl>
-      )}
+      {income &&
+        (income.trailingTwelveMonths !== null || income.lastExDate) && (
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-t border-border px-5 py-4 sm:grid-cols-4">
+            <Metric
+              label="Paid last 12 months"
+              value={
+                income.trailingTwelveMonths == null
+                  ? "—"
+                  : price(income.trailingTwelveMonths, currency)
+              }
+              size="sm"
+              hint={
+                income.paymentsCounted > 0
+                  ? `Per share, from ${income.paymentsCounted} payment${income.paymentsCounted === 1 ? "" : "s"}.`
+                  : undefined
+              }
+            />
+            <Metric label="Pays" value={income.frequency ?? "—"} size="sm" />
+            <Metric
+              label="Last ex-dividend"
+              value={launched(income.lastExDate, true)}
+              size="sm"
+            />
+            <Metric
+              label="52-week range"
+              value={yearRangeText(yearRange, currency)}
+              size="sm"
+            />
+          </dl>
+        )}
 
       {quote && (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-t border-border px-5 py-4 sm:grid-cols-4">
-          <Metric label="Previous close" value={price(quote.previousClose, quote.currency ?? "USD")} size="sm" />
+          <Metric
+            label="Previous close"
+            value={price(quote.previousClose, quote.currency ?? "USD")}
+            size="sm"
+          />
           <Metric label="Day's range" value={range} size="sm" />
           <Metric label="Volume" value={count(quote.volume)} size="sm" />
           <Metric
             label="Change"
-            value={quote.changePercent == null ? "—" : `${quote.changePercent >= 0 ? "+" : ""}${quote.changePercent.toFixed(2)}%`}
+            value={
+              quote.changePercent == null
+                ? "—"
+                : `${quote.changePercent >= 0 ? "+" : ""}${quote.changePercent.toFixed(2)}%`
+            }
             size="sm"
-            tone={quote.changePercent == null ? undefined : quote.changePercent >= 0 ? "up" : "down"}
+            tone={
+              quote.changePercent == null
+                ? undefined
+                : quote.changePercent >= 0
+                  ? "up"
+                  : "down"
+            }
           />
         </dl>
       )}
@@ -154,7 +238,9 @@ export function FundFacts({
         <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-t border-border px-5 py-4 sm:grid-cols-4">
           <Metric
             label="P/E of its holdings"
-            value={analytics.valuation ? num(analytics.valuation.peRatio, 1) : "—"}
+            value={
+              analytics.valuation ? num(analytics.valuation.peRatio, 1) : "—"
+            }
             size="sm"
             hint={
               analytics.valuation
@@ -164,7 +250,11 @@ export function FundFacts({
           />
           <Metric
             label="Priced from"
-            value={analytics.valuation ? percent(analytics.valuation.coverage, 0) : "—"}
+            value={
+              analytics.valuation
+                ? percent(analytics.valuation.coverage, 0)
+                : "—"
+            }
             size="sm"
             hint="How much of the fund that P/E covers. The rest is held in companies this site does not score."
           />
@@ -192,9 +282,16 @@ export function FundFacts({
           <p className="eyebrow text-[0.625rem]">What it is invested in</p>
           <ul className="mt-2.5 grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-1.5 sm:grid-cols-2">
             {profile.sectors.map((s) => (
-              <li key={s.sector} className="flex items-baseline justify-between gap-4 text-sm">
-                <span className="min-w-0 truncate text-muted-strong">{s.sector}</span>
-                <span className="tnum shrink-0 font-medium">{percent(s.weight, 1)}</span>
+              <li
+                key={s.sector}
+                className="flex items-baseline justify-between gap-4 text-sm"
+              >
+                <span className="min-w-0 truncate text-muted-strong">
+                  {s.sector}
+                </span>
+                <span className="tnum shrink-0 font-medium">
+                  {percent(s.weight, 1)}
+                </span>
               </li>
             ))}
           </ul>
@@ -206,12 +303,13 @@ export function FundFacts({
         The holdings panel below can point at a filing; none of this can.
       */}
       <p className="border-t border-border px-5 py-3 text-xs leading-relaxed text-faint">
-        Fee, launch date and turnover from Alpha Vantage. Everything else on this card is
-        computed here — the payout and the year&rsquo;s range from the fund&rsquo;s own
-        payment history, the beta from five years of returns against{" "}
-        {analytics?.benchmark ?? "the market"}, and the P/E from this site&rsquo;s own
-        scores for the companies it holds. Check the fund&rsquo;s factsheet before acting
-        on a fee: that one is a provider&rsquo;s figure, not the prospectus.
+        Fee, launch date and turnover from Alpha Vantage. Everything else on
+        this card is computed here — the payout and the year&rsquo;s range from
+        the fund&rsquo;s own payment history, the beta from five years of
+        returns against {analytics?.benchmark ?? "the market"}, and the P/E from
+        this site&rsquo;s own scores for the companies it holds. Check the
+        fund&rsquo;s factsheet before acting on a fee: that one is a
+        provider&rsquo;s figure, not the prospectus.
       </p>
     </Card>
   );
@@ -228,12 +326,15 @@ function launched(date: string | null, withDay = false): string {
   if (!date) return "—";
   const [y, m, d] = date.split("-").map(Number);
   if (!y || !m) return date;
-  return new Date(Date.UTC(y, m - 1, withDay ? (d || 1) : 1)).toLocaleDateString("en-US", {
-    timeZone: "UTC",
-    ...(withDay ? { day: "numeric" as const } : {}),
-    month: "short",
-    year: "numeric",
-  });
+  return new Date(Date.UTC(y, m - 1, withDay ? d || 1 : 1)).toLocaleDateString(
+    "en-US",
+    {
+      timeZone: "UTC",
+      ...(withDay ? { day: "numeric" as const } : {}),
+      month: "short",
+      year: "numeric",
+    },
+  );
 }
 
 /**
@@ -244,7 +345,14 @@ function launched(date: string | null, withDay = false): string {
  * output in the one line on the card written to be read as a sentence.
  */
 function plainMoney(value: number, currency: string): string {
-  const symbol = currency === "USD" ? "$" : currency === "GBP" ? "£" : currency === "EUR" ? "€" : "";
+  const symbol =
+    currency === "USD"
+      ? "$"
+      : currency === "GBP"
+        ? "£"
+        : currency === "EUR"
+          ? "€"
+          : "";
   const rounded = Math.round(value);
   const text = rounded.toLocaleString("en-US");
   return symbol ? `${symbol}${text}` : `${text} ${currency}`;
@@ -252,10 +360,14 @@ function plainMoney(value: number, currency: string): string {
 
 /** "578.46 – 716.39", the year's low and high. */
 function yearRangeText(
-  range: { fiftyTwoWeekLow: number | null; fiftyTwoWeekHigh: number | null } | null,
+  range: {
+    fiftyTwoWeekLow: number | null;
+    fiftyTwoWeekHigh: number | null;
+  } | null,
   currency: string,
 ): string {
-  if (!range || range.fiftyTwoWeekLow == null || range.fiftyTwoWeekHigh == null) return "—";
+  if (!range || range.fiftyTwoWeekLow == null || range.fiftyTwoWeekHigh == null)
+    return "—";
   return `${price(range.fiftyTwoWeekLow, currency)} – ${price(range.fiftyTwoWeekHigh, currency)}`;
 }
 
@@ -277,8 +389,7 @@ function sectorsAreComplete(sectors: { weight: number }[]): boolean {
 }
 
 /** "699.49 – 702.71", or nothing when the quote carried only one side. */
-function dayRange(quote: Quote | null): string {
+function dayRange(quote: Quote | null, currency: string): string {
   if (!quote || quote.dayLow == null || quote.dayHigh == null) return "—";
-  const currency = quote.currency ?? "USD";
   return `${price(quote.dayLow, currency)} – ${price(quote.dayHigh, currency)}`;
 }

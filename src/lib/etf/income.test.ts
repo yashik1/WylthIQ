@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { feeOn, summariseIncome, type Distribution } from "./income";
+import { feeOn, isSameListing, summariseIncome, type Distribution } from "./income";
 
 /**
  * What a fund paid, derived from its own dividend dates.
@@ -133,5 +133,32 @@ describe("what a fee costs in money", () => {
 
   it("keeps a genuine zero, which some funds really do charge", () => {
     expect(feeOn(0, 10_000)).toBe(0);
+  });
+});
+
+describe("telling two listings apart", () => {
+  /*
+    The bug this exists for: "QQC" is a US fund from Simplify and QQC.TO is a
+    Canadian one from CI Invesco. The quote resolved to one and the dividend
+    history to the other, so the page showed a price of $24.31 beside a
+    52-week range of $37.80–$51.57 — two different funds, in two different
+    currencies, both printed as "$".
+  */
+  it("rejects a Canadian listing's figures against a US quote", () => {
+    expect(isSameListing("USD", "CAD")).toBe(false);
+  });
+
+  it("accepts a match, whatever the case", () => {
+    expect(isSameListing("USD", "USD")).toBe(true);
+    expect(isSameListing("usd", "USD")).toBe(true);
+    expect(isSameListing("CAD", "cad")).toBe(true);
+  });
+
+  it("does not refuse a figure merely because a currency went unstated", () => {
+    // Dropping every fund whose provider omitted a currency would cost far
+    // more than the rare mismatch it would catch.
+    expect(isSameListing(null, "USD")).toBe(true);
+    expect(isSameListing("USD", null)).toBe(true);
+    expect(isSameListing(undefined, undefined)).toBe(true);
   });
 });

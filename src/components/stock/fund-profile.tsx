@@ -114,7 +114,18 @@ export function FundProfile({
       />
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-b border-border px-5 py-4 sm:grid-cols-4">
-        <Metric label="Net assets" value={money(netAssets, "USD")} size="lg" />
+        {/*
+            Always US dollars, whatever the fund trades in. N-PORT reports
+            every value as `valUSD` by definition, so a Canadian-listed fund
+            files its portfolio in USD while its price is in CAD — printing
+            both as a bare "$" on one page is how a reader concludes the two
+            are the same money.
+        */}
+        <Metric
+          label="Net assets (USD)"
+          value={money(netAssets, "USD")}
+          size="lg"
+        />
         <Metric label="Positions" value={count(holdingCount)} size="lg" />
         <Metric
           label="In the top 10"
@@ -239,9 +250,10 @@ export function FundProfile({
             , filed <ReportedOn date={filing.filedAt} />
           </>
         )}
-        . N-PORT reports what a fund owns, not what it charges — there is no
-        expense ratio in this filing, so none is shown. Check the fund&rsquo;s
-        own factsheet for that.{" "}
+        . Every value in this panel is in US dollars, as the form reports them,
+        whatever currency the fund itself trades in. N-PORT reports what a fund
+        owns and not what it charges, so no expense ratio appears here — the
+        fund&rsquo;s own factsheet states that.{" "}
         <Link
           href={`/compare?symbols=${encodeURIComponent(symbol)},SPY`}
           className="text-accent underline"
