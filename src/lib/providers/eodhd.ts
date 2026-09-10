@@ -16,6 +16,7 @@ import type {
 } from "./types";
 import { ProviderNotConfiguredError } from "./types";
 import { parseEodhdAnalystRatings, type AnalystView } from "../signals/analysts";
+import type { EtfProfile } from "./alphavantage";
 
 const BASE = "https://eodhd.com/api";
 
@@ -170,6 +171,48 @@ export class EodhdProvider implements MarketDataProvider {
   }
 
   /**
+   * A fund's commercial facts, out of the same fundamentals payload.
+   *
+   * No new request: `/fundamentals` is already fetched and cached for twelve
+   * hours, and `ETF_Data` is sitting in that response. It is also the only
+   * source here that reaches beyond the SEC — a Toronto-listed fund files
+   * with the CSA through SEDAR+, which has no public API, so an ETF on the
+   * TSX had no fee, no holdings and no launch date on this site at all.
+   *
+   * Returns the same shape as the Alpha Vantage version so the page cannot
+   * tell them apart, which is what lets one replace the other.
+   */
+  async getEtfProfile(symbol: string): Promise<EtfProfile | null> {
+    for (const candidate of this.fundCandidates(symbol)) {
+      const data = await this.fetchFundamentals(candidate).catch(() => null);
+      const profile = mapEodhdEtfProfile(data?.ETF_Data ?? null);
+      if (profile) return profile;
+    }
+    return null;
+  }
+
+  /**
+   * Which exchange to ask about, when the ticker does not say.
+   *
+   * `qualify` assumes `.US`, which is right for most of this app and wrong for
+   * exactly the funds this method exists to reach: VFV and XIC are Toronto
+   * listings, `VFV.US` is nothing, and a fund that files with the CSA has no
+   * US listing to fall back on. So an unsuffixed ticker is tried in the US
+   * first and then in Toronto.
+   *
+   * Two requests only when the first misses, and both are cached for twelve
+   * hours by `fetchFundamentals` — a US fund still costs one call. Kept to
+   * this method rather than changed in `qualify`, because every other caller
+   * is a company lookup where the US assumption is correct and a stray
+   * Toronto request would be waste.
+   */
+  private fundCandidates(symbol: string): string[] {
+    const upper = symbol.toUpperCase().trim();
+    if (upper.includes(".")) return [upper];
+    return [`${upper}.US`, `${upper}.TO`];
+  }
+
+  /**
    * Published analyst ratings, out of the fundamentals payload.
    *
    * No new request: `/fundamentals` was already being fetched for the
@@ -239,6 +282,12 @@ interface EodhdStatements {
 
 export interface EodhdFundamentals {
   General?: Record<string, string | null> & { CIK?: string; CountryISO?: string };
+  /*
+    Present only for funds, and the reason a Toronto-listed ETF can have a fee
+    on this site at all — it files with the CSA, not the SEC, so nothing in
+    EDGAR describes it.
+  */
+  ETF_Data?: EodhdEtfData;
   Highlights?: { MarketCapitalization?: number };
   SharesStats?: { SharesOutstanding?: number };
   /*
@@ -405,6 +454,95 @@ export function resample(bars: Bar[], bucketSeconds: number): Bar[] {
   }
   if (current) out.push(current);
   return out;
+}
+
+/**
+ * EODHD's fund block, as far as this app reads it.
+ *
+ * Everything arrives as a string, and several fields are optional in practice
+ * even where the schema suggests otherwise.
+ */
+interface EodhdEtfData {
+  Inception_Date?: string;
+  Yield?: string;
+  NetExpenseRatio?: string;
+  Ongoing_Charge?: string;
+  AnnualHoldingsTurnover?: string;
+  Sector_Weights?: Record<string, { "Equity_%"?: string } | undefined>;
+  Holdings?: Record<string, { Code?: string; "Assets_%"?: string } | undefined>;
+}
+
+/**
+ * Percentages here, fractions in the app.
+ *
+ * This is the one thing in this file that would be silently, badly wrong. The
+ * `EtfProfile` contract is fractions, because that is what Alpha Vantage
+ * sends and what `percent()` renders — 0.0018 prints as 0.18%. EODHD sends the
+ * same quantity as a percentage: 0.18 means 0.18%. Passing one through
+ * unconverted puts an 18% annual fee on a fund that charges 0.18%, and it
+ * looks like a real number.
+ *
+ * So everything is divided, and then checked. No fund charges a quarter of
+ * its assets a year, and a figure that claims to has been read in the wrong
+ * units — dropping it is better than rendering it, because a reader cannot
+ * tell a units bug from an expensive fund.
+ */
+const MAX_CREDIBLE_FEE = 0.25;
+
+function pctToFraction(raw: string | undefined, cap = 1): number | null {
+  if (raw == null || raw === "" || raw.toLowerCase?.() === "n/a") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  const fraction = n / 100;
+  return fraction > cap ? null : fraction;
+}
+
+/** The provider's own title casing is inconsistent; the app's is not. */
+function tidySector(name: string): string {
+  return name.replace(/_/g, " ").replace(/\s+/g, " ").trim();
+}
+
+export function mapEodhdEtfProfile(data: EodhdEtfData | null | undefined): EtfProfile | null {
+  if (!data) return null;
+
+  // Net expense ratio is the headline; the ongoing charge is the European
+  // name for the same idea and stands in when the first is absent.
+  const expenseRatio =
+    pctToFraction(data.NetExpenseRatio, MAX_CREDIBLE_FEE) ??
+    pctToFraction(data.Ongoing_Charge, MAX_CREDIBLE_FEE);
+
+  const inception =
+    data.Inception_Date && data.Inception_Date !== "0000-00-00" ? data.Inception_Date : null;
+
+  // The same test the Alpha Vantage mapper uses: a payload with neither a fee
+  // nor a launch date is not describing a fund.
+  if (expenseRatio === null && !inception) return null;
+
+  const sectors = Object.entries(data.Sector_Weights ?? {})
+    .map(([name, v]) => ({ sector: tidySector(name), weight: pctToFraction(v?.["Equity_%"]) }))
+    .filter((s): s is { sector: string; weight: number } => Boolean(s.sector) && s.weight !== null)
+    .sort((a, b) => b.weight - a.weight);
+
+  const holdings = Object.entries(data.Holdings ?? {})
+    .map(([key, v]) => ({
+      // Keyed as "AAPL.US"; the app matches on the bare ticker.
+      symbol: (v?.Code ?? key.split(".")[0] ?? "").toUpperCase().trim(),
+      weight: pctToFraction(v?.["Assets_%"]),
+    }))
+    .filter((h): h is { symbol: string; weight: number } => Boolean(h.symbol) && h.weight !== null)
+    .sort((a, b) => b.weight - a.weight);
+
+  return {
+    expenseRatio,
+    dividendYield: pctToFraction(data.Yield),
+    turnover: pctToFraction(data.AnnualHoldingsTurnover),
+    inceptionDate: inception,
+    // EODHD does not carry a leveraged flag. Absent rather than guessed: this
+    // drives a warning, and a false negative is quieter than a false alarm.
+    leveraged: false,
+    sectors,
+    holdings,
+  };
 }
 
 export const eodhd = new EodhdProvider();

@@ -26,8 +26,7 @@ import { NotACompany } from "@/components/stock/not-a-company";
 import { FundProfile } from "@/components/stock/fund-profile";
 import { FundFacts } from "@/components/stock/fund-facts";
 import { getFundReport, loadFundMap } from "@/lib/etf/fund-filings";
-import { alphaVantage } from "@/lib/providers/alphavantage";
-import { yahoo } from "@/lib/providers";
+import { getEtfProfile, yahoo } from "@/lib/providers";
 import { isSameListing, summariseIncome } from "@/lib/etf/income";
 import { getFundAnalytics } from "@/lib/etf/fund-analytics";
 import { EarlySignals } from "@/components/stock/early-signals";
@@ -243,7 +242,7 @@ async function StockBody({
   const isFund = Boolean(fund) || data.instrumentType === "etf";
   const [fundProfile, fundIncome] = isFund
     ? await Promise.all([
-        alphaVantage.getEtfProfile(upper).catch(() => null),
+        getEtfProfile(upper),
         /*
           What it paid, and the year's range, from the endpoint the price
           chart's dividend markers already come from. A fund files no accounts,
