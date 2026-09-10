@@ -411,13 +411,108 @@ const freeStack = new FreeStackProvider();
 /**
  * Returns the active provider.
  *
- * Setting EODHD_API_KEY switches the whole application from the free US/Canada
- * stack to worldwide coverage. Nothing else in the codebase inspects which
- * provider is in use.
+ * EODHD_API_KEY adds worldwide coverage on top of the free US/Canada stack. It
+ * never replaces it — see `LayeredProvider` below for what that distinction
+ * cost when it was the other way round.
  */
 export function getProvider(): MarketDataProvider {
-  return eodhd.isConfigured() ? eodhd : freeStack;
+  return layeredStack;
 }
+
+/**
+ * Puts an optional source after the ones already trusted.
+ *
+ * Last, not first, because a supplementary provider is by definition the one
+ * the app worked without. Ahead of the free stack, every request pays for its
+ * failures before reaching a source that answers; behind it, a broken key
+ * costs nothing that used to work.
+ */
+export function layerSources<S>(free: S[], supplement: S | null): S[] {
+  if (!supplement || free.includes(supplement)) return free;
+  return [...free, supplement];
+}
+
+/** The quote chain for one symbol: the free sources in order, then EODHD if configured. */
+export function quoteSourcesFor(symbol: string): PriceSource[] {
+  return layerSources<PriceSource>(sourcesFor(symbol), eodhd.isConfigured() ? eodhd : null);
+}
+
+/**
+ * The provider every page talks to: the free stack, with EODHD layered behind.
+ *
+ * `getProvider()` used to return EODHD whole once its key was set, and the
+ * cost showed up only in production. EODHD's quote call fails quietly on a
+ * key or plan it will not serve, and there was no chain behind it, so every
+ * price on the site went at once: the header price on every company, coin and
+ * contract page, the dashboard's index strip, the markets page, Compare, and
+ * the nightly ingest that keeps the screener's prices current. The same
+ * replacement had already emptied the filings list and the weekly digest's
+ * filings, because EODHD carries no SEC filings at all.
+ *
+ * So each method does what the free stack did before the key existed, and
+ * consults EODHD only where that comes up empty. A provider meant to add
+ * coverage cannot, by construction, remove any.
+ */
+class LayeredProvider implements MarketDataProvider {
+  get name(): string {
+    return eodhd.isConfigured() ? `${freeStack.name} + EODHD` : freeStack.name;
+  }
+
+  isConfigured(): boolean {
+    return true;
+  }
+
+  // Charts already fail over across their own chain and were never routed
+  // through EODHD, so they are left exactly as they were.
+  getBars(symbol: string, timeframe: Timeframe, from: Date, to: Date): Promise<Bar[]> {
+    return freeStack.getBars(symbol, timeframe, from, to);
+  }
+
+  async getQuote(symbol: string): Promise<Quote | null> {
+    return (await fetchQuoteWithFailover(quoteSourcesFor(symbol), symbol)).value;
+  }
+
+  getProfile(symbol: string): Promise<CompanyProfile | null> {
+    return getCompanyProfile(symbol);
+  }
+
+  /*
+    The EDGAR-first chain only, deliberately without an EODHD fallback. The
+    company page reads statements through that same chain, and an EODHD
+    payload for an ETF can carry annual periods — which in Compare would turn
+    a fund back into a company with accounts. Matching the page is the safer
+    rule until that is handled on its own.
+  */
+  getFundamentals(symbol: string): Promise<NormalizedFundamentals | null> {
+    return freeStack.getFundamentals(symbol);
+  }
+
+  getNews(symbol: string, limit?: number): Promise<NewsItem[]> {
+    return freeStack.getNews(symbol, limit);
+  }
+
+  getFilings(symbol: string, limit?: number): Promise<Filing[]> {
+    return getCompanyFilings(symbol, limit);
+  }
+
+  /** The free search first; EODHD only tops up what it could not find. */
+  async searchSymbols(query: string, limit = 10): Promise<SymbolSearchResult[]> {
+    const free = await freeStack.searchSymbols(query, limit);
+    if (free.length >= limit || !eodhd.isConfigured()) return free;
+
+    const seen = new Set(free.map((r) => r.symbol.toUpperCase()));
+    const extra = await eodhd.searchSymbols(query, limit).catch(() => [] as SymbolSearchResult[]);
+    return [
+      ...free,
+      // Found, not scored: the same flag the free stack puts on a worldwide hit.
+      ...extra
+        .filter((r) => !seen.has(r.symbol.toUpperCase()))
+        .map((r) => ({ ...r, supported: false })),
+    ].slice(0, limit);
+  }
+}
+
+const layeredStack = new LayeredProvider();
 
 /**
  * Whether a quote request can reach any provider at all.
@@ -469,7 +564,16 @@ export async function getPeers(symbol: string): Promise<string[]> {
  * than an oversight. See src/lib/signals/analysts.ts.
  */
 export async function getAnalystView(symbol: string): Promise<AnalystView | null> {
-  if (eodhd.isConfigured()) return eodhd.getAnalystView(symbol).catch(() => null);
+  /*
+    EODHD first when configured, because its ratings carry a consensus target
+    price that Finnhub's free tier does not — but no longer EODHD only. That
+    was the same replacement that took every price off the site: a key EODHD
+    will not serve made this null on every page even with Finnhub answering.
+  */
+  if (eodhd.isConfigured()) {
+    const fromEodhd = await eodhd.getAnalystView(symbol).catch(() => null);
+    if (fromEodhd) return fromEodhd;
+  }
   return freeStack.getAnalystView(symbol);
 }
 
@@ -555,8 +659,10 @@ export async function getCompanyProfile(symbol: string): Promise<CompanyProfile 
 export function providerStatus() {
   const global = eodhd.isConfigured();
   return {
-    activeProvider: global ? eodhd.name : freeStack.name,
-    coverage: global ? "worldwide" : "US and Canadian cross-listed",
+    activeProvider: getProvider().name,
+    coverage: global
+      ? "US and Canadian from the free stack, worldwide from EODHD where that has nothing"
+      : "US and Canadian cross-listed",
     fundamentals: true,
     charts: global || twelveData.isConfigured() || tiingo.isConfigured() || yahoo.isConfigured(),
     news: global || finnhub.isConfigured(),
