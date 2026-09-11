@@ -17,17 +17,6 @@ import { listWatchlist } from "@/lib/watchlist/actions";
 
 export const dynamic = "force-dynamic";
 
-/**
- * The home page keeps the root title and description — it is the page they
- * were written for — and adds the one thing they cannot inherit.
- *
- * The canonical matters more here than anywhere: this deployment answers on
- * its own domain and on the Railway hostname underneath it, so without this
- * tag the same home page exists at two addresses and a search engine has to
- * guess which is the real one. It splits the brand between them when it
- * guesses wrong. `siteUrl()` resolves to the configured domain whichever
- * hostname served the request, so both copies now point at the same one.
- */
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
@@ -46,22 +35,16 @@ export default async function HomePage() {
     getMarketSnapshot(5),
     getIndexStrip(),
     auth().catch(() => null),
-    // Returns an empty list when signed out, so this costs nothing for a
-    // visitor and does not need a branch here.
     listWatchlist(),
   ]);
   const signedIn = Boolean(session?.user?.id);
 
   return (
     <div>
-      {/* Both blocks, once, on the one page a crawler treats as the site's
-          front door. The organisation is what a search for the product's own
-          name has to match; the website is what carries the search box. */}
       <StructuredData data={[organisationLd(), websiteLd()]} />
-
       <TranslationHero />
 
-      <IndexStrip readings={indices} universeCount={universeCount} asOf={market.asOf} />
+      <IndexStrip readings={indices} universeCount={universeCount} asOf={market.asOf} ageDays={market.ageDays} />
 
       <div className="space-y-11 pt-11">
         {hasMarketData(market) ? (
@@ -70,10 +53,6 @@ export default async function HomePage() {
           universeCount != null && universeCount > 0 && <MarketSetupHint />
         )}
 
-        {/* The merge runs once, here, because the dashboard is where somebody
-            lands after signing in — and it must happen before the panel below
-            is read, or a freshly-merged company appears only on the next
-            visit. */}
         <WatchlistSync signedIn={signedIn} />
         <WatchlistPanel signedIn={signedIn} saved={saved} />
 
@@ -108,17 +87,9 @@ export default async function HomePage() {
                         label={r.healthScore != null ? `${r.healthScore.toFixed(1)}/10` : "—"}
                       />
                     </div>
-
-                    {/*
-                      A minimum height rather than a clamp, so the metric rules
-                      below line up across a row whether a headline runs to one
-                      line or three. Cards of unequal internal rhythm are what
-                      makes a grid look assembled rather than drawn.
-                    */}
                     <p className="mt-3 min-h-[2.8em] text-[0.8125rem] leading-relaxed text-muted">
                       {r.headline}
                     </p>
-
                     <dl className="mt-3.5 grid grid-cols-3 gap-2.5 border-t border-border pt-3">
                       <Cell label="Value" value={money(r.marketCap)} />
                       <Cell label="Growth" value={percent(r.revenueGrowth)} />
@@ -131,20 +102,13 @@ export default async function HomePage() {
           ) : (
             <Card className="p-5">
               <p className="font-display text-base font-semibold">
-                {healthiest.status === "no-database"
-                  ? "Rankings need a database"
-                  : "No companies loaded yet"}
+                {healthiest.status === "no-database" ? "Rankings need a database" : "No companies loaded yet"}
               </p>
               <p className="mt-1.5 max-w-2xl text-sm text-muted">
                 Individual stock pages work without any setup — search above or try{" "}
-                <Link href="/stock/AAPL" className="text-accent underline">
-                  AAPL
-                </Link>
-                . To rank and filter across the whole universe, see the{" "}
-                <Link href="/screen" className="text-accent underline">
-                  screener
-                </Link>{" "}
-                for setup steps.
+                <Link href="/stock/AAPL" className="text-accent underline">AAPL</Link>.
+                To rank and filter across the whole universe, see the{" "}
+                <Link href="/screen" className="text-accent underline">screener</Link> for setup steps.
               </p>
             </Card>
           )}
@@ -167,58 +131,46 @@ function IndexStrip({
   readings,
   universeCount,
   asOf,
+  ageDays,
 }: {
   readings: IndexReading[];
   universeCount: number | null;
   asOf: Date | string | null;
+  ageDays: number | null;
 }) {
-  return (
-    /*
-      Bleeds with the hero above it. The rule is on the outer band so it runs
-      the whole width like the hero's does; the cells stay in the column, so
-      the figures line up with everything else on the page.
+  const stale = ageDays != null && ageDays > 3;
 
-      Which they did not, quite. The cells carry their own `px` for the space
-      either side of the rules between them, and that sat on top of the
-      wrapper gutter — so the first label started 20px right of the hero above
-      it and every card below. The wrapper gutter is now the page gutter
-      *minus* the cell padding, so the two compose to the same 16px on a phone
-      and 28px on a desktop that everything else on the page uses, while the
-      rules between cells keep their air.
-    */
+  return (
     <div className="full-bleed border-b border-border">
-    <div className="mx-auto grid w-full max-w-[var(--content-max)] grid-cols-[repeat(auto-fit,minmax(min(100%,190px),1fr))] px-0 sm:px-2">
-      {readings.map((r) => (
-        <div key={r.symbol} className="border-r border-border px-4 py-[18px] last:border-r-0 sm:px-5">
-          <p className="eyebrow">{r.label}</p>
+      <div className="mx-auto grid w-full max-w-[var(--content-max)] grid-cols-[repeat(auto-fit,minmax(min(100%,190px),1fr))] px-0 sm:px-2">
+        {readings.map((r) => (
+          <div key={r.symbol} className="border-r border-border px-4 py-[18px] last:border-r-0 sm:px-5">
+            <p className="eyebrow">{r.label}</p>
+            <p className="display mt-1.5 text-[1.625rem]">
+              {r.value == null ? "—" : r.format === "rate" ? `${num(r.value, 3)}%` : num(r.value, 2)}
+            </p>
+            <p className={`tnum mt-0.5 text-[0.8125rem] ${r.changePercent == null ? "text-faint" : r.changePercent >= 0 ? "text-up" : "text-down"}`}>
+              {r.changePercent == null ? "—" : signedPercent(r.changePercent)}
+            </p>
+          </div>
+        ))}
+
+        <div className="px-4 py-[18px] sm:px-5">
+          <p className="eyebrow">Companies scored</p>
           <p className="display mt-1.5 text-[1.625rem]">
-            {r.value == null ? "—" : r.format === "rate" ? `${num(r.value, 3)}%` : num(r.value, 2)}
+            {universeCount == null ? "—" : num(universeCount, 0)}
           </p>
-          <p
-            className={`tnum mt-0.5 text-[0.8125rem] ${
-              r.changePercent == null ? "text-faint" : r.changePercent >= 0 ? "text-up" : "text-down"
-            }`}
-          >
-            {r.changePercent == null ? "—" : signedPercent(r.changePercent)}
+          <p className="mt-0.5 text-[0.8125rem] text-faint">
+            {asOf ? (
+              <>
+                {stale ? "⚠ data refresh is stale · " : "refreshed "}
+                <LocalTime value={asOf} mode="datetime" showZone />
+              </>
+            ) : (
+              "not yet ingested"
+            )}
           </p>
         </div>
-      ))}
-
-      <div className="px-4 py-[18px] sm:px-5">
-        <p className="eyebrow">Companies scored</p>
-        <p className="display mt-1.5 text-[1.625rem]">
-          {universeCount == null ? "—" : num(universeCount, 0)}
-        </p>
-        <p className="mt-0.5 text-[0.8125rem] text-faint">
-          {asOf ? (
-            <>
-              refreshed <LocalTime value={asOf} mode="time" />
-            </>
-          ) : (
-            "not yet ingested"
-          )}
-        </p>
-      </div>
       </div>
     </div>
   );
