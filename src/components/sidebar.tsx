@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Bookmark,
   CandlestickChart,
   ChevronsLeft,
   GitCompare,
@@ -11,6 +12,7 @@ import {
   History,
   LayoutDashboard,
   Menu,
+  Microscope,
   NotebookPen,
   SlidersHorizontal,
   X,
@@ -35,6 +37,8 @@ function isActive(href: string, pathname: string): boolean {
 */
 const NAV_ICONS: Record<string, LucideIcon> = {
   "/": LayoutDashboard,
+  "/research": Microscope,
+  "/watchlist": Bookmark,
   "/screen": SlidersHorizontal,
   "/compare": GitCompare,
   "/markets": CandlestickChart,

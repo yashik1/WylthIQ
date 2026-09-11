@@ -8,6 +8,8 @@ import { FilingsList, NewsList, PeersList, ResearchLinks } from "@/components/st
 import { QuestionCard, QuestionSummary, VerdictCard } from "@/components/stock/verdict";
 import { Scorecard } from "@/components/stock/scorecard";
 import { WhatChanged } from "@/components/stock/what-changed";
+import { FilingTimeline } from "@/components/stock/filing-timeline";
+import { buildFilingTimeline } from "@/lib/filings/timeline";
 import { PricePanel } from "@/components/stock/peer-chart";
 import { RecordVisit, WatchButton } from "@/components/watchlist";
 import { StrengthsAndRisks, WhatItDoes } from "@/components/stock/orientation";
@@ -550,6 +552,12 @@ async function StockBody({
         })
       : null;
 
+  // Every filing in order, carrying the figures behind each report when this
+  // page holds that period. Funds file none of these forms, so theirs is empty.
+  const timeline = filesAccounts
+    ? buildFilingTimeline(data.filings, fundamentals ?? null, currency)
+    : [];
+
   /*
     Jump links, in the order the sections appear.
 
@@ -573,6 +581,7 @@ async function StockBody({
     dividends && { id: "dividend", label: "Dividends" },
     filesAccounts && { id: "financials", label: "Financials" },
     data.assetClass === "equity" && { id: "early-signals", label: "Early signals" },
+    timeline.length > 0 && { id: "timeline", label: "Timeline" },
     filesAccounts && { id: "filings", label: "Filings" },
     filesAccounts && data.peers.length > 0 && { id: "peers", label: "Peers" },
     !filesAccounts && { id: "sources", label: "News" },
@@ -928,6 +937,11 @@ async function StockBody({
           upcoming={data.earlySignals.upcoming}
         />
       )}
+      </Section>
+
+      {/* ---- what it filed, in order ---- */}
+      <Section id="timeline">
+        {timeline.length > 0 && <FilingTimeline years={timeline} />}
       </Section>
 
       {/* ---- sources ---- */}
