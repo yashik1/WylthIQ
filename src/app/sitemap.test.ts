@@ -58,6 +58,14 @@ describe("what is always listed", () => {
     expect(urls).toContain(`${ORIGIN}/compare`);
   });
 
+  it("lists every written guide", async () => {
+    const urls = (await build()).map((e) => e.url);
+
+    expect(urls).toContain(`${ORIGIN}/how-to-analyze-a-company`);
+    expect(urls).toContain(`${ORIGIN}/what-is-free-cash-flow`);
+    expect(urls).toContain(`${ORIGIN}/financial-health-stock-screener`);
+  });
+
   /*
     A sitemap is an invitation, and these are not pages anybody should be
     invited to from a search result: one holds somebody's private notes,

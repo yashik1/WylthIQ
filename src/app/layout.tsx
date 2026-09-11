@@ -344,6 +344,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                   </a>
                 </li>
                 <li><Link href="/learn" className={FOOTER_LINK}>How the scores work</Link></li>
+                <li><Link href="/how-to-analyze-a-company" className={FOOTER_LINK}>How to analyze a company</Link></li>
                 <li><Link href="/terms" className={FOOTER_LINK}>Terms &amp; privacy</Link></li>
                 <li>
                   <a

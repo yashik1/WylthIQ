@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/lib/db";
 import { companies } from "@/lib/db/schema";
 import { ALL_INSTRUMENTS } from "@/lib/instruments";
+import { GUIDES } from "@/lib/guides/content";
 import { siteUrl } from "@/lib/site-url";
 
 /**
@@ -101,5 +102,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  return [...statics, ...instruments, ...(await companyEntries(base))];
+  // The written guides. Each answers a question people search for, and they
+  // are the only long-form pages, so all of them are listed.
+  const guides: MetadataRoute.Sitemap = GUIDES.map((guide) => ({
+    url: `${base}/${guide.slug}`,
+    lastModified: new Date(),
+    changeFrequency: "monthly" as const,
+    priority: 0.7,
+  }));
+
+  return [...statics, ...guides, ...instruments, ...(await companyEntries(base))];
 }

@@ -21,6 +21,12 @@ import { loadPeerScores } from "@/lib/peers";
 import { figuresFromFundamentals } from "@/lib/peer-context";
 import { getThesis } from "@/lib/thesis/actions";
 import { buildThesisReality } from "@/lib/thesis/reality";
+import { MovementContextCard } from "@/components/stock/movement-context";
+import { ResearchJourney } from "@/components/stock/research-journey";
+import { buildMovementContext } from "@/lib/movement-context";
+import { sectorMove } from "@/lib/sector-moves";
+import { displaySectorFromSic } from "@/lib/scoring/sectors";
+import { getProvider } from "@/lib/providers";
 import { PricePanel } from "@/components/stock/peer-chart";
 import { RecordVisit, WatchButton } from "@/components/watchlist";
 import { StrengthsAndRisks, WhatItDoes } from "@/components/stock/orientation";
@@ -581,14 +587,39 @@ async function StockBody({
   const statements =
     fundamentals && filesAccounts && !isFund ? buildStatements(fundamentals, currency) : null;
 
-  // The reader's own thesis, and this company's peers from the nightly scores.
-  // Both are database reads, so they run together.
-  const [thesis, peerScores] = await Promise.all([
+  /*
+    The reader's own thesis, this company's peers from the nightly scores, and
+    today's move set beside its sector and the market. All independent, so
+    they run together; each fails soft to nothing.
+  */
+  const movesToday = data.assetClass === "equity" && !isFund && quote?.changePercent != null;
+  const market = upper.endsWith(".TO")
+    ? { symbol: "^GSPTSE", label: "S&P/TSX Composite" }
+    : { symbol: "^GSPC", label: "S&P 500" };
+  const [thesis, peerScores, sectorReading, marketQuote] = await Promise.all([
     report && signedIn && !isFund ? getThesis(upper) : Promise.resolve(null),
     filesAccounts && !isFund && data.peers.length > 0
       ? loadPeerScores(data.peers)
       : Promise.resolve([]),
+    movesToday ? sectorMove(displaySectorFromSic(profile?.sicCode), upper) : Promise.resolve(null),
+    movesToday ? getProvider().getQuote(market.symbol).catch(() => null) : Promise.resolve(null),
   ]);
+  const movement = movesToday
+    ? buildMovementContext({
+        symbol: upper,
+        stockChange: quote?.changePercent ?? null,
+        sector: sectorReading,
+        market:
+          marketQuote?.changePercent != null
+            ? { label: market.label, change: marketQuote.changePercent }
+            : null,
+        filings: data.filings,
+        news: data.news,
+        now: new Date(),
+      })
+    : null;
+  const latestReport =
+    data.filings.find((filing) => /^(10-K|10-Q|20-F|40-F)(\/A)?$/.test(filing.form)) ?? null;
   const thesisReality = thesis
     ? buildThesisReality(thesis.conditions, thesis.createdAt, fundamentals)
     : null;
@@ -683,7 +714,10 @@ async function StockBody({
         sat next to a health score computed from an annual filing — two
         figures on utterly different clocks, presented as a pair.
       */}
-      <header className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] items-end gap-6 border-b border-border pt-10 pb-[22px]">
+      <header
+        id="company-header"
+        className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] items-end gap-6 border-b border-border pt-10 pb-[22px]"
+      >
         <div className="min-w-0">
           <p className="eyebrow mb-2">
             {[
@@ -765,6 +799,18 @@ async function StockBody({
         symbol={upper}
         name={profile?.name ?? unsupported?.name ?? fundamentals?.entityName}
       />
+
+      {report && !isFund && (
+        <ResearchJourney
+          symbol={upper}
+          hasOverview={Boolean(brief)}
+          hasChanges={Boolean(changes)}
+          hasPeers={filesAccounts && data.peers.length > 0}
+          latestFiling={latestReport ? { form: latestReport.form, url: latestReport.url } : null}
+          saved={alreadySaved}
+          hasThesis={Boolean(thesis)}
+        />
+      )}
 
       {brief ? (
         <Section id="overview">
@@ -878,7 +924,13 @@ async function StockBody({
       </Section>
 
       {/* ---- price chart ---- */}
-      <Section id="price">
+      <Section id="price" className="space-y-5">
+      {movement && (
+        <MovementContextCard
+          context={movement}
+          freshness={quote ? (FRESHNESS_WORD[quote.freshness] ?? null) : null}
+        />
+      )}
       <Card>
         <CardHeader
           title="Price history"

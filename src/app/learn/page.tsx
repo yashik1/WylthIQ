@@ -4,6 +4,7 @@ import { Card, CardHeader, PageHeader } from "@/components/ui";
 import { faqLd } from "@/lib/structured-data";
 import { StructuredData } from "@/components/structured-data";
 import { METRIC_GUIDES } from "@/lib/learn/metric-guide";
+import { GUIDES } from "@/lib/guides/content";
 
 export const metadata: Metadata = {
   title: "Learn — what the numbers actually mean",
@@ -93,6 +94,66 @@ const RATIOS: Entry[] = [
   },
 ];
 
+/**
+ * The newcomer's checklist: eight questions, each with where a company page
+ * answers it and the guide that explains how to read the answer.
+ */
+const CHECKLIST: {
+  question: string;
+  answer: string;
+  example: string;
+  guide: { label: string; href: string };
+}[] = [
+  {
+    question: "What does the company do?",
+    answer: "Every figure means something different depending on the business. Start with what it sells, to whom, and whether sales recur.",
+    example: "/stock/AAPL#overview",
+    guide: { label: "How to analyze a company", href: "/how-to-analyze-a-company" },
+  },
+  {
+    question: "Is it profitable?",
+    answer: "Look at operating and net margins across several years rather than one.",
+    example: "/stock/AAPL#questions",
+    guide: { label: "How to read an income statement", href: "/how-to-read-an-income-statement" },
+  },
+  {
+    question: "Is it growing?",
+    answer: "Compare revenue with a year and three years earlier, and check whether acquisitions supplied the growth.",
+    example: "/stock/AAPL#what-changed",
+    guide: { label: "Revenue, explained", href: "/learn#revenue" },
+  },
+  {
+    question: "Does it generate cash?",
+    answer: "Operating cash flow should broadly keep pace with profit. Free cash flow is what remains after investment.",
+    example: "/stock/AAPL#statements",
+    guide: { label: "What is free cash flow?", href: "/what-is-free-cash-flow" },
+  },
+  {
+    question: "How much debt does it have?",
+    answer: "Net debt and interest cover say more than total liabilities, which include ordinary bills.",
+    example: "/stock/AAPL#questions",
+    guide: { label: "How to read a balance sheet", href: "/how-to-read-a-balance-sheet" },
+  },
+  {
+    question: "How is it valued?",
+    answer: "A multiple needs a comparison: the company's own history, or similar companies.",
+    example: "/stock/AAPL#key-figures",
+    guide: { label: "What is the P/E ratio?", href: "/what-is-price-to-earnings" },
+  },
+  {
+    question: "What changed?",
+    answer: "Set the latest year and quarter beside the ones before, then read the company's own explanation in its filing.",
+    example: "/stock/AAPL#what-changed",
+    guide: { label: "How to analyze a company", href: "/how-to-analyze-a-company" },
+  },
+  {
+    question: "What risks should I investigate?",
+    answer: "Warning signs, the accounting and distress models, and the filing's own risk factors all say where to look harder.",
+    example: "/stock/AAPL#health",
+    guide: { label: "What is the Beneish M-Score?", href: "/what-is-beneish-m-score" },
+  },
+];
+
 const SCORES: Entry[] = [
   {
     term: "Piotroski F-Score (0–9)",
@@ -153,6 +214,55 @@ export default function LearnPage() {
           balance sheet before. Nothing here is advice — it is just vocabulary.
         </p>
       </PageHeader>
+
+      <Card as="section">
+        <CardHeader
+          title="Guides"
+          subtitle="Longer walkthroughs, each with a worked example and links to real companies"
+        />
+        <ul className="divide-y divide-border">
+          {GUIDES.map((guide) => (
+            <li key={guide.slug}>
+              <Link
+                href={`/${guide.slug}`}
+                className="block px-5 py-3 transition-colors hover:bg-surface-2"
+              >
+                <span className="text-sm font-semibold text-accent">{guide.title}</span>
+                <span className="mt-0.5 block text-sm leading-relaxed text-muted">
+                  {guide.description}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      <Card as="section">
+        <CardHeader
+          title="New to financial analysis?"
+          subtitle="Eight questions to work through on any company page, with where each one is answered"
+        />
+        <ol className="list-none divide-y divide-border">
+          {CHECKLIST.map((item, index) => (
+            <li key={item.question} className="flex gap-3 px-5 py-3">
+              <span className="tnum w-5 shrink-0 text-sm text-faint">{index + 1}.</span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">{item.question}</p>
+                <p className="mt-0.5 text-sm leading-relaxed text-muted">{item.answer}</p>
+                <p className="mt-1 text-xs">
+                  <Link href={item.example} className="text-accent underline underline-offset-2">
+                    See it on Apple&apos;s page
+                  </Link>
+                  <span className="text-faint"> · </span>
+                  <Link href={item.guide.href} className="text-accent underline underline-offset-2">
+                    {item.guide.label}
+                  </Link>
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </Card>
 
       <Section
         title="The basics"
