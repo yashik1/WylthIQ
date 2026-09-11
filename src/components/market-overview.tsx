@@ -37,7 +37,7 @@ export function MarketOverview({ snapshot }: { snapshot: MarketSnapshot }) {
     The age arrives on the snapshot rather than being read from the clock
     here — see MarketSnapshot for why.
   */
-  const stale = ageDays != null && ageDays > STALE_AFTER_DAYS;
+  const stale = ageDays != null && ageDays >= STALE_AFTER_DAYS;
 
   return (
     <section aria-labelledby="market-heading">
