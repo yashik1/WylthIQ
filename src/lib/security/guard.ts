@@ -34,6 +34,10 @@ export const RULES = {
   marketData: { limit: 60, windowSeconds: 60 },
   /** Scheduled jobs. Authenticated already; this bounds a leaked secret. */
   cron: { limit: 4, windowSeconds: 60 },
+  /** Grounded explanations, per address. Each one is a paid model call. */
+  ai: { limit: 6, windowSeconds: 60 },
+  /** Grounded explanations, per account per day, so one account cannot run up the bill. */
+  aiDaily: { limit: 40, windowSeconds: 86_400 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type RuleName = keyof typeof RULES;

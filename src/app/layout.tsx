@@ -147,6 +147,7 @@ const NAV = [
   { href: "/", label: "Dashboard" },
   { href: "/research", label: "Research" },
   { href: "/watchlist", label: "Watchlist" },
+  { href: "/portfolio", label: "Portfolio" },
   { href: "/screen", label: "Screener" },
   { href: "/compare", label: "Compare" },
   { href: "/markets", label: "Markets" },

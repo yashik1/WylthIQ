@@ -30,7 +30,7 @@ const EXPECTED_TABLES = [
   "users", "accounts", "sessions", "verification_tokens",
   "password_reset_tokens", "subscriptions", "journal_entries",
   "watchlist_items", "playbooks", "trades",
-  "watchlist_groups", "saved_screen_runs", "investment_theses",
+  "watchlist_groups", "saved_screen_runs", "investment_theses", "portfolio_holdings",
 ] as const;
 
 /** Postgres error codes we treat as "already done" rather than failures. */

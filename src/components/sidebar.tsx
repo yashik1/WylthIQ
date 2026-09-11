@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Bookmark,
+  Briefcase,
   CandlestickChart,
   ChevronsLeft,
   GitCompare,
@@ -39,6 +40,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   "/": LayoutDashboard,
   "/research": Microscope,
   "/watchlist": Bookmark,
+  "/portfolio": Briefcase,
   "/screen": SlidersHorizontal,
   "/compare": GitCompare,
   "/markets": CandlestickChart,
