@@ -51,6 +51,8 @@ export function convertFundamentals(
     // Quarters are converted at the same rate as the years, or a quarter
     // compared against its own year would be two currencies side by side.
     ...(fundamentals.quarterly ? { quarterly: fundamentals.quarterly.map(convert) } : {}),
+    // As-reported snapshots stay in the filing currency, labelled as such.
+    // Only ratios and signs are ever read from them, and those do not change.
   };
 }
 

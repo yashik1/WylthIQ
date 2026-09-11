@@ -9,6 +9,15 @@ import { getEntitlement, hasAccess } from "@/lib/billing/entitlement";
 import { calendarDate } from "@/lib/format";
 import { listEntries } from "@/lib/journal/actions";
 import { newFilingsFor, type NewFiling } from "@/lib/research/new-filings";
+import { getFundamentalsWithSource } from "@/lib/providers";
+import { listTheses, type SavedThesis } from "@/lib/thesis/actions";
+import { THESIS_STATUSES } from "@/lib/thesis/metrics";
+import {
+  buildThesisReality,
+  CONDITION_STATUS_LABEL,
+  type ConditionStatus,
+  type ThesisReality,
+} from "@/lib/thesis/reality";
 import { listSavedScreens } from "@/lib/saved-screens";
 import { describeFilters } from "@/lib/screen-summary";
 import { listWatchlist, type SavedCompany } from "@/lib/watchlist/actions";
@@ -201,6 +210,17 @@ export default async function ResearchPage() {
       <Suspense
         fallback={
           <Card>
+            <CardHeader title="Thesis updates" subtitle="Measuring your theses against the latest filings…" />
+            <p className="px-5 py-4 text-sm text-muted">Loading your theses.</p>
+          </Card>
+        }
+      >
+        <ThesisUpdates />
+      </Suspense>
+
+      <Suspense
+        fallback={
+          <Card>
             <CardHeader title="New filings" subtitle="Checking SEC EDGAR for your saved companies…" />
             <p className="px-5 py-4 text-sm text-muted">Loading recent filings.</p>
           </Card>
@@ -289,6 +309,88 @@ export default async function ResearchPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+/** Theses measured on one page load, one company at a time. */
+const MAX_THESIS_UPDATES = 10;
+
+const OUTCOME_ORDER: ConditionStatus[] = ["on-track", "above", "below", "no-data"];
+
+/**
+ * Each thesis the reader wrote, measured against its company's latest annual
+ * report. Sequential and capped, for the same fair-use reason new filings are,
+ * and it says how many it covered when it did not cover them all.
+ */
+async function ThesisUpdates() {
+  const theses = await listTheses();
+
+  if (theses.length === 0) {
+    return (
+      <Card>
+        <CardHeader title="Thesis updates" subtitle="Your theses, measured against each new annual report" />
+        <p className="px-5 py-4 text-sm text-muted">
+          Write a thesis from any company page, with conditions such as a margin you expect to hold,
+          and each new annual report is measured against it here.
+        </p>
+      </Card>
+    );
+  }
+
+  const measured: { thesis: SavedThesis; reality: ThesisReality }[] = [];
+  for (const thesis of theses.slice(0, MAX_THESIS_UPDATES)) {
+    const { fundamentals } = await getFundamentalsWithSource(thesis.symbol).catch(() => ({
+      fundamentals: null,
+    }));
+    measured.push({ thesis, reality: buildThesisReality(thesis.conditions, thesis.createdAt, fundamentals) });
+  }
+
+  const coverage =
+    theses.length > MAX_THESIS_UPDATES
+      ? ` · the ${MAX_THESIS_UPDATES} most recently edited of ${theses.length}`
+      : "";
+
+  return (
+    <Card>
+      <CardHeader
+        title="Thesis updates"
+        subtitle={`Your theses, measured against each company's latest annual report${coverage}. The status is always the one you set.`}
+      />
+      <ul className="divide-y divide-border">
+        {measured.map(({ thesis, reality }) => {
+          const outcomes = OUTCOME_ORDER.filter((status) => reality.counts[status] > 0).map(
+            (status) => `${reality.counts[status]} ${CONDITION_STATUS_LABEL[status].toLowerCase()}`,
+          );
+          return (
+            <li key={thesis.id} className="px-5 py-3">
+              <div className="flex flex-wrap items-baseline gap-2">
+                <Link
+                  href={`/stock/${encodeURIComponent(thesis.symbol)}#thesis`}
+                  className="text-sm font-bold tracking-tight hover:text-accent"
+                >
+                  {thesis.symbol}
+                </Link>
+                <Badge>{THESIS_STATUSES[thesis.status]}</Badge>
+                {reality.latest?.newSinceThesis && (
+                  <Badge tone="accent">FY{reality.latest.fiscalYear} filed since you wrote it</Badge>
+                )}
+                <span className="ml-auto text-xs text-faint">
+                  Edited <LocalTime value={thesis.updatedAt.toISOString()} mode="relative" />
+                </span>
+              </div>
+              {thesis.thesis && (
+                <p className="mt-1 line-clamp-2 text-sm text-muted-strong">{thesis.thesis}</p>
+              )}
+              <p className="mt-1 text-xs text-muted">
+                {reality.results.length === 0
+                  ? "No conditions to measure."
+                  : `${outcomes.join(" · ")}${reality.latest ? `, in FY${reality.latest.fiscalYear}` : ""}.`}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 

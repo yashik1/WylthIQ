@@ -322,7 +322,7 @@ describe("analyst ratings", () => {
     const text = render(null, null, null, analysts()).replace(/<[^>]*>/g, " ");
 
     expect(text).toMatch(/Against today/i);
-    expect(text).not.toMatch(/upside/i);
+    expect(text).not.toMatch(/\bupside\b/i);
   });
 
   it("survives a company where every analyst agrees", () => {

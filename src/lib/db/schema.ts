@@ -774,6 +774,40 @@ export const savedScreenRuns = pgTable("saved_screen_runs", {
   resultCount: integer("result_count"),
 });
 
+/**
+ * A reader's own thesis for a company: what they believe, what has to go
+ * right, what would break it, and conditions to check the figures against.
+ *
+ * One per reader per company. `createdAt` is kept through edits because
+ * Thesis vs Reality measures from the day the thesis was first written.
+ * `symbol` is free text, like the journal's, so a thesis survives its ticker
+ * leaving the screening universe.
+ */
+export const investmentTheses = pgTable(
+  "investment_theses",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    symbol: text("symbol").notNull(),
+    thesis: text("thesis").notNull().default(""),
+    mustGoRight: text("must_go_right").notNull().default(""),
+    couldBreak: text("could_break").notNull().default(""),
+    horizon: text("horizon"),
+    /** active | under-review | intact | at-risk | invalidated — the reader's call, never the app's. */
+    status: text("status").notNull().default("active"),
+    conditions: jsonb("conditions").notNull().default(sql`'[]'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("investment_theses_user_symbol_idx").on(t.userId, t.symbol),
+    index("investment_theses_user_updated_idx").on(t.userId, t.updatedAt),
+  ],
+);
+
+export type InvestmentThesis = typeof investmentTheses.$inferSelect;
 export type WatchlistGroup = typeof watchlistGroups.$inferSelect;
 export type SavedScreenRun = typeof savedScreenRuns.$inferSelect;
 export type Company = typeof companies.$inferSelect;

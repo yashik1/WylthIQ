@@ -3,7 +3,9 @@ import { getInstrumentType, getProvider } from "./providers";
 import type { InstrumentType, Quote } from "./providers/types";
 import { sectorFromSic, type SectorKind } from "./scoring/applicability";
 import { buildHealthReport, type HealthReport } from "./scoring/health";
+import { buildKeyFigures } from "./scoring/key-figures";
 import { div } from "./scoring/math";
+import { enterpriseValueToEbitda, returnOnInvestedCapital } from "./scoring/returns";
 import { classify, findInstrument, type AssetClass } from "./instruments";
 
 /** Most symbols a single comparison will load. */
@@ -37,6 +39,14 @@ export interface CompareItem {
     debtToEquity: number | null;
     revenue: number | null;
     netIncome: number | null;
+    grossMargin: number | null;
+    operatingMargin: number | null;
+    fcfMargin: number | null;
+    returnOnEquity: number | null;
+    /** Approximate — see src/lib/scoring/returns.ts. */
+    returnOnInvestedCapital: number | null;
+    /** Approximate — see src/lib/scoring/returns.ts. */
+    evToEbitda: number | null;
   };
   /** Set when the symbol could not be resolved at all. */
   error?: string;
@@ -45,7 +55,8 @@ export interface CompareItem {
 const EMPTY_METRICS: CompareItem["metrics"] = {
   peRatio: null, pbRatio: null, psRatio: null, netMargin: null,
   revenueGrowth: null, returnOnAssets: null, debtToEquity: null,
-  revenue: null, netIncome: null,
+  revenue: null, netIncome: null, grossMargin: null, operatingMargin: null,
+  fcfMargin: null, returnOnEquity: null, returnOnInvestedCapital: null, evToEbitda: null,
 };
 
 /**
@@ -151,6 +162,7 @@ async function loadOne(symbol: string): Promise<CompareItem> {
   }
 
   const report = buildHealthReport(fundamentals, sector, marketCap);
+  const figures = buildKeyFigures(fundamentals, marketCap);
   const latest = fundamentals.annual[0];
   const prior = fundamentals.annual[1];
   const revenue = fieldValue(latest, "revenue");
@@ -180,6 +192,12 @@ async function loadOne(symbol: string): Promise<CompareItem> {
       debtToEquity: div(fieldValue(latest, "liabilities"), fieldValue(latest, "equity")),
       revenue,
       netIncome,
+      grossMargin: figures.grossMargin,
+      operatingMargin: figures.operatingMargin,
+      fcfMargin: figures.fcfMargin,
+      returnOnEquity: figures.returnOnEquity,
+      returnOnInvestedCapital: returnOnInvestedCapital(latest),
+      evToEbitda: enterpriseValueToEbitda(latest, marketCap),
     },
   };
 }
