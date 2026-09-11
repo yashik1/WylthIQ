@@ -807,6 +807,33 @@ export const investmentTheses = pgTable(
   ],
 );
 
+/**
+ * A reader's holdings: how many shares of what, at what average cost.
+ *
+ * Entered by hand, one row per company. Like the trade journal, nothing here
+ * comes from a brokerage; unlike it, this is a position rather than a history
+ * of executions, because the portfolio page asks "what do I own now".
+ */
+export const portfolioHoldings = pgTable(
+  "portfolio_holdings",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    symbol: text("symbol").notNull(),
+    quantity: doublePrecision("quantity").notNull(),
+    /** Per share, in the currency the shares trade in. */
+    averageCost: doublePrecision("average_cost").notNull(),
+    /** ISO date. Optional: many readers will not remember it. */
+    purchaseDate: text("purchase_date"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("portfolio_holdings_user_symbol_idx").on(t.userId, t.symbol)],
+);
+
+export type PortfolioHolding = typeof portfolioHoldings.$inferSelect;
 export type InvestmentThesis = typeof investmentTheses.$inferSelect;
 export type WatchlistGroup = typeof watchlistGroups.$inferSelect;
 export type SavedScreenRun = typeof savedScreenRuns.$inferSelect;

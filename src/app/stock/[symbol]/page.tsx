@@ -27,6 +27,9 @@ import { buildMovementContext } from "@/lib/movement-context";
 import { sectorMove } from "@/lib/sector-moves";
 import { displaySectorFromSic } from "@/lib/scoring/sectors";
 import { getProvider } from "@/lib/providers";
+import { AskAboutFigures } from "@/components/stock/ask-about-figures";
+import { isAiConfigured } from "@/lib/ai/config";
+import { AI_QUESTION_OPTIONS } from "@/lib/ai/questions";
 import { PricePanel } from "@/components/stock/peer-chart";
 import { RecordVisit, WatchButton } from "@/components/watchlist";
 import { StrengthsAndRisks, WhatItDoes } from "@/components/stock/orientation";
@@ -620,6 +623,9 @@ async function StockBody({
     : null;
   const latestReport =
     data.filings.find((filing) => /^(10-K|10-Q|20-F|40-F)(\/A)?$/.test(filing.form)) ?? null;
+
+  // Grounded explanations, only where an operator has switched them on.
+  const askable = Boolean(report && latest && !isFund && isAiConfigured());
   const thesisReality = thesis
     ? buildThesisReality(thesis.conditions, thesis.createdAt, fundamentals)
     : null;
@@ -644,6 +650,7 @@ async function StockBody({
     warnings.length > 0 && { id: "warning-signs", label: "Risks" },
     { id: "health", label: "Health" },
     changes && { id: "what-changed", label: "What changed" },
+    askable && { id: "ask", label: "Ask" },
     { id: "price", label: "Price" },
     hasMarketExpectations(data) && { id: "expectations", label: "Expectations" },
     report && { id: "questions", label: "Five questions" },
@@ -917,6 +924,17 @@ async function StockBody({
           margin fell four points" are the same reader's next two questions. */}
       <Section id="what-changed">
         {changes && <WhatChanged report={changes} />}
+      </Section>
+
+      <Section id="ask">
+        {askable && (
+          <AskAboutFigures
+            symbol={upper}
+            companyName={companyName}
+            signedIn={signedIn}
+            questions={AI_QUESTION_OPTIONS}
+          />
+        )}
       </Section>
 
       <Section id="strengths">
