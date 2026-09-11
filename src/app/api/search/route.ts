@@ -4,6 +4,7 @@ import { getProvider } from "@/lib/providers";
 import { ASSET_CLASS_LABEL, searchInstruments } from "@/lib/instruments";
 import { addressSearchResults } from "@/lib/exchange-suffix";
 import type { SymbolSearchResult } from "@/lib/providers/types";
+import { searchTopics } from "@/lib/learn/topics";
 
 /**
  * Symbol search.
@@ -49,6 +50,13 @@ export async function GET(request: Request) {
     supported: true,
   }));
 
+  /*
+    Guides and explanations, matched locally and returned beside the symbols
+    rather than mixed into them. Like the instruments above, they need no
+    upstream, so they survive the equity provider being down.
+  */
+  const topics = searchTopics(query, 3).map(({ title, kind, href }) => ({ title, kind, href }));
+
   const remaining = Math.max(0, 8 - local.length);
 
   try {
@@ -69,7 +77,7 @@ export async function GET(request: Request) {
     const results = [...local, ...upstream.filter((r) => !seen.has(r.symbol.toUpperCase()))];
 
     return NextResponse.json(
-      { results },
+      { results, topics },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (err) {
@@ -80,7 +88,7 @@ export async function GET(request: Request) {
     // withhold an answer this route already has in hand.
     const message = err instanceof Error ? err.message : "Search failed";
     return NextResponse.json(
-      { results: local, error: "search-failed", message },
+      { results: local, topics, error: "search-failed", message },
       { status: 200, headers: { "Cache-Control": "no-store" } },
     );
   }
