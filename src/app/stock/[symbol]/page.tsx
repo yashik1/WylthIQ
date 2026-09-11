@@ -28,6 +28,8 @@ import { sectorMove } from "@/lib/sector-moves";
 import { displaySectorFromSic } from "@/lib/scoring/sectors";
 import { getProvider } from "@/lib/providers";
 import { AskAboutFigures } from "@/components/stock/ask-about-figures";
+import { DataChecks } from "@/components/stock/data-checks";
+import { validateFundamentals } from "@/lib/fundamentals/validate";
 import { isAiConfigured } from "@/lib/ai/config";
 import { AI_QUESTION_OPTIONS } from "@/lib/ai/questions";
 import { PricePanel } from "@/components/stock/peer-chart";
@@ -90,6 +92,8 @@ const FRESHNESS_WORD: Record<string, string> = {
   // one of them documents 15 to 20 minutes.
   "delayed-15min": "delayed ~15 min",
   "end-of-day": "at close",
+  // No provider had a current price, so this is the last one known.
+  stale: "stale — last known price",
   unknown: "timing unknown",
 };
 
@@ -589,6 +593,8 @@ async function StockBody({
     report && filesAccounts && !isFund ? buildHealthHistory(fundamentals, sector) : null;
   const statements =
     fundamentals && filesAccounts && !isFund ? buildStatements(fundamentals, currency) : null;
+  const dataChecks =
+    fundamentals && filesAccounts && !isFund ? validateFundamentals(fundamentals, sector) : null;
 
   /*
     The reader's own thesis, this company's peers from the nightly scores, and
@@ -1129,6 +1135,8 @@ async function StockBody({
         </div>
       </div>
       </Section>
+
+      {dataChecks && <DataChecks checks={dataChecks} />}
 
       {/* ---- provenance ---- */}
       {latest && (

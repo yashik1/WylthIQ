@@ -29,6 +29,15 @@ vi.mock("@/lib/db", () => ({
   }),
 }));
 
+/*
+  Every test re-imports the sitemap after `vi.resetModules()`, and the module
+  graph behind it — the instrument catalogue and the written guides — takes a
+  few seconds to transform on a busy machine. That sat right at the default
+  five-second limit and failed whenever the suite ran alongside a build, which
+  said nothing about the sitemap. The limit is raised for this file only.
+*/
+vi.setConfig({ testTimeout: 20_000 });
+
 const ORIGIN = "https://stockfilter.example";
 
 beforeEach(() => {

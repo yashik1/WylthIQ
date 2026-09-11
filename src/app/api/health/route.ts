@@ -11,6 +11,7 @@ import {
   twelveData,
   yahoo,
 } from "@/lib/providers";
+import { classifyProviderError } from "@/lib/providers/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -291,6 +292,7 @@ async function probePriceProvider(): Promise<Record<string, unknown>> {
     return {
       configured: true,
       working: false,
+      category: classifyProviderError(err),
       // The provider's own wording usually names the cause outright.
       error: message.slice(0, 300),
       note: /api key|apikey|unauthor/i.test(message)

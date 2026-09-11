@@ -30,7 +30,12 @@ export interface Bar {
  * whether they are looking at a live price or a delayed one — free tiers stream
  * IEX in real time but consolidated data is 15 minutes behind.
  */
-export type PriceFreshness = "realtime-iex" | "delayed-15min" | "end-of-day" | "unknown";
+/**
+ * How current a quote is. "stale" is set by the failover layer, never by a
+ * provider: a quote whose own timestamp is days old, kept only because nothing
+ * current could be found.
+ */
+export type PriceFreshness = "realtime-iex" | "delayed-15min" | "end-of-day" | "stale" | "unknown";
 
 export interface Quote {
   symbol: string;
