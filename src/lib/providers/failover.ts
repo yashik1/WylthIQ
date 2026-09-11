@@ -1,4 +1,5 @@
 import type { Bar, NewsItem, Quote, Timeframe } from "./types";
+import { classifyProviderError, withTimeout, type ProviderErrorCategory } from "./errors";
 
 /**
  * Failover across price providers, with a short in-process cache.
@@ -18,6 +19,10 @@ import type { Bar, NewsItem, Quote, Timeframe } from "./types";
  * The cost of getting this wrong in the other direction is small and bounded: a
  * genuinely bogus ticker makes one request per provider, on the failure path
  * only, and the outcome is cached.
+ *
+ * Every attempt now carries a category as well as the provider's own words, and
+ * every call has a ceiling on how long it may take, so a provider that hangs
+ * costs a few seconds rather than the whole page.
  */
 
 export interface PriceSource {
@@ -42,13 +47,32 @@ export interface PriceSource {
   getQuote(symbol: string): Promise<Quote | null>;
 }
 
+export interface ProviderAttempt {
+  provider: string;
+  /** The provider's own description, for diagnostics. Never shown to readers or logged. */
+  error: string;
+  category: ProviderErrorCategory;
+}
+
 export interface FailoverResult<T> {
   value: T;
   /** Which provider answered, for display and debugging. */
   source: string | null;
   /** Providers that failed, and why. */
-  attempts: { provider: string; error: string }[];
+  attempts: ProviderAttempt[];
 }
+
+/** How long each kind of call may take before the next provider is tried. */
+export const PROVIDER_TIMEOUT_MS = { bars: 15_000, quote: 8_000, news: 8_000 } as const;
+
+/**
+ * A quote older than this is stale.
+ *
+ * Five days covers a long weekend with a holiday on either side, so an
+ * ordinary Monday morning never calls Friday's close stale, while a quote that
+ * has genuinely stopped updating is never passed off as current.
+ */
+export const STALE_QUOTE_DAYS = 5;
 
 /**
  * Cache of successful responses.
@@ -82,6 +106,36 @@ function writeCache(key: string, value: unknown, ttlSeconds: number): void {
 /** Exposed so tests can start from a known state. */
 export function clearPriceCache(): void {
   cache.clear();
+}
+
+function failed(provider: string, err: unknown): ProviderAttempt {
+  return {
+    provider,
+    error: err instanceof Error ? err.message : String(err),
+    category: classifyProviderError(err),
+  };
+}
+
+/**
+ * Records that nothing could be served.
+ *
+ * Categories only. A provider's own error text can quote the request URL, and
+ * several providers carry the API key in the query string, so the raw message
+ * never reaches a log line.
+ */
+function logUnavailable(kind: string, symbol: string, attempts: ProviderAttempt[]): void {
+  if (attempts.length === 0 || process.env.NODE_ENV === "test") return;
+  console.warn(
+    `[providers] ${kind} unavailable for ${symbol}: ${attempts.map((a) => `${a.provider}=${a.category}`).join(", ")}`,
+  );
+}
+
+/** Marks a quote whose own timestamp is too old to be current. */
+export function markStaleQuote(quote: Quote, now = Date.now()): Quote {
+  if (!quote.asOf) return quote;
+  const at = Date.parse(quote.asOf);
+  if (!Number.isFinite(at)) return quote;
+  return now - at > STALE_QUOTE_DAYS * 86_400_000 ? { ...quote, freshness: "stale" } : quote;
 }
 
 /** How long each timeframe's bars stay fresh. */
@@ -144,7 +198,7 @@ export async function fetchBarsWithFailover(
   const cached = readCache<FailoverResult<Bar[]>>(key);
   if (cached) return cached;
 
-  const attempts: { provider: string; error: string }[] = [];
+  const attempts: ProviderAttempt[] = [];
 
   // The best thin answer seen so far, kept in case nothing better turns up —
   // a genuinely young listing has little history from any provider, and its
@@ -154,17 +208,21 @@ export async function fetchBarsWithFailover(
   for (const source of sources) {
     if (!source.isConfigured()) continue;
     if (source.supports && !source.supports(timeframe)) {
-      attempts.push({ provider: source.name, error: `does not serve ${timeframe} bars` });
+      attempts.push({ provider: source.name, error: `does not serve ${timeframe} bars`, category: "NO_DATA" });
       continue;
     }
 
     try {
-      const bars = await source.getBars(symbol, timeframe, from, to);
+      const bars = await withTimeout(
+        source.getBars(symbol, timeframe, from, to),
+        PROVIDER_TIMEOUT_MS.bars,
+        source.name,
+      );
 
       if (bars.length === 0) {
         // An empty response says this provider has nothing for the symbol,
         // which is a statement about its coverage rather than about the symbol.
-        attempts.push({ provider: source.name, error: "returned no bars" });
+        attempts.push({ provider: source.name, error: "returned no bars", category: "NO_DATA" });
         continue;
       }
 
@@ -178,13 +236,15 @@ export async function fetchBarsWithFailover(
       attempts.push({
         provider: source.name,
         error: `only ${bars.length} bars, covering ${Math.round(covered * 100)}% of the window`,
+        // A thin answer is usually a provider answering about a different
+        // security, which is invalid data rather than missing data.
+        category: "INVALID_DATA",
       });
       if (!best || covered > best.coverage) {
         best = { bars, source: source.name, coverage: covered };
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      attempts.push({ provider: source.name, error: message });
+      attempts.push(failed(source.name, err));
     }
   }
 
@@ -196,6 +256,7 @@ export async function fetchBarsWithFailover(
     return result;
   }
 
+  logUnavailable("bars", symbol, attempts);
   return { value: [], source: null, attempts };
 }
 
@@ -227,33 +288,39 @@ export async function fetchNewsWithFailover(
   const cached = readCache<FailoverResult<NewsItem[]>>(key);
   if (cached) return cached;
 
-  const attempts: { provider: string; error: string }[] = [];
+  const attempts: ProviderAttempt[] = [];
 
   for (const source of sources) {
     if (!source.isConfigured()) {
-      attempts.push({ provider: source.name, error: "not configured" });
+      attempts.push({ provider: source.name, error: "not configured", category: "NO_DATA" });
       continue;
     }
 
     try {
-      const items = await source.getNews(symbol, limit);
+      const items = await withTimeout(source.getNews(symbol, limit), PROVIDER_TIMEOUT_MS.news, source.name);
       if (items.length > 0) {
         const result = { value: items, source: source.name, attempts };
         writeCache(key, result, 900);
         return result;
       }
-      attempts.push({ provider: source.name, error: "returned no articles" });
+      attempts.push({ provider: source.name, error: "returned no articles", category: "NO_DATA" });
     } catch (err) {
-      attempts.push({
-        provider: source.name,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      attempts.push(failed(source.name, err));
     }
   }
 
+  logUnavailable("news", symbol, attempts.filter((a) => a.error !== "not configured"));
   return { value: [], source: null, attempts };
 }
 
+/**
+ * A quote, from the first provider with a current one.
+ *
+ * A stale quote — one whose own timestamp is days old — does not end the
+ * search: the next provider may have today's. It is kept as a last resort and
+ * marked stale, so a page that has nothing better says "last known price"
+ * rather than presenting an old figure as current.
+ */
 export async function fetchQuoteWithFailover(
   sources: PriceSource[],
   symbol: string,
@@ -262,25 +329,40 @@ export async function fetchQuoteWithFailover(
   const cached = readCache<FailoverResult<Quote | null>>(key);
   if (cached) return cached;
 
-  const attempts: { provider: string; error: string }[] = [];
+  const attempts: ProviderAttempt[] = [];
+  let stale: { quote: Quote; source: string } | null = null;
 
   for (const source of sources) {
     if (!source.isConfigured()) continue;
 
     try {
-      const quote = await source.getQuote(symbol);
-      if (quote?.price != null) {
-        const result = { value: quote, source: source.name, attempts };
-        writeCache(key, result, 60);
-        return result;
+      const raw = await withTimeout(source.getQuote(symbol), PROVIDER_TIMEOUT_MS.quote, source.name);
+      if (raw?.price == null) {
+        attempts.push({ provider: source.name, error: "no quote returned", category: "NO_DATA" });
+        continue;
       }
-      attempts.push({ provider: source.name, error: "no quote returned" });
+
+      const quote = markStaleQuote(raw);
+      if (quote.freshness === "stale") {
+        attempts.push({ provider: source.name, error: `quote dated ${quote.asOf} is stale`, category: "NO_DATA" });
+        if (!stale) stale = { quote, source: source.name };
+        continue;
+      }
+
+      const result = { value: quote, source: source.name, attempts };
+      writeCache(key, result, 60);
+      return result;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      attempts.push({ provider: source.name, error: message });
+      attempts.push(failed(source.name, err));
     }
   }
 
+  if (stale) {
+    const result = { value: stale.quote, source: stale.source, attempts };
+    writeCache(key, result, 60);
+    return result;
+  }
+
+  logUnavailable("quote", symbol, attempts);
   return { value: null, source: null, attempts };
 }
-
