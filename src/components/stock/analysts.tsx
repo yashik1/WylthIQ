@@ -112,7 +112,7 @@ export function AnalystRatings({
           <Metric
             label="Against today's price"
             value={gap == null ? "—" : `${gap > 0 ? "+" : ""}${percent(gap)}`}
-            hint="How far the average target sits from the current price. Deliberately not called upside — the gap is a fact about what analysts published, not a claim the price will move to meet it."
+            hint="How far the average target sits from the current price. The gap is a fact about what analysts published, not a claim the price will move to meet it."
             size="sm"
           />
           <Metric

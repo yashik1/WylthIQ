@@ -96,6 +96,39 @@ export interface FinancialPeriod {
 /** Which XBRL taxonomy a company reports under. */
 export type Taxonomy = "us-gaap" | "ifrs-full";
 
+/** One fiscal year inside an as-reported snapshot. */
+export interface AsReportedPeriod {
+  fiscalYear: number;
+  end: string;
+  /** The currency the money figures are in. Share counts are counts. */
+  currency: string;
+  values: Partial<Record<CanonicalField, number>>;
+}
+
+/**
+ * A company's annual figures exactly as they stood on the day one annual
+ * report was filed.
+ *
+ * The live figures are the latest word on every period, restatements
+ * included, which is right for describing a company today and wrong for
+ * describing what anybody could have known a year ago. A snapshot reads only
+ * observations filed on or before `asOf`, so a figure corrected later appears
+ * here as it was first published, and a year not yet reported is absent.
+ *
+ * Numbers only, without provenance, because a company carries several of
+ * these in an in-process cache and each would otherwise repeat every fact's
+ * metadata.
+ */
+export interface AsReportedSnapshot {
+  /** The day this year's annual report was filed. Nothing filed later was read. */
+  asOf: string;
+  fiscalYear: number;
+  form: string;
+  sourceFilingUrl: string | null;
+  /** Consecutive fiscal years, newest first, starting with `fiscalYear`. */
+  periods: AsReportedPeriod[];
+}
+
 /** Normalized fundamentals for one company, newest period first. */
 export interface NormalizedFundamentals {
   cik: string;
@@ -112,6 +145,11 @@ export interface NormalizedFundamentals {
    * Optional because the fallback providers supply annual statements only.
    */
   quarterly?: FinancialPeriod[];
+  /**
+   * Recent annual reports as each was first filed, newest first. Only EDGAR
+   * supplies these; a fallback provider has no filing dates to rebuild from.
+   */
+  asReported?: AsReportedSnapshot[];
   /**
    * Fields the filer never reported and which could not be derived. Surfaced in
    * the UI as "not disclosed" rather than silently rendered as zero.

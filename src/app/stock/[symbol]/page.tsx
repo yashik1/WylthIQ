@@ -4,12 +4,23 @@ import type { Metadata } from "next";
 import { parseExchangeSuffix } from "@/lib/exchange-suffix";
 import { BalanceSheetVisual } from "@/components/stock/balance-sheet";
 import { FundamentalsChart, type TrendSeries } from "@/components/stock/fundamentals-chart";
-import { FilingsList, NewsList, PeersList, ResearchLinks } from "@/components/stock/links";
+import { FilingsList, NewsList, ResearchLinks } from "@/components/stock/links";
 import { QuestionCard, QuestionSummary, VerdictCard } from "@/components/stock/verdict";
 import { Scorecard } from "@/components/stock/scorecard";
 import { WhatChanged } from "@/components/stock/what-changed";
 import { FilingTimeline } from "@/components/stock/filing-timeline";
 import { buildFilingTimeline } from "@/lib/filings/timeline";
+import { HealthBreakdownCard, HealthHistoryCard } from "@/components/stock/health-breakdown";
+import { StatementExplorer } from "@/components/stock/statement-explorer";
+import { PeerSnapshot } from "@/components/stock/peer-snapshot";
+import { ThesisPanel } from "@/components/thesis/thesis-panel";
+import { buildHealthBreakdown } from "@/lib/scoring/health-breakdown";
+import { buildHealthHistory } from "@/lib/scoring/health-history";
+import { buildStatements } from "@/lib/fundamentals/statements";
+import { loadPeerScores } from "@/lib/peers";
+import { figuresFromFundamentals } from "@/lib/peer-context";
+import { getThesis } from "@/lib/thesis/actions";
+import { buildThesisReality } from "@/lib/thesis/reality";
 import { PricePanel } from "@/components/stock/peer-chart";
 import { RecordVisit, WatchButton } from "@/components/watchlist";
 import { StrengthsAndRisks, WhatItDoes } from "@/components/stock/orientation";
@@ -559,6 +570,34 @@ async function StockBody({
     : [];
 
   /*
+    The score taken apart, and how it has moved. Each past year is scored from
+    its annual report as first filed, so a later restatement never rewrites an
+    earlier point. Operating companies only: a fund has no score to explain.
+  */
+  const breakdown =
+    report && fundamentals && filesAccounts && !isFund ? buildHealthBreakdown(report, fundamentals) : null;
+  const healthHistory =
+    report && filesAccounts && !isFund ? buildHealthHistory(fundamentals, sector) : null;
+  const statements =
+    fundamentals && filesAccounts && !isFund ? buildStatements(fundamentals, currency) : null;
+
+  // The reader's own thesis, and this company's peers from the nightly scores.
+  // Both are database reads, so they run together.
+  const [thesis, peerScores] = await Promise.all([
+    report && signedIn && !isFund ? getThesis(upper) : Promise.resolve(null),
+    filesAccounts && !isFund && data.peers.length > 0
+      ? loadPeerScores(data.peers)
+      : Promise.resolve([]),
+  ]);
+  const thesisReality = thesis
+    ? buildThesisReality(thesis.conditions, thesis.createdAt, fundamentals)
+    : null;
+  const subjectFigures =
+    report && fundamentals
+      ? figuresFromFundamentals(upper, fundamentals, marketCap, report.score)
+      : null;
+
+  /*
     Jump links, in the order the sections appear.
 
     Built from the same conditions that decide whether each panel renders, so
@@ -580,10 +619,12 @@ async function StockBody({
     keyFigures && { id: "key-figures", label: "Key figures" },
     dividends && { id: "dividend", label: "Dividends" },
     filesAccounts && { id: "financials", label: "Financials" },
+    statements && { id: "statements", label: "Statements" },
+    filesAccounts && data.peers.length > 0 && { id: "peers", label: "Peers" },
     data.assetClass === "equity" && { id: "early-signals", label: "Early signals" },
     timeline.length > 0 && { id: "timeline", label: "Timeline" },
+    report && !isFund && { id: "thesis", label: "Thesis" },
     filesAccounts && { id: "filings", label: "Filings" },
-    filesAccounts && data.peers.length > 0 && { id: "peers", label: "Peers" },
     !filesAccounts && { id: "sources", label: "News" },
   ].filter((s): s is StockSection => Boolean(s));
 
@@ -745,6 +786,8 @@ async function StockBody({
             report={report}
             companyName={profile?.name ?? unsupported?.name ?? upper}
           />
+          {breakdown && <HealthBreakdownCard breakdown={breakdown} />}
+          {healthHistory && <HealthHistoryCard history={healthHistory} />}
           {/* The working behind the headline, directly under it. The three
               model figures in the card above are the summary; this is what
               they are made of. */}
@@ -922,6 +965,29 @@ async function StockBody({
         )}
       </div>
 
+      {/* ---- the three statements, annual and quarterly ---- */}
+      <Section id="statements">
+        {statements && <StatementExplorer data={statements} />}
+      </Section>
+
+      {/* ---- against similar companies ---- */}
+      <Section id="peers">
+        {filesAccounts && data.peers.length > 0 && (
+          <PeerSnapshot
+            symbol={upper}
+            name={companyName}
+            subject={subjectFigures}
+            subjectFScore={
+              report?.piotroski.maxScore
+                ? { score: report.piotroski.score, max: report.piotroski.maxScore }
+                : null
+            }
+            peers={peerScores}
+            peerSymbols={data.peers}
+          />
+        )}
+      </Section>
+
       {/*
         Early signals — insider trades, pending sales, ownership stakes, a
         projected calendar. Equity only, not funds: an ETF's trust has
@@ -942,6 +1008,19 @@ async function StockBody({
       {/* ---- what it filed, in order ---- */}
       <Section id="timeline">
         {timeline.length > 0 && <FilingTimeline years={timeline} />}
+      </Section>
+
+      {/* ---- the reader's own thesis ---- */}
+      <Section id="thesis">
+        {report && !isFund && (
+          <ThesisPanel
+            symbol={upper}
+            companyName={companyName}
+            signedIn={signedIn}
+            thesis={thesis}
+            reality={thesisReality}
+          />
+        )}
       </Section>
 
       {/* ---- sources ---- */}
@@ -970,11 +1049,6 @@ async function StockBody({
             status={data.newsStatus}
             source={data.newsSource}
           />
-          {filesAccounts && data.peers.length > 0 && (
-            <div id="peers">
-              <PeersList peers={data.peers} />
-            </div>
-          )}
           {filesAccounts && (
             <ResearchLinks
               symbol={upper}

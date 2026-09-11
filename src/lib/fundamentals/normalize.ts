@@ -7,6 +7,7 @@ import {
   QUARTERLY_FORMS,
 } from "./concept-map";
 import type {
+  AsReportedSnapshot,
   CanonicalField,
   Fact,
   FinancialPeriod,
@@ -148,6 +149,7 @@ function extractField(
   cik: number,
   field: CanonicalField,
   spec: PeriodSpec,
+  asOf?: string,
 ): Map<string, Fact> {
   const fieldIsDuration = DURATION_FIELDS.has(field);
   /** Period -> best observation so far, plus the preference rank that supplied it. */
@@ -176,6 +178,9 @@ function extractField(
 
       for (const entry of entries) {
         if (!entry.form || !spec.forms.has(entry.form)) continue;
+        // Reconstructing what was public on a date: an observation filed after
+        // it, or carrying no filing date to test, did not exist yet.
+        if (asOf && (!entry.filed || entry.filed > asOf)) continue;
         if (typeof entry.val !== "number" || !Number.isFinite(entry.val)) continue;
         // Discard filing errors such as a reported share count of zero.
         if (MUST_BE_POSITIVE.has(field) && entry.val <= 0) continue;
@@ -286,10 +291,15 @@ function detectTaxonomy(facts: SecCompanyFacts["facts"]): Taxonomy {
 
 type Extracted = Map<CanonicalField, Map<string, Fact>>;
 
-function extractAll(raw: SecCompanyFacts, fields: CanonicalField[], spec: PeriodSpec): Extracted {
+function extractAll(
+  raw: SecCompanyFacts,
+  fields: CanonicalField[],
+  spec: PeriodSpec,
+  asOf?: string,
+): Extracted {
   const extracted: Extracted = new Map();
   for (const field of fields) {
-    extracted.set(field, extractField(raw.facts, raw.cik, field, spec));
+    extracted.set(field, extractField(raw.facts, raw.cik, field, spec, asOf));
   }
   return extracted;
 }
@@ -367,6 +377,97 @@ function latestFiled(facts: Partial<Record<CanonicalField, Fact>>): string | nul
   return filedAt;
 }
 
+/** How many past annual reports are rebuilt as they were first filed. */
+const MAX_SNAPSHOTS = 6;
+
+/** Years kept in each: enough for a health score's one- and three-year comparisons. */
+const SNAPSHOT_YEARS = 4;
+
+export interface NormalizeOptions {
+  /**
+   * Rebuild the figures as they stood on this ISO date: only observations
+   * filed on or before it are read. Quarters and snapshots are skipped, since
+   * a rebuild is itself one snapshot.
+   */
+  asOf?: string;
+}
+
+/**
+ * The day a year's annual report became public.
+ *
+ * The earliest first-disclosure date among the anchor figures. Not `filedAt`,
+ * which is the latest date among every fact in the period, and not the latest
+ * anchor either: a restated anchor carries the restatement's later date, and
+ * rebuilding from that would read the correction into the original report —
+ * the very thing a snapshot exists to avoid. No anchor for a year can appear
+ * before that year's own annual report, so the earliest is that report.
+ */
+function reportDate(period: FinancialPeriod): string | null {
+  let date: string | null = null;
+  for (const field of ["assets", "revenue", "netIncome"] as const) {
+    const fact = period.facts[field];
+    if (fact && !fact.derived && fact.filed && (!date || fact.filed < date)) date = fact.filed;
+  }
+  return date ?? period.filedAt;
+}
+
+function moneyUnit(period: FinancialPeriod): string {
+  return (
+    period.facts.assets?.unit ?? period.facts.revenue?.unit ?? period.facts.netIncome?.unit ?? "USD"
+  );
+}
+
+/**
+ * The recent annual reports, each rebuilt from only what was filed by the day
+ * it was published.
+ *
+ * Cheap despite rebuilding several times: the expensive part of normalising
+ * is parsing the payload, done once, and extraction walks only the concepts
+ * the canonical model maps.
+ */
+function buildAsReported(raw: SecCompanyFacts, annual: FinancialPeriod[]): AsReportedSnapshot[] {
+  const snapshots: AsReportedSnapshot[] = [];
+
+  for (const period of annual.slice(0, MAX_SNAPSHOTS)) {
+    const asOf = reportDate(period);
+    if (!asOf) continue;
+
+    const known = normalizeCompanyFacts(raw, { asOf }).annual;
+    const start = known.findIndex((p) => p.fiscalYear === period.fiscalYear);
+    if (start < 0) continue;
+
+    // Consecutive years only. A gap would turn a one-year comparison into a
+    // two-year one without saying so.
+    const years: FinancialPeriod[] = [known[start]];
+    for (const next of known.slice(start + 1)) {
+      if (years.length >= SNAPSHOT_YEARS) break;
+      if (next.fiscalYear !== years[years.length - 1].fiscalYear - 1) break;
+      years.push(next);
+    }
+
+    const head = years[0];
+    snapshots.push({
+      asOf,
+      fiscalYear: head.fiscalYear,
+      form: head.form,
+      sourceFilingUrl:
+        head.facts.assets?.sourceFilingUrl ?? head.facts.revenue?.sourceFilingUrl ?? null,
+      periods: years.map((p) => ({
+        fiscalYear: p.fiscalYear,
+        end: p.end,
+        currency: moneyUnit(p),
+        values: Object.fromEntries(
+          (Object.entries(p.facts) as [CanonicalField, Fact | undefined][])
+            .filter((entry): entry is [CanonicalField, Fact] => entry[1] !== undefined)
+            .map(([field, fact]) => [field, fact.value]),
+        ),
+      })),
+    });
+  }
+
+  return snapshots;
+}
+
 /**
  * Converts a raw SEC `companyfacts` payload into the canonical model.
  *
@@ -376,13 +477,17 @@ function latestFiled(facts: Partial<Record<CanonicalField, Fact>>): string | nul
  *  - Fields that are genuinely absent stay absent. Nothing defaults to zero,
  *    because a zero would silently corrupt every ratio built on top of it.
  */
-export function normalizeCompanyFacts(raw: SecCompanyFacts): NormalizedFundamentals {
+export function normalizeCompanyFacts(
+  raw: SecCompanyFacts,
+  options: NormalizeOptions = {},
+): NormalizedFundamentals {
+  const { asOf } = options;
   const cik = String(raw.cik).padStart(10, "0");
   const taxonomy = detectTaxonomy(raw.facts);
   const fields = Object.keys(CONCEPT_MAP) as CanonicalField[];
 
   // ---- annual ----
-  const annualFacts = extractAll(raw, fields, ANNUAL);
+  const annualFacts = extractAll(raw, fields, ANNUAL, asOf);
 
   // A year is only a real period if the core anchors are present.
   const annual: FinancialPeriod[] = [...periodKeys(annualFacts, ["assets", "revenue", "netIncome"])]
@@ -409,7 +514,7 @@ export function normalizeCompanyFacts(raw: SecCompanyFacts): NormalizedFundament
     balance sheet at the prior year end as a comparative, which alone would
     look like an extra quarter with no revenue and no profit in it.
   */
-  const quarterFacts = extractAll(raw, fields, QUARTERLY);
+  const quarterFacts: Extracted = asOf ? new Map() : extractAll(raw, fields, QUARTERLY);
   const quarterly: FinancialPeriod[] = [...periodKeys(quarterFacts, ["revenue", "netIncome"])]
     .sort((a, b) => b.localeCompare(a))
     .slice(0, MAX_QUARTERS)
@@ -439,6 +544,7 @@ export function normalizeCompanyFacts(raw: SecCompanyFacts): NormalizedFundament
     annual,
     quarterly,
     missingFields,
+    ...(asOf ? {} : { asReported: buildAsReported(raw, annual) }),
   };
 }
 
