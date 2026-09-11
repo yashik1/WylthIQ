@@ -1,28 +1,36 @@
 import { fieldValue } from "../fundamentals/normalize";
-import type { CanonicalField, NormalizedFundamentals } from "../fundamentals/types";
+import type { CanonicalField, FinancialPeriod, NormalizedFundamentals } from "../fundamentals/types";
 import { money, num, signedPercent } from "../format";
+import {
+  atLeast,
+  bySeverity,
+  classifyChange,
+  CROSSED_ZERO,
+  type ChangeSeverity,
+} from "./change-thresholds";
 import { div, round, sub } from "./math";
 
 /**
- * What moved between the last two annual filings.
+ * What moved between two reported periods.
  *
  * The rest of this app describes where a company stands. This describes what
  * changed to get it there, which is a different and often more useful question:
  * a 12% margin means little on its own, and a 12% margin that was 19% last year
  * means a great deal.
  *
- * Annual against annual, because that is what the pipeline holds — `financials`
- * is keyed on `(companyId, fiscalYear)` and stores one row per year, so there
- * are no quarterly periods here to compare. Nothing about narrative disclosure
- * either: this reads XBRL facts, and the management discussion lives in the
- * filing's prose, which the ingest never fetches.
+ * Three comparisons, each only when it is a fair one: the latest fiscal year
+ * against the one before, the latest quarter against the same quarter a year
+ * earlier, and the latest quarter against the quarter before it. Nothing about
+ * narrative disclosure: this reads XBRL facts, and the management discussion
+ * lives in the filing's prose, which is never fetched.
  *
  * Three rules keep this honest.
  *
  * Only material moves are reported. Every figure changes by something every
- * year, and a list that says so is noise a reader has to filter for themselves;
- * the thresholds below are the filter, and what falls under them is counted
- * rather than listed, so "nothing much moved" stays a visible answer.
+ * period, and a list that says so is noise a reader has to filter for
+ * themselves; the bands in change-thresholds.ts are the filter, and what falls
+ * under them is counted rather than listed, so "nothing much moved" stays a
+ * visible answer.
  *
  * A percentage is never printed across a sign change. A company going from a
  * $100M loss to a $50M profit has not improved by "150%" — the figure is
@@ -43,53 +51,74 @@ export interface Change {
   key: string;
   /** What moved, in plain words. */
   label: string;
-  /** The prior year's figure, formatted. */
+  /** The earlier period's figure, formatted. */
   from: string;
   /** The latest figure, formatted. */
   to: string;
   /**
-   * The move itself — "+12.4%", "+1.8 pts", "$3.10B more". Never a percentage
-   * computed across zero.
+   * The move itself — "+12.4%", "+1.8 pts", "$3.10B narrower". Never a
+   * percentage computed across zero.
    */
   delta: string;
   direction: ChangeDirection;
-  /** Whether this move matters, and what would make it not matter. */
+  /**
+   * How large the move is, graded on the shared scale. Never "normal": a move
+   * that small is counted as steady rather than listed.
+   */
+  severity: Exclude<ChangeSeverity, "normal">;
+  /** Why this measure matters, and what would make a move in it not matter. */
   meaning: string;
 }
 
-export interface ChangeReport {
-  /** The earlier of the two periods compared. */
+/** What moved between one pair of periods. */
+export interface PeriodComparison {
+  changes: Change[];
+  /** How many measures were compared and found to have barely moved. */
+  steady: number;
+}
+
+/** Two quarters compared. */
+export interface QuarterComparison extends PeriodComparison {
+  kind: "year-over-year" | "sequential";
+  /** The latest quarter, e.g. "Q3 FY2026". */
+  toLabel: string;
+  /** The quarter it is measured against. */
+  fromLabel: string;
+  form: string | null;
+  /** When the latest quarter's figures became public. */
+  filedAt: string | null;
+  sourceFilingUrl: string | null;
+}
+
+export interface ChangeReport extends PeriodComparison {
+  /** The earlier of the two fiscal years compared. */
   fromYear: number;
   /** The later of the two. */
   toYear: number;
   /** The filing form the latest figures came from, e.g. `10-K`. */
   form: string | null;
-  changes: Change[];
-  /** How many measures were compared and found to have barely moved. */
-  steady: number;
+  /** When the latest annual figures became public. */
+  filedAt: string | null;
   sourceFilingUrl: string | null;
+  /**
+   * Comparisons between reported quarters newer than the latest annual
+   * report. Empty for a company that files no 10-Q, and for one whose latest
+   * news is the annual report itself.
+   */
+  quarterly: QuarterComparison[];
 }
 
-/*
-  What counts as worth mentioning.
-
-  A percentage-point band for margins and a relative band for amounts, because
-  they do not mean the same thing: a margin moving two points is a large event
-  and revenue moving two per cent is a rounding difference. The share count
-  band is the tightest — a company quietly issuing three per cent more stock
-  has taken three per cent of everything from the holders it already had, and
-  nobody announces that.
-*/
-const MATERIAL_RELATIVE = 0.05;
-const MATERIAL_MARGIN_POINTS = 0.01;
-const MATERIAL_SHARE_CHANGE = 0.01;
+/** Days apart two same-quarter period ends may be and still be a year apart. */
+const YEAR_APART = { min: 350, max: 380 };
+/** Days apart two back-to-back quarters' period ends may be. */
+const QUARTER_APART = { min: 80, max: 100 };
 
 /**
  * Builds the comparison, or null when there is nothing to compare against.
  *
  * A first-year filer and a company whose prior year never made it into the
- * database are the same case here: one period is not a comparison, and an
- * empty panel claiming "no significant changes" would be a statement about the
+ * data are the same case here: one period is not a comparison, and an empty
+ * panel claiming "no significant changes" would be a statement about the
  * company rather than about the data.
  */
 export function buildChangeReport(
@@ -100,6 +129,120 @@ export function buildChangeReport(
   const prior = fundamentals.annual[1];
   if (!latest || !prior) return null;
 
+  const { changes, steady } = comparePeriods(latest, prior, currency);
+
+  return {
+    fromYear: prior.fiscalYear,
+    toYear: latest.fiscalYear,
+    form: latest.form ?? null,
+    filedAt: latest.filedAt ?? null,
+    changes,
+    steady,
+    sourceFilingUrl: latest.facts.assets?.sourceFilingUrl ?? null,
+    quarterly: buildQuarterComparisons(fundamentals.quarterly, latest.end, currency),
+  };
+}
+
+/**
+ * The fair comparisons for the latest reported quarter.
+ *
+ * "Never compare incompatible periods", in practice:
+ *  - only a quarter newer than the latest annual report is "the latest
+ *    quarter" — otherwise the annual comparison is the newer news;
+ *  - a year-over-year pair must be the same fiscal quarter, a year apart;
+ *  - a sequential pair must be back to back and in fiscal order.
+ *
+ * A first quarter never gets a sequential comparison. The quarter before it
+ * is a fourth quarter, which no company files on its own, and working one out
+ * as the annual total less nine months would be a number nobody reported.
+ */
+export function buildQuarterComparisons(
+  quarters: FinancialPeriod[] | undefined,
+  latestAnnualEnd: string | null,
+  currency = "USD",
+): QuarterComparison[] {
+  if (!quarters || quarters.length < 2) return [];
+
+  const [latest, ...earlier] = quarters;
+  if (!isQuarterLabel(latest.fiscalPeriod)) return [];
+  if (latestAnnualEnd && latest.end <= latestAnnualEnd) return [];
+
+  const out: QuarterComparison[] = [];
+
+  const yearAgo = earlier.find(
+    (q) =>
+      q.fiscalPeriod === latest.fiscalPeriod &&
+      within(daysApart(q.end, latest.end), YEAR_APART),
+  );
+  if (yearAgo) out.push(describeQuarters("year-over-year", latest, yearAgo, currency));
+
+  const previous = earlier[0];
+  if (
+    previous &&
+    within(daysApart(previous.end, latest.end), QUARTER_APART) &&
+    followsInFiscalYear(previous, latest)
+  ) {
+    out.push(describeQuarters("sequential", latest, previous, currency));
+  }
+
+  return out;
+}
+
+function describeQuarters(
+  kind: QuarterComparison["kind"],
+  latest: FinancialPeriod,
+  earlier: FinancialPeriod,
+  currency: string,
+): QuarterComparison {
+  const anchor = latest.facts.revenue ?? latest.facts.netIncome;
+  return {
+    kind,
+    toLabel: quarterLabel(latest),
+    fromLabel: quarterLabel(earlier),
+    form: latest.form ?? null,
+    filedAt: latest.filedAt ?? null,
+    sourceFilingUrl: anchor?.sourceFilingUrl ?? null,
+    ...comparePeriods(latest, earlier, currency),
+  };
+}
+
+function isQuarterLabel(fiscalPeriod: string): boolean {
+  return /^Q[1-3]$/.test(fiscalPeriod);
+}
+
+/** "Q3 FY2026". */
+export function quarterLabel(period: FinancialPeriod): string {
+  return `${period.fiscalPeriod} FY${period.fiscalYear}`;
+}
+
+/** Q2 after Q1, or Q3 after Q2, in the same fiscal year. */
+function followsInFiscalYear(previous: FinancialPeriod, latest: FinancialPeriod): boolean {
+  if (!isQuarterLabel(previous.fiscalPeriod) || !isQuarterLabel(latest.fiscalPeriod)) return false;
+  return (
+    previous.fiscalYear === latest.fiscalYear &&
+    Number(latest.fiscalPeriod[1]) === Number(previous.fiscalPeriod[1]) + 1
+  );
+}
+
+function daysApart(earlierEnd: string, laterEnd: string): number {
+  return (Date.parse(laterEnd) - Date.parse(earlierEnd)) / 86_400_000;
+}
+
+function within(days: number, range: { min: number; max: number }): boolean {
+  return Number.isFinite(days) && days >= range.min && days <= range.max;
+}
+
+/**
+ * Every measure compared between two periods of the same length.
+ *
+ * Exported so a quarter and a year go through exactly the same rules; the
+ * caller is responsible for handing it two comparable periods.
+ */
+export function comparePeriods(
+  latest: FinancialPeriod,
+  prior: FinancialPeriod,
+  currency = "USD",
+): PeriodComparison {
   const f = (k: CanonicalField) => fieldValue(latest, k);
   const p = (k: CanonicalField) => fieldValue(prior, k);
 
@@ -126,6 +269,34 @@ export function buildChangeReport(
       meaning:
         "Sales are what everything else is built on. A fall can be lost customers, lower prices, " +
         "or a business the company sold — the filing itself says which.",
+    }),
+  );
+
+  consider(
+    amountChange({
+      key: "grossProfit",
+      label: "Gross profit",
+      from: p("grossProfit"),
+      to: f("grossProfit"),
+      format: amount,
+      rising: "better",
+      meaning:
+        "What is left of sales after the direct cost of producing them. It normally moves with " +
+        "revenue, so a move out of step with revenue is the part worth noticing.",
+    }),
+  );
+
+  consider(
+    amountChange({
+      key: "operatingIncome",
+      label: "Operating income",
+      from: p("operatingIncome"),
+      to: f("operatingIncome"),
+      format: amount,
+      rising: "better",
+      meaning:
+        "Profit from running the business, before interest and tax. Less exposed than profit to " +
+        "one-off financing and tax items, so a clearer read on the business itself.",
     }),
   );
 
@@ -159,6 +330,18 @@ export function buildChangeReport(
 
   consider(
     marginChange({
+      key: "operatingMargin",
+      label: "Operating margin",
+      from: div(p("operatingIncome"), p("revenue")),
+      to: div(f("operatingIncome"), f("revenue")),
+      meaning:
+        "What survives each sale after running the business. A falling operating margin beside a " +
+        "steady gross margin points at overheads — wages, marketing, research — rather than pricing.",
+    }),
+  );
+
+  consider(
+    marginChange({
       key: "netMargin",
       label: "Profit margin",
       from: div(p("netIncome"), p("revenue")),
@@ -181,6 +364,22 @@ export function buildChangeReport(
       meaning:
         "Cash left after paying for the plant that produced it — the money genuinely available " +
         "for dividends, buybacks or paying down debt. Harder to flatter than profit.",
+    }),
+  );
+
+  // ---- per share ----
+  consider(
+    amountChange({
+      key: "eps",
+      label: "Earnings per share",
+      from: perShare(p("netIncome"), p("sharesOutstanding")),
+      to: perShare(f("netIncome"), f("sharesOutstanding")),
+      format: amount,
+      rising: "better",
+      meaning:
+        "Profit divided by the shares in issue at the period end, so it sits close to but not on " +
+        "the company's own reported figure. It can rise with no growth in profit when the company " +
+        "buys back stock — read it beside the share count.",
     }),
   );
 
@@ -222,6 +421,21 @@ export function buildChangeReport(
     }),
   );
 
+  // ---- what it paid out, deliberately unrated ----
+  consider(
+    amountChange({
+      key: "dividendsPaid",
+      label: "Dividends paid",
+      from: absOrNull(p("dividendsPaid")),
+      to: absOrNull(f("dividendsPaid")),
+      format: amount,
+      rising: "neutral",
+      meaning:
+        "Cash handed to shareholders. A rise can be a higher dividend or simply more shares, and a " +
+        "cut is a decision the company explains in its own filing — neither is rated here.",
+    }),
+  );
+
   // ---- spending, deliberately unrated ----
   consider(
     amountChange({
@@ -237,20 +451,19 @@ export function buildChangeReport(
     }),
   );
 
-  return {
-    fromYear: prior.fiscalYear,
-    toYear: latest.fiscalYear,
-    form: latest.form ?? null,
-    changes,
-    steady,
-    sourceFilingUrl: latest.facts.assets?.sourceFilingUrl ?? null,
-  };
+  return { changes: changes.sort(bySeverity), steady };
 }
 
 /** Operating cash flow after capital spending, with capex taken as an outflow. */
 function freeCashFlow(ocf: number | null, capex: number | null): number | null {
   // A minority of filers tag capex negative; the magnitude is what matters.
   return sub(ocf, absOrNull(capex));
+}
+
+/** Profit per share, only where there is a positive share count to divide by. */
+function perShare(netIncome: number | null, shares: number | null): number | null {
+  if (netIncome == null || shares == null || shares <= 0) return null;
+  return netIncome / shares;
 }
 
 function absOrNull(v: number | null): number | null {
@@ -260,7 +473,7 @@ function absOrNull(v: number | null): number | null {
 /**
  * A change in an amount of money.
  *
- * Returns `"steady"` when the move is under the materiality band, and `null`
+ * Returns `"steady"` when the move is under the notable band, and `null`
  * when there is no honest way to describe it — a missing figure either side.
  */
 function amountChange({
@@ -305,6 +518,7 @@ function amountChange({
         to: format(to),
         delta: "turned positive",
         direction: rising === "neutral" ? "neutral" : rising,
+        severity: gradeOf(CROSSED_ZERO),
         meaning,
       };
     }
@@ -316,6 +530,7 @@ function amountChange({
         to: format(to),
         delta: "turned negative",
         direction: rising === "neutral" ? "neutral" : falling,
+        severity: gradeOf(CROSSED_ZERO),
         meaning,
       };
     }
@@ -329,13 +544,17 @@ function amountChange({
       to: format(to),
       delta: `${format(Math.abs(absolute))} ${absolute > 0 ? "narrower" : "wider"}`,
       direction,
+      // Always reported, as it always was; graded by how far the loss moved.
+      severity: gradeOf(atLeast(classifyChange("amount", absolute / Math.abs(from)), "notable")),
       meaning,
     };
   }
 
   const relative = div(absolute, Math.abs(from));
   if (relative == null) return null;
-  if (Math.abs(relative) < MATERIAL_RELATIVE) return "steady";
+
+  const severity = classifyChange("amount", relative);
+  if (severity === "normal") return "steady";
 
   return {
     key,
@@ -344,6 +563,7 @@ function amountChange({
     to: format(to),
     delta: signedPercent(relative, 1),
     direction,
+    severity,
     meaning,
   };
 }
@@ -381,7 +601,8 @@ function marginChange({
     "+1.0 pts" can be filtered out for being smaller than one point.
   */
   const points = round(to - from, 4);
-  if (Math.abs(points) < MATERIAL_MARGIN_POINTS) return "steady";
+  const severity = classifyChange("margin", points);
+  if (severity === "normal") return "steady";
 
   return {
     key,
@@ -390,6 +611,7 @@ function marginChange({
     to: `${num(to * 100, 1)}%`,
     delta: `${points > 0 ? "+" : "−"}${num(Math.abs(points) * 100, 1)} pts`,
     direction: points > 0 ? "better" : "worse",
+    severity,
     meaning,
   };
 }
@@ -413,7 +635,9 @@ function shareCountChange({
 
   const relative = div(to - from, from);
   if (relative == null) return null;
-  if (Math.abs(relative) < MATERIAL_SHARE_CHANGE) return "steady";
+
+  const severity = classifyChange("shares", relative);
+  if (severity === "normal") return "steady";
 
   const issued = relative > 0;
   return {
@@ -423,12 +647,18 @@ function shareCountChange({
     to: compactShares(to),
     delta: signedPercent(relative, 1),
     direction: issued ? "worse" : "better",
+    severity,
     meaning: issued
       ? "New shares divide the same company into more pieces, so each existing holding owns " +
         "slightly less of it. Often pay for staff or an acquisition rather than anything wrong."
       : "The company bought back stock, so each remaining holding owns slightly more of it. " +
         "Worth checking it was not funded by borrowing.",
   };
+}
+
+/** Narrows a grade already known not to be "normal" to the listed grades. */
+function gradeOf(grade: ChangeSeverity): Exclude<ChangeSeverity, "normal"> {
+  return grade === "normal" ? "notable" : grade;
 }
 
 /** Share counts run to billions; the money formatter would print a currency. */

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
+  Gem,
   ShieldCheck,
   PiggyBank,
   TrendingUp,
@@ -9,7 +10,17 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { SetupNotice } from "@/components/setup-notice";
-import { Badge, Card, EmptyState, MeterBar, NotReported, PageHeader, RatingBadge } from "@/components/ui";
+import { SaveScreenForm, SavedScreenItem } from "@/components/screen/saved-screens";
+import {
+  Badge,
+  Card,
+  CardHeader,
+  EmptyState,
+  MeterBar,
+  NotReported,
+  PageHeader,
+  RatingBadge,
+} from "@/components/ui";
 import { money, multiple, percent, price as fmtPrice, signedPercent } from "@/lib/format";
 import type { Rating } from "@/lib/scoring/types";
 import {
@@ -26,6 +37,13 @@ import {
 import { DISPLAY_SECTORS } from "@/lib/scoring/sectors";
 import { accountIsEnough } from "@/lib/billing/access-mode";
 import { canAccess, getEntitlement } from "@/lib/billing/entitlement";
+import {
+  getSavedScreen,
+  listSavedScreens,
+  recordScreenRun,
+  type SavedScreen,
+} from "@/lib/saved-screens";
+import { describeFilters } from "@/lib/screen-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -44,12 +62,13 @@ export const metadata: Metadata = {
 };
 
 /** One icon per preset. "red-flags" is a warning, not an invitation, so it is
- * styled separately below rather than sharing the other four's accent tile. */
+ * styled separately below rather than sharing the other presets' accent tile. */
 const PRESET_ICONS: Record<PresetKey, LucideIcon> = {
   healthy: ShieldCheck,
   "cheap-profitable": PiggyBank,
   growing: TrendingUp,
   dividend: HandCoins,
+  quality: Gem,
   "red-flags": TriangleAlert,
 };
 
@@ -99,7 +118,7 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
     return v === "1" || v === "true" ? true : undefined;
   };
 
-  const requested: ScreenFilters = {
+  const fromUrl: ScreenFilters = {
     preset: preset && preset in PRESETS ? preset : undefined,
     sector: get("sector") || undefined,
     country: get("country") || undefined,
@@ -135,10 +154,35 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
   */
   const entitlement = await getEntitlement();
   const mayUseAdvanced = canAccess(entitlement, "ADVANCED_SCREENER");
+  const maySave = canAccess(entitlement, "SAVED_SCREENERS");
+
+  /*
+    A saved screen opens by id — `?saved=12` — and its stored filters replace
+    whatever else the URL says. The lookup is scoped to the signed-in account,
+    so an id belonging to somebody else finds nothing and the page simply runs
+    the URL's own filters. `from` then rides along in the form as a hidden
+    field, so an opened screen that is adjusted and applied still knows which
+    screen it started as, and saving it under that name updates it.
+  */
+  const savedId = positiveInt(get("saved"));
+  const opened = maySave && savedId ? await getSavedScreen(savedId) : null;
+  const fromId = opened?.id ?? (maySave ? positiveInt(get("from")) : null);
+  const requested: ScreenFilters = opened
+    ? { ...opened.filters, sort: opened.filters.sort ?? "health" }
+    : fromUrl;
+
   const advancedRequested = usesAdvancedFilters(requested);
   const filters = mayUseAdvanced ? requested : withoutAdvancedFilters(requested);
 
   const result = await runScreen(filters);
+
+  // A run is recorded only when a saved screen was opened and the query ran.
+  // A connection error is not a screen that returned nothing.
+  if (opened && (result.status === "ok" || result.status === "empty")) {
+    await recordScreenRun(opened.id, result.total);
+  }
+  const savedScreens = maySave ? await listSavedScreens() : [];
+  const startedFrom = fromId ? (savedScreens.find((s) => s.id === fromId) ?? null) : null;
 
   return (
     <div className="space-y-5">
@@ -202,6 +246,24 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
         </div>
       </section>
 
+      {filters.preset && <PresetExplainer preset={filters.preset} />}
+
+      {maySave ? (
+        <SavedScreensCard
+          screens={savedScreens}
+          filters={filters}
+          activeId={fromId}
+          startedFrom={startedFrom}
+        />
+      ) : accountIsEnough ? (
+        <p className="text-xs text-muted">
+          <Link href="/signin?next=/screen" className="text-accent underline underline-offset-2">
+            Sign in
+          </Link>{" "}
+          to save a screen and run it again later.
+        </p>
+      ) : null}
+
       {/*
         Filters beside the results rather than above them.
 
@@ -217,6 +279,7 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
         <Card className="min-w-0 lg:sticky lg:top-5">
           <form method="get" className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
           {filters.preset && <input type="hidden" name="preset" value={filters.preset} />}
+          {fromId && <input type="hidden" name="from" value={fromId} />}
 
           <Field label="Sector" name="sector" value={filters.sector} options={SECTORS} />
           <Field label="Listing" name="country" value={filters.country} options={COUNTRIES} />
@@ -335,6 +398,7 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
               <p className="text-sm text-muted">
                 {result.total} {result.total === 1 ? "company" : "companies"}
                 {filters.preset && ` · ${PRESETS[filters.preset].label}`}
+                {opened && ` · saved as “${opened.name}”`}
               </p>
 
               {/*
@@ -388,7 +452,7 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
                     href="/screen?preset=healthy"
                     className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg"
                   >
-                    Try &ldquo;Financially healthy&rdquo; instead
+                    Try &ldquo;Financial health&rdquo; instead
                   </Link>
                 }
               />
@@ -412,6 +476,98 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
       </div>
     </div>
   );
+}
+
+/**
+ * What the active preset screens for, and what it cannot say.
+ *
+ * On the page rather than behind an info icon: a preset is where somebody
+ * starts when they do not yet know which ratio to filter on, which is exactly
+ * the reader who most needs to know what the screen left out.
+ */
+function PresetExplainer({ preset }: { preset: PresetKey }) {
+  const { label, doesNotTell } = PRESETS[preset];
+  const looksFor: readonly string[] = PRESETS[preset].looksFor;
+
+  return (
+    <Card className="p-5">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 md:grid-cols-2">
+        <div>
+          <h2 className="text-sm font-semibold">What &ldquo;{label}&rdquo; looks for</h2>
+          <ul className="mt-2 space-y-1.5">
+            {looksFor.map((item) => (
+              <li key={item} className="flex gap-2 text-sm leading-relaxed text-muted-strong">
+                <span aria-hidden className="text-faint">
+                  ·
+                </span>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold">What it does not tell you</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted-strong">{doesNotTell}</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function SavedScreensCard({
+  screens,
+  filters,
+  activeId,
+  startedFrom,
+}: {
+  screens: SavedScreen[];
+  filters: ScreenFilters;
+  activeId: number | null;
+  startedFrom: SavedScreen | null;
+}) {
+  return (
+    <Card>
+      <CardHeader
+        title="Your saved screens"
+        subtitle={
+          screens.length > 0
+            ? "Open one to run it again against the latest scores"
+            : "Save the filters on screen now and come back to them"
+        }
+      />
+      {screens.length > 0 && (
+        <ul className="divide-y divide-border border-b border-border">
+          {screens.map((screen) => (
+            <SavedScreenItem
+              key={screen.id}
+              active={screen.id === activeId}
+              screen={{
+                id: screen.id,
+                name: screen.name,
+                summary: describeFilters(screen.filters),
+                lastRunAt: screen.lastRunAt?.toISOString() ?? null,
+                lastResultCount: screen.lastResultCount,
+              }}
+            />
+          ))}
+        </ul>
+      )}
+      <div className="px-5 py-4">
+        <SaveScreenForm
+          key={startedFrom?.id ?? "new"}
+          filters={filters}
+          defaultName={startedFrom?.name}
+        />
+      </div>
+    </Card>
+  );
+}
+
+/** A positive whole number from a query value, or null. */
+function positiveInt(value: string | undefined): number | null {
+  if (!value || !/^\d{1,9}$/.test(value)) return null;
+  const n = Number(value);
+  return n > 0 ? n : null;
 }
 
 function ResultsTable({ rows }: { rows: ScreenRow[] }) {

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Card, CardHeader, PageHeader } from "@/components/ui";
 import { faqLd } from "@/lib/structured-data";
 import { StructuredData } from "@/components/structured-data";
+import { METRIC_GUIDES } from "@/lib/learn/metric-guide";
 
 export const metadata: Metadata = {
   title: "Learn — what the numbers actually mean",
@@ -169,6 +170,67 @@ export default function LearnPage() {
         entries={SCORES}
       />
 
+      {/*
+        The guide every explanation on a company page links to.
+
+        Each entry has its own anchor, so the "Learn" link under any figure
+        lands on exactly that figure — and each carries the same five parts
+        the explanation on the company page does, so nothing reads
+        differently here from there.
+      */}
+      <Card as="section">
+        <CardHeader
+          title="Metric guide"
+          subtitle="What each figure is, how it is worked out, why it matters, where it misleads, and where it comes from"
+        />
+        <dl className="divide-y divide-border">
+          {METRIC_GUIDES.map((guide) => (
+            <div key={guide.id} id={guide.id} className="scroll-mt-24 px-5 py-4">
+              <dt className="text-sm font-semibold">{guide.name}</dt>
+              <dd className="mt-1.5 space-y-1.5 text-sm leading-relaxed text-muted">
+                <p className="font-medium text-muted-strong">{guide.what}</p>
+                <p>
+                  <span className="font-medium text-muted-strong">How it is calculated. </span>
+                  {guide.how}
+                </p>
+                <p>
+                  <span className="font-medium text-muted-strong">Why it matters. </span>
+                  {guide.why}
+                </p>
+                <p>
+                  <span className="font-medium text-muted-strong">Limitations. </span>
+                  {guide.limits}
+                </p>
+                <p>
+                  <span className="font-medium text-muted-strong">Where it comes from. </span>
+                  {guide.source}
+                </p>
+              </dd>
+            </div>
+          ))}
+        </dl>
+        {/* Learn, then apply: every figure above is on a real company page. */}
+        <p className="border-t border-border px-5 py-3 text-sm leading-relaxed text-muted">
+          See these figures on a real company —{" "}
+          <Link href="/stock/AAPL" className="text-accent underline">
+            Apple
+          </Link>{" "}
+          or{" "}
+          <Link href="/stock/RY" className="text-accent underline">
+            Royal Bank of Canada
+          </Link>{" "}
+          —{" "}
+          <Link href="/compare" className="text-accent underline">
+            compare two side by side
+          </Link>
+          , or{" "}
+          <Link href="/screen" className="text-accent underline">
+            screen for companies
+          </Link>{" "}
+          that pass them.
+        </p>
+      </Card>
+
       {/* This section exists because it is the single most common way these
           models are misused. */}
       <Card>
@@ -221,9 +283,9 @@ export default function LearnPage() {
             US accounting rules, and WylthIQ reads both.
           </p>
           <p>
-            Figures come from annual reports, so they update once a year and can be
-            several months old. Share prices are separate and much fresher — each page
-            labels exactly how fresh.
+            Figures come from annual reports, and from quarterly reports for companies
+            that file them in the US, so they can be several months old. Share prices
+            are separate and much fresher — each page labels exactly how fresh.
           </p>
         </div>
       </Card>

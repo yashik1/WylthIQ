@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "../db";
-import { watchlistItems, type WatchlistItem } from "../db/schema";
+import { watchlistGroups, watchlistItems } from "../db/schema";
 import { auth } from "../auth";
+import { cleanGroupName } from "./groups";
 
 /**
  * The saved-companies list, kept on the account.
@@ -36,6 +37,16 @@ export interface WatchlistResult {
   message?: string;
 }
 
+/** A saved company, as the account holds it. */
+export interface SavedCompany {
+  id: number;
+  symbol: string;
+  name: string | null;
+  addedAt: Date;
+  /** The reader's group for it, or null — always null before migration 0014 has run. */
+  groupName: string | null;
+}
+
 async function currentUserId(): Promise<string | null> {
   if (!isDatabaseConfigured()) return null;
   // A thrown auth() — a missing or malformed AUTH_SECRET — reads as signed
@@ -46,7 +57,8 @@ async function currentUserId(): Promise<string | null> {
 }
 
 /** Normalises a ticker the same way every route in the app does. */
-function cleanSymbol(raw: string): string | null {
+function cleanSymbol(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
   const symbol = raw.trim().toUpperCase().slice(0, MAX_SYMBOL);
   return symbol.length > 0 ? symbol : null;
 }
@@ -57,14 +69,38 @@ function cleanName(raw: string | null | undefined): string | null {
   return name.length > 0 ? name : null;
 }
 
+/**
+ * Each saved symbol's group.
+ *
+ * Its own query, allowed to fail: before migration 0014 there is no groups
+ * table, and the saved list must still show.
+ */
+async function groupsFor(userId: string): Promise<Map<string, string>> {
+  try {
+    const rows = await getDb()
+      .select({ symbol: watchlistGroups.symbol, groupName: watchlistGroups.groupName })
+      .from(watchlistGroups)
+      .where(eq(watchlistGroups.userId, userId));
+    return new Map(rows.map((r) => [r.symbol, r.groupName]));
+  } catch {
+    return new Map();
+  }
+}
+
 /** The signed-in reader's saved companies, newest first. Empty when signed out. */
-export async function listWatchlist(): Promise<WatchlistItem[]> {
+export async function listWatchlist(): Promise<SavedCompany[]> {
   const userId = await currentUserId();
   if (!userId) return [];
 
+  let rows: Omit<SavedCompany, "groupName">[];
   try {
-    return await getDb()
-      .select()
+    rows = await getDb()
+      .select({
+        id: watchlistItems.id,
+        symbol: watchlistItems.symbol,
+        name: watchlistItems.name,
+        addedAt: watchlistItems.addedAt,
+      })
       .from(watchlistItems)
       .where(eq(watchlistItems.userId, userId))
       .orderBy(desc(watchlistItems.addedAt))
@@ -74,6 +110,9 @@ export async function listWatchlist(): Promise<WatchlistItem[]> {
     // one and everything else still works.
     return [];
   }
+
+  const groups = rows.length > 0 ? await groupsFor(userId) : new Map<string, string>();
+  return rows.map((row) => ({ ...row, groupName: groups.get(row.symbol) ?? null }));
 }
 
 export async function saveToWatchlist(
@@ -114,13 +153,61 @@ export async function removeFromWatchlist(symbol: string): Promise<WatchlistResu
     await getDb()
       .delete(watchlistItems)
       // Both conditions, always. Deleting on symbol alone would clear the
-      // same company from every account in the table.
+      // same company from every account in the table. The company's group
+      // goes with it, by the foreign key in migration 0014.
       .where(and(eq(watchlistItems.userId, userId), eq(watchlistItems.symbol, clean)));
   } catch {
     return { ok: false, message: "Could not remove that just now." };
   }
 
   revalidateWatchlist(clean);
+  return { ok: true };
+}
+
+/**
+ * Files a saved company under a group, or takes it out of one.
+ *
+ * An empty group removes the row rather than storing an empty name. Writing a
+ * group for a company the reader has not saved is refused by the database —
+ * the foreign key to the saved company — rather than by a check here that
+ * could race with a removal.
+ */
+export async function setWatchlistGroup(
+  symbol: string,
+  group: string | null,
+): Promise<WatchlistResult> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, message: "Sign in to organise your saved companies." };
+
+  const clean = cleanSymbol(symbol);
+  if (!clean) return { ok: false, message: "That is not a symbol." };
+
+  const groupName = cleanGroupName(group);
+  const db = getDb();
+
+  try {
+    if (groupName === null) {
+      await db
+        .delete(watchlistGroups)
+        .where(and(eq(watchlistGroups.userId, userId), eq(watchlistGroups.symbol, clean)));
+    } else {
+      await db
+        .insert(watchlistGroups)
+        .values({ userId, symbol: clean, groupName })
+        .onConflictDoUpdate({
+          target: [watchlistGroups.userId, watchlistGroups.symbol],
+          set: { groupName, updatedAt: new Date() },
+        });
+    }
+  } catch {
+    return {
+      ok: false,
+      message: "Could not change that group. Groups need the latest database migration.",
+    };
+  }
+
+  revalidatePath("/watchlist");
+  revalidatePath("/research");
   return { ok: true };
 }
 
@@ -173,5 +260,7 @@ export async function mergeLocalWatchlist(
 
 function revalidateWatchlist(symbol: string) {
   revalidatePath("/");
+  revalidatePath("/watchlist");
+  revalidatePath("/research");
   revalidatePath(`/stock/${encodeURIComponent(symbol)}`);
 }

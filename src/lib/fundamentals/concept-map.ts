@@ -221,6 +221,15 @@ export const DURATION_FIELDS: ReadonlySet<CanonicalField> = new Set([
   "dividendsPaid",
 ]);
 
+/**
+ * Quarterly report forms.
+ *
+ * Only the domestic 10-Q. A foreign private issuer's interim results arrive on
+ * a 6-K, which carries no XBRL financial statements, so a Canadian 40-F filer
+ * has no quarterly figures here by construction rather than by omission.
+ */
+export const QUARTERLY_FORMS: ReadonlySet<string> = new Set(["10-Q", "10-Q/A"]);
+
 /** Annual report forms. `40-F` and `20-F` are the foreign private issuer variants. */
 export const ANNUAL_FORMS: ReadonlySet<string> = new Set([
   "10-K",

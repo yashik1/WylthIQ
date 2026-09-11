@@ -730,6 +730,52 @@ export const stripeEvents = pgTable("stripe_events", {
   processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * The group a reader filed a saved company under — Technology, Dividend, or a
+ * name of their own.
+ *
+ * A table of its own rather than a column on `watchlist_items`. A new column
+ * there would be part of every insert and select generated for that table, so
+ * a deployment running this code before its migration would stop saving
+ * companies at all. On its own table, groups are simply absent until the
+ * migration runs, and saving keeps working throughout.
+ *
+ * The migration also ties each row to the saved company by a foreign key on
+ * (user_id, symbol), so removing a company from the list removes its group.
+ * That constraint lives in drizzle/0014 rather than here: SQL migrations, not
+ * this schema, are what create tables on this project.
+ */
+export const watchlistGroups = pgTable(
+  "watchlist_groups",
+  {
+    userId: text("user_id").notNull(),
+    symbol: text("symbol").notNull(),
+    groupName: text("group_name").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.symbol] }),
+    index("watchlist_groups_user_group_idx").on(t.userId, t.groupName),
+  ],
+);
+
+/**
+ * When each saved screen was last opened, and how many companies it returned.
+ *
+ * Separate from `saved_screeners` for the same reason groups are separate from
+ * the watchlist: saving a screen must keep working on a deployment that has not
+ * yet run the migration that creates this.
+ */
+export const savedScreenRuns = pgTable("saved_screen_runs", {
+  screenId: integer("screen_id")
+    .primaryKey()
+    .references(() => savedScreeners.id, { onDelete: "cascade" }),
+  lastRunAt: timestamp("last_run_at", { withTimezone: true }).notNull().defaultNow(),
+  resultCount: integer("result_count"),
+});
+
+export type WatchlistGroup = typeof watchlistGroups.$inferSelect;
+export type SavedScreenRun = typeof savedScreenRuns.$inferSelect;
 export type Company = typeof companies.$inferSelect;
 export type Score = typeof scores.$inferSelect;
 export type Financial = typeof financials.$inferSelect;

@@ -83,6 +83,26 @@ function decimalsFor(abs: number): number {
   return Math.min(12, 3 - Math.floor(Math.log10(abs)));
 }
 
+/**
+ * A calendar date — "Oct 31, 2025" — from an ISO `YYYY-MM-DD`.
+ *
+ * Built from the string's own parts rather than the reader's clock: a filing
+ * date is a date, not a moment, and passing it through a timezone turns the
+ * 31st into the 30th for every reader west of UTC.
+ */
+export function calendarDate(iso: string | null | undefined): string | null {
+  const match = iso?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 /** Formats a large money figure as $1.23B / €456M / ₩12.3T. */
 export function money(value: number | null | undefined, currency = "USD"): string {
   if (value == null || !Number.isFinite(value)) return "—";

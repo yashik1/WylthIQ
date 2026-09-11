@@ -10,25 +10,70 @@ import { companies, scores } from "./db/schema";
  */
 export const PRESETS = {
   healthy: {
-    label: "Financially healthy",
-    description: "Strong finances across profitability, debt and accounting quality.",
-  },
-  "cheap-profitable": {
-    label: "Cheap & profitable",
-    description: "Making real money, but priced modestly against those profits.",
+    label: "Financial health",
+    description:
+      "Strong finances across profitability, debt and accounting quality, and improving on most standard checks.",
+    looksFor: [
+      "A health score of 7.5 or more out of 10",
+      "A Piotroski F-Score of 6 or more out of 9",
+    ],
+    doesNotTell:
+      "Whether the share price is reasonable, or whether the business will keep improving. It reads the latest annual filing, which can be months old.",
   },
   growing: {
-    label: "Growing fast",
+    label: "Growth",
     description: "Sales up sharply on last year, without obvious financial strain.",
+    looksFor: [
+      "Revenue up 15% or more on the previous year",
+      "A health score of at least 5, so the growth is not arriving with obvious strain",
+    ],
+    doesNotTell:
+      "Whether the growth is profitable or can last. One strong year can come from an acquisition, and growth in earnings per share and free cash flow is not screened here.",
+  },
+  "cheap-profitable": {
+    label: "Value",
+    description: "Making real money, but priced modestly against those profits.",
+    looksFor: [
+      "A P/E between 0 and 18",
+      "A profit margin of at least 5%",
+      "A health score of at least 6",
+    ],
+    doesNotTell:
+      "Why the price is low. A low P/E can reflect a business the market expects to shrink, and price to free cash flow and EV/EBITDA are not screened here.",
   },
   dividend: {
-    label: "Pays dividends",
+    label: "Dividend",
     description: "Returns cash to shareholders and stays financially sound.",
+    looksFor: [
+      "A dividend yield of 1.5% or more",
+      "A health score of at least 5.5",
+    ],
+    doesNotTell:
+      "Whether the dividend is covered by free cash flow or will be kept. The yield is trailing, and a falling share price raises it on its own.",
+  },
+  quality: {
+    label: "Quality",
+    description: "High margins and returns, carried on a moderate balance sheet.",
+    looksFor: [
+      "A profit margin of 15% or more",
+      "A return on assets of 8% or more",
+      "Liabilities no more than 1.5 times equity",
+      "A health score of at least 7",
+    ],
+    doesNotTell:
+      "Whether that quality is already reflected in the price, or how durable the returns are. Return on invested capital and free cash flow are not screened here.",
   },
   "red-flags": {
     label: "Red flags",
     description:
-      "Companies showing financial distress or unusual accounting. Shown so you can avoid surprises, not as targets.",
+      "Companies showing financial distress or unusual accounting. Shown so they are not a surprise, not as targets.",
+    looksFor: [
+      "An accounting flag from the Beneish M-Score",
+      "Or a distress reading from the Altman Z-Score",
+      "Or a health score of 4 or less",
+    ],
+    doesNotTell:
+      "That anything is actually wrong. Each is a statistical screen or a weak score — a prompt to read the filings, not evidence of a problem.",
   },
 } as const;
 
@@ -302,6 +347,17 @@ function presetConditions(preset: PresetKey): SQL[] {
       return [gte(scores.revenueGrowth, 0.15), gte(scores.healthScore, 5)];
     case "dividend":
       return [gte(scores.dividendYield, 0.015), gte(scores.healthScore, 5.5)];
+    case "quality":
+      // Non-null debt required for the reason the advanced filter requires
+      // it: a null fails the comparison silently rather than visibly.
+      return [
+        gte(scores.netMargin, 0.15),
+        gte(scores.returnOnAssets, 0.08),
+        isNotNull(scores.debtToEquity),
+        gte(scores.debtToEquity, 0),
+        lte(scores.debtToEquity, 1.5),
+        gte(scores.healthScore, 7),
+      ];
     case "red-flags":
       // Any one of these is enough to warrant a closer look.
       return [

@@ -1,4 +1,5 @@
 import { Card, CardHeader, Metric } from "@/components/ui";
+import { MetricGuideBody } from "@/components/metric-guide-body";
 import type { KeyFigures } from "@/lib/scoring/key-figures";
 import { money, multiple, num, percent, signedPercent } from "@/lib/format";
 
@@ -11,16 +12,20 @@ import { money, multiple, num, percent, signedPercent } from "@/lib/format";
  * somewhere else needs the standard numbers to be here at all, and until now
  * several of them were being stored in the database and never shown.
  *
- * Every figure carries a hint written the same way the rest of the app writes
- * them — what it means in plain terms, not the formula. Anything that cannot
- * be computed says so rather than showing a zero.
+ * Every figure opens the same five-part explanation from the shared metric
+ * guide — what it is, how it is worked out, why it matters, where it
+ * misleads, and where it came from — with `filing` naming the exact document.
+ * Anything that cannot be computed says so rather than showing a zero.
  */
 export function KeyFiguresPanel({
   figures,
   currency,
+  filing = null,
 }: {
   figures: KeyFigures;
   currency: string;
+  /** "Apple's FY2025 10-K, filed Oct 31, 2025", when known. */
+  filing?: string | null;
 }) {
   const {
     freeCashFlow, fcfMargin, grossMargin, operatingMargin, netMargin,
@@ -37,6 +42,8 @@ export function KeyFiguresPanel({
   ].some((v) => v != null);
   if (!anything) return null;
 
+  const from = filing ? `From ${filing}` : null;
+
   return (
     <Card>
       <CardHeader
@@ -51,37 +58,37 @@ export function KeyFiguresPanel({
           label="Free cash flow"
           value={freeCashFlow == null ? "—" : money(freeCashFlow, currency)}
           tone={freeCashFlow == null ? undefined : freeCashFlow > 0 ? "up" : "down"}
-          hint="Cash left after paying for the buildings and equipment the business needs to keep running. What is actually available for dividends, buybacks or paying down debt."
+          hint={<MetricGuideBody id="free-cash-flow" filing={from} />}
           size="lg"
         />
         <Metric
           label="Earnings per share"
           value={eps == null ? "—" : money(eps, currency)}
-          hint="Last year's profit divided by the shares in issue at year end. A company's own reported EPS uses a weighted average across the year, so this sits close to it rather than exactly on it."
+          hint={<MetricGuideBody id="eps" filing={from} />}
         />
         <Metric
           label="Free cash flow margin"
           value={percent(fcfMargin)}
-          hint="Of every $100 of sales, this much survived as spendable cash."
+          hint={<MetricGuideBody id="fcf-margin" filing={from} />}
         />
         <Metric
           label="Price to free cash flow"
           value={multiple(priceToFreeCashFlow)}
-          hint="What the market pays for each $1 of cash the company actually generates. Harder to flatter than a P/E."
+          hint={<MetricGuideBody id="price-to-fcf" />}
         />
       </dl>
 
       <dl className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,150px),1fr))] gap-4 border-t border-border bg-surface-2/40 px-5 py-3.5">
         <Metric label="Gross margin" value={percent(grossMargin)} size="sm"
-          hint="What is left of each sale after the direct cost of making it — before wages, rent or research." />
+          hint={<MetricGuideBody id="gross-margin" filing={from} />} />
         <Metric label="Operating margin" value={percent(operatingMargin)} size="sm"
-          hint="What is left after running the business, but before interest and tax." />
+          hint={<MetricGuideBody id="operating-margin" filing={from} />} />
         <Metric label="Profit margin" value={percent(netMargin)} size="sm"
-          hint="What is left at the very end, after everything." />
+          hint={<MetricGuideBody id="net-margin" filing={from} />} />
         <Metric label="Return on equity" value={percent(returnOnEquity)} size="sm"
-          hint="Profit earned on what the owners have put in. Beware of very high figures at heavily indebted companies — borrowing shrinks the denominator." />
+          hint={<MetricGuideBody id="roe" filing={from} />} />
         <Metric label="Return on assets" value={percent(returnOnAssets)} size="sm"
-          hint="How hard everything the company owns is working." />
+          hint={<MetricGuideBody id="roa" filing={from} />} />
         <Metric
           label="Interest cover"
           value={
@@ -91,7 +98,13 @@ export function KeyFiguresPanel({
           }
           size="sm"
           tone={interestCoverage != null && interestCoverage < 1.5 ? "down" : undefined}
-          hint="How many times over its operating profit covers its interest bill. Under about 1.5 leaves very little room."
+          hint={
+            <MetricGuideBody
+              id="interest-cover"
+              note="Under about 1.5 leaves very little room, which is why it is marked down here."
+              filing={from}
+            />
+          }
         />
         <Metric
           label="Share count"
@@ -108,7 +121,13 @@ export function KeyFiguresPanel({
                   ? "down"
                   : "muted"
           }
-          hint="Change against last year. Falling means shares were bought back, which hands value to the holders who remain; rising means new shares were issued, diluting them."
+          hint={
+            <MetricGuideBody
+              id="share-count"
+              note="Shown as the change against last year: falling means shares were bought back, rising means new shares were issued."
+              filing={from}
+            />
+          }
         />
       </dl>
     </Card>
