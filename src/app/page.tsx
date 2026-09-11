@@ -131,7 +131,7 @@ function IndexStrip({
   asOf: Date | string | null;
   ageDays: number | null;
 }) {
-  const stale = ageDays != null && ageDays > 3;
+  const stale = ageDays != null && ageDays >= 3;
 
   return (
     <div className="full-bleed border-b border-border">
@@ -156,11 +156,11 @@ function IndexStrip({
           <p className="mt-0.5 text-[0.8125rem] text-faint">
             {asOf ? (
               <>
-                {stale ? "⚠ data refresh is stale · " : "refreshed "}
+                {stale ? "⚠ market snapshot is stale · " : "market data as of "}
                 <LocalTime value={asOf} mode="datetime" showZone />
               </>
             ) : (
-              "not yet ingested"
+              "market data not yet ingested"
             )}
           </p>
         </div>
