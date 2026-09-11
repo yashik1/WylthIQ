@@ -6,7 +6,7 @@ import { loadComparison, MAX_COMPARE, parseSymbols, type CompareItem } from "@/l
 import { money, multiple, percent, price as fmtPrice } from "@/lib/format";
 import { describeAgainstPeers, median, type PeerFigures } from "@/lib/peer-context";
 import { ASSET_CLASS_LABEL } from "@/lib/instruments";
-import type { Rating } from "@/lib/scoring/types";
+import { healthRating } from "@/lib/scoring/ratings";
 
 export const dynamic = "force-dynamic";
 
@@ -24,13 +24,6 @@ const SUGGESTIONS = [
   { label: "Index ETFs", symbols: "SPY,QQQ,VTI" },
   { label: "Retail", symbols: "WMT,COST,TGT" },
 ];
-
-function healthRating(score: number | null | undefined): Rating {
-  if (score == null) return "unknown";
-  if (score >= 7.5) return "good";
-  if (score >= 5) return "fair";
-  return "poor";
-}
 
 export default async function ComparePage({ searchParams }: PageProps<"/compare">) {
   const params = await searchParams;

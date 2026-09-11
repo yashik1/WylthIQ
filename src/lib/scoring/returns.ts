@@ -27,6 +27,32 @@ export function totalDebt(period: FinancialPeriod | undefined): number | null {
 }
 
 /**
+ * Cash from operations less capital spending — the one definition of free
+ * cash flow every panel uses.
+ *
+ * Capital spending is taken as an outflow whatever sign it was filed with.
+ * Filers disagree: `PaymentsToAcquirePropertyPlantAndEquipment` is tagged
+ * positive by most and negative by a minority, and subtracting it as tagged
+ * would add to free cash flow for that minority, turning the heaviest
+ * spenders into the biggest cash generators. This was written out in eight
+ * places; one of them getting the sign wrong would put two different free
+ * cash flows on one page.
+ */
+export function freeCashFlowOf(
+  operatingCashFlow: number | null | undefined,
+  capex: number | null | undefined,
+): number | null {
+  if (operatingCashFlow == null || capex == null) return null;
+  if (!Number.isFinite(operatingCashFlow) || !Number.isFinite(capex)) return null;
+  return operatingCashFlow - Math.abs(capex);
+}
+
+/** Free cash flow for one period, or null when either half was not reported. */
+export function freeCashFlow(period: FinancialPeriod | undefined): number | null {
+  return freeCashFlowOf(value(period, "operatingCashFlow"), value(period, "capex"));
+}
+
+/**
  * The share of pre-tax income paid in tax, from the filings themselves.
  * Falls back to the US federal rate when there is no pre-tax profit, or when
  * the implied rate is outside what an ordinary year produces.

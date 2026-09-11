@@ -1,3 +1,5 @@
+import { ACCOUNTING_FLAG, DISTRESS_FLAG } from "../scoring/model-flags";
+
 /**
  * What a portfolio is exposed to, described in the terms the company pages use.
  *
@@ -142,10 +144,10 @@ export function buildIntelligence(profiles: HoldingProfile[]): PortfolioIntellig
   const flags: PortfolioFlag[] = [];
   for (const p of profiles) {
     if (p.mApplicable && p.mFlagged) {
-      flags.push({ symbol: p.symbol, label: "Accounting flag", detail: "The Beneish M-Score finds patterns seen in companies that overstated earnings. A prompt to read the filings, not evidence of a problem." });
+      flags.push({ symbol: p.symbol, label: ACCOUNTING_FLAG.label, detail: ACCOUNTING_FLAG.text });
     }
     if (p.zApplicable && p.zZone === "distress") {
-      flags.push({ symbol: p.symbol, label: "Distress zone", detail: "The Altman Z-Score places the balance sheet in its distress zone. A statistical reading, not a forecast." });
+      flags.push({ symbol: p.symbol, label: DISTRESS_FLAG.label, detail: DISTRESS_FLAG.text });
     }
     if (p.thesisStatus === "at-risk" || p.thesisStatus === "invalidated") {
       flags.push({

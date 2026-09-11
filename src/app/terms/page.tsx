@@ -208,7 +208,7 @@ export default async function TermsPage() {
           Railway may host the application and Postgres database. Resend may deliver email.
           If AI explanations are enabled, the configured AI provider may process the prompt
           and supplied research context. Stripe may process payments if subscriptions are
-          enabled. Each provider's applicable terms and privacy policy govern its processing.
+          enabled. Each provider&apos;s applicable terms and privacy policy govern its processing.
         </Clause>
       </Card>
 

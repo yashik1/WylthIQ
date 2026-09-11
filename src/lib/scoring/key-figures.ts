@@ -1,6 +1,7 @@
 import { fieldValue } from "../fundamentals/normalize";
 import type { NormalizedFundamentals } from "../fundamentals/types";
 import { div } from "./math";
+import { freeCashFlowOf } from "./returns";
 
 /**
  * The figures a reader coming from any other stock site expects to find.
@@ -63,18 +64,6 @@ export interface KeyFigures {
   priceToFreeCashFlow: number | null;
 }
 
-/**
- * Capital expenditure, as a positive amount.
- *
- * Filers disagree about the sign: `PaymentsToAcquirePropertyPlantAndEquipment`
- * is a cash outflow and most tag it positive, but a minority carry it
- * negative. Subtracting it as tagged would *add* to free cash flow for that
- * minority, turning the heaviest spenders into the biggest cash generators.
- */
-function capexMagnitude(value: number | null): number | null {
-  return value == null ? null : Math.abs(value);
-}
-
 export function buildKeyFigures(
   fundamentals: NormalizedFundamentals,
   marketCap: number | null,
@@ -86,11 +75,10 @@ export function buildKeyFigures(
 
   const revenue = f("revenue");
   const netIncome = f("netIncome");
-  const ocf = f("operatingCashFlow");
-  const capex = capexMagnitude(f("capex"));
 
   // The whole reason this module exists. Both inputs were already stored.
-  const freeCashFlow = ocf == null || capex == null ? null : ocf - capex;
+  // The sign of capital spending is handled in freeCashFlowOf.
+  const freeCashFlow = freeCashFlowOf(f("operatingCashFlow"), f("capex"));
 
   const shares = f("sharesOutstanding");
   const priorShares = p("sharesOutstanding");

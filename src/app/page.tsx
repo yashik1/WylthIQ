@@ -8,7 +8,7 @@ import { getIndexStrip, type IndexReading } from "@/lib/indices";
 import { Card, RatingBadge } from "@/components/ui";
 import { LocalTime } from "@/components/local-time";
 import { money, num, percent, signedPercent } from "@/lib/format";
-import type { Rating } from "@/lib/scoring/types";
+import { healthRating } from "@/lib/scoring/ratings";
 import { getHealthiest, getUniverseCount } from "@/lib/screener";
 import { organisationLd, websiteLd } from "@/lib/structured-data";
 import { StructuredData } from "@/components/structured-data";
@@ -20,13 +20,6 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
-
-function healthRating(score: number | null): Rating {
-  if (score == null) return "unknown";
-  if (score >= 7.5) return "good";
-  if (score >= 5) return "fair";
-  return "poor";
-}
 
 export default async function HomePage() {
   const [healthiest, universeCount, market, indices, session, saved] = await Promise.all([

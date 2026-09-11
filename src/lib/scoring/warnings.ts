@@ -3,6 +3,7 @@ import type { Filing } from "../providers/types";
 import type { InsiderActivity } from "../signals/insider";
 import { describeEightK } from "../signals/eight-k-items";
 import { money } from "../format";
+import { ACCOUNTING_FLAG, DISTRESS_FLAG } from "./model-flags";
 
 /**
  * Everything on this page that a careful reader should not miss.
@@ -84,9 +85,7 @@ export function buildWarnings(input: {
   /* ---- what the published models flagged --------------------------------- */
   if (report?.beneish.value?.flagged) {
     warnings.push({
-      text:
-        "Its accounting patterns resemble those of companies that later restated " +
-        "earnings. This is a statistical screen, not evidence of wrongdoing.",
+      text: ACCOUNTING_FLAG.text,
       evidence: `Beneish M-Score ${report.beneish.value.m.toFixed(2)}, above the −1.78 threshold`,
       level: "notable",
     });
@@ -94,7 +93,7 @@ export function buildWarnings(input: {
 
   if (report?.altman.value?.zone === "distress") {
     warnings.push({
-      text: "A published bankruptcy-risk model places it in its distress range.",
+      text: DISTRESS_FLAG.text,
       evidence: `Altman Z-Score ${report.altman.value.z.toFixed(2)}`,
       level: "notable",
     });

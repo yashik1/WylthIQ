@@ -20,14 +20,15 @@ interface Entry {
   example?: string;
 }
 
+/**
+ * The terms the metric guide below does not cover.
+ *
+ * Revenue, the ratios and the scores were once defined here as well as in the
+ * metric guide, in different words, so the same page explained ten terms
+ * twice. Each is now defined once, in the guide, which is also what every
+ * company page links to.
+ */
 const BASICS: Entry[] = [
-  {
-    term: "Revenue",
-    short: "All the money coming in from selling things.",
-    detail:
-      "Also called sales or turnover. It is the top line — before any costs, wages, or taxes are taken out. A company can have enormous revenue and still lose money.",
-    example: "A shop that sells $1M of goods has $1M in revenue, even if the goods cost it $1.2M.",
-  },
   {
     term: "Net income (profit)",
     short: "What's left after every cost is paid.",
@@ -57,40 +58,6 @@ const BASICS: Entry[] = [
     short: "Actual cash the business generated.",
     detail:
       "Profit is an accounting figure and involves judgement calls; cash flow is harder to massage. When profit is healthy but cash flow is not, it is worth asking why.",
-  },
-];
-
-const RATIOS: Entry[] = [
-  {
-    term: "P/E ratio (price to earnings)",
-    short: "What you pay for each $1 of yearly profit.",
-    detail:
-      "A P/E of 20 means investors pay $20 for every $1 the company earns per year. Higher usually means the market expects growth. It cannot be calculated for a company that loses money.",
-    example: "Two firms both earn $1/share. One trades at $10 (P/E 10), the other at $50 (P/E 50).",
-  },
-  {
-    term: "Net profit margin",
-    short: "Cents of profit kept from each dollar of sales.",
-    detail:
-      "A 25% margin means 25 cents of every sales dollar becomes profit. Supermarkets run on thin margins; software companies often run on very fat ones. Only compare within an industry.",
-  },
-  {
-    term: "Return on assets",
-    short: "How hard the company's assets work.",
-    detail:
-      "Profit divided by everything owned. Banks look low on this measure by nature, because they hold enormous asset bases relative to their earnings.",
-  },
-  {
-    term: "Current ratio",
-    short: "Can it pay the bills due this year?",
-    detail:
-      "Short-term assets divided by short-term bills. Below 1.0 means more due within a year than readily available to pay it — not automatically a problem, but worth understanding.",
-  },
-  {
-    term: "Net debt",
-    short: "Borrowings left after spending all its cash.",
-    detail:
-      "Total borrowings minus cash on hand. A company with more cash than debt has negative net debt, which is a position of strength. This is a better measure of debt burden than total liabilities, which include ordinary supplier bills.",
   },
 ];
 
@@ -154,33 +121,6 @@ const CHECKLIST: {
   },
 ];
 
-const SCORES: Entry[] = [
-  {
-    term: "Piotroski F-Score (0–9)",
-    short: "Nine checks of whether the finances are improving.",
-    detail:
-      "Devised by accounting professor Joseph Piotroski in 2000. It tests profitability, debt levels and operating efficiency, awarding one point per test passed. 8–9 indicates strong and improving financials; 0–2 indicates weak and deteriorating ones. When a company cannot report a figure a test needs, that test is skipped and the score is shown out of a smaller total rather than counting as a failure.",
-  },
-  {
-    term: "Altman Z-Score",
-    short: "How far the company is from financial distress.",
-    detail:
-      "Published by Edward Altman in 1968 to predict bankruptcy. Above 2.99 is the safe zone, 1.81–2.99 is grey, below 1.81 signals distress. WylthIQ uses the original five-factor model for manufacturers and the four-factor Z'' variant elsewhere, because the original was fitted on manufacturing companies. It is not shown at all for banks and insurers — see below.",
-  },
-  {
-    term: "Beneish M-Score",
-    short: "Screens for signs of manipulated earnings.",
-    detail:
-      "Built by Messod Beneish in 1999 from eight ratios comparing this year with last. Above −1.78 flags accounting patterns statistically similar to companies that later restated earnings. It is a prompt to read the filings carefully — never evidence of wrongdoing, and plenty of honest companies trip it.",
-  },
-  {
-    term: "Health score (0–10)",
-    short: "Our summary of the four health questions.",
-    detail:
-      "The average of the profitability, growth, debt and accounting ratings, scored 10 for good, 6 for mixed and 2 for weak. Anything that cannot be assessed is left out rather than guessed. Valuation is deliberately excluded: whether a share looks expensive says nothing about whether the business underneath is sound.",
-  },
-];
-
 export default function LearnPage() {
   return (
     /*
@@ -193,19 +133,24 @@ export default function LearnPage() {
     */
     <div className="mx-auto w-full max-w-3xl space-y-6">
       {/*
-        The glossary restated as questions.
+        The glossary and the metric guide restated as questions, each term
+        once.
 
         Every entry below is already a term with a plain-English answer, so
         this markup says what the page says — the line between structured
         data and cloaking is that a crawler and a reader get the same thing.
       */}
       <StructuredData
-        data={faqLd(
-          [...BASICS, ...RATIOS, ...SCORES].map((e) => ({
+        data={faqLd([
+          ...BASICS.map((e) => ({
             question: `What is ${e.term}?`,
             answer: `${e.short} ${e.detail}`,
           })),
-        )}
+          ...METRIC_GUIDES.map((guide) => ({
+            question: `What is ${guide.name}?`,
+            answer: `${guide.what} ${guide.how}`,
+          })),
+        ])}
       />
 
       <PageHeader eyebrow="Reference" title="What the numbers mean">
@@ -237,6 +182,8 @@ export default function LearnPage() {
         </ul>
       </Card>
 
+      {/* Company pages link here rather than carrying their own copy. */}
+      <div id="checklist" className="scroll-mt-24">
       <Card as="section">
         <CardHeader
           title="New to financial analysis?"
@@ -263,21 +210,12 @@ export default function LearnPage() {
           ))}
         </ol>
       </Card>
+      </div>
 
       <Section
         title="The basics"
-        subtitle="The handful of figures that appear on every company page"
+        subtitle="The statement lines every other figure is built from"
         entries={BASICS}
-      />
-      <Section
-        title="Ratios"
-        subtitle="Comparisons that make companies of different sizes comparable"
-        entries={RATIOS}
-      />
-      <Section
-        title="The scores"
-        subtitle="Published academic models, applied consistently"
-        entries={SCORES}
       />
 
       {/*

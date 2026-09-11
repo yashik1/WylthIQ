@@ -3,6 +3,8 @@ import type { CanonicalField, Fact, FinancialPeriod } from "../fundamentals/type
 import {
   debtToEbitda,
   ebitda,
+  freeCashFlow,
+  freeCashFlowOf,
   effectiveTaxRate,
   enterpriseValueToEbitda,
   returnOnInvestedCapital,
@@ -47,5 +49,20 @@ describe("returns and enterprise value", () => {
     expect(enterpriseValueToEbitda(period({ operatingIncome: 80, depreciation: 20 }), 1000)).toBeNull();
     expect(enterpriseValueToEbitda(period({ operatingIncome: -80, depreciation: 20, longTermDebt: 1 }), 1000)).toBeNull();
     expect(debtToEbitda(p)).toBe(2);
+  });
+});
+
+describe("free cash flow", () => {
+  it("subtracts capital spending as an outflow, whichever sign it was filed with", () => {
+    expect(freeCashFlowOf(220, 60)).toBe(160);
+    expect(freeCashFlowOf(220, -60)).toBe(160);
+    expect(freeCashFlow(period({ operatingCashFlow: 130, capex: -30 }))).toBe(100);
+  });
+
+  it("is unknown when either half is missing", () => {
+    expect(freeCashFlowOf(null, 60)).toBeNull();
+    expect(freeCashFlowOf(220, undefined)).toBeNull();
+    expect(freeCashFlow(period({ operatingCashFlow: 130 }))).toBeNull();
+    expect(freeCashFlow(undefined)).toBeNull();
   });
 });

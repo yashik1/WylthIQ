@@ -31,12 +31,14 @@ describe("health breakdown", () => {
     const f = fundamentals([sound, { ...sound, revenue: 800, grossProfit: 350 }]);
     const breakdown = buildHealthBreakdown(buildHealthReport(f, "manufacturing", null), f);
 
+    // The same area names and words the investor brief uses.
     expect(breakdown.areas.map((a) => a.label)).toEqual([
-      "Profitability", "Growth", "Cash generation", "Leverage", "Accounting risk",
+      "Profitability", "Growth", "Cash generation", "Debt", "Accounting",
     ]);
     expect(breakdown.areas.find((a) => a.key === "profitability")?.word).toBe("Strong");
     expect(breakdown.areas.find((a) => a.key === "cash")).toMatchObject({ word: "Strong", scored: false });
-    expect(breakdown.areas.find((a) => a.key === "leverage")?.word).toBe("Low");
+    expect(breakdown.areas.find((a) => a.key === "debt")?.word).toBe("Strong");
+    expect(breakdown.areas.map((a) => a.word)).not.toContain("Moderate");
     expect(breakdown.scoredTotal).toBe(4);
   });
 

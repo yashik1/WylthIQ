@@ -133,6 +133,14 @@ describe("building the timeline", () => {
     expect(year.events[0]).toMatchObject({ period: null, highlights: [] });
   });
 
+  it("keeps the period each filing covers, so no separate filings table is needed", () => {
+    const [year] = buildFilingTimeline(
+      [filing({ form: "10-Q", filedAt: "2024-05-01", periodOfReport: "2024-03-30" })],
+      fundamentals,
+    );
+    expect(year.events[0].periodOfReport).toBe("2024-03-30");
+  });
+
   it("still lists every filing without any figures to hand", () => {
     const years = buildFilingTimeline([filing({ form: "10-K", periodOfReport: "2025-09-27" })], null);
     expect(years[0].events[0].highlights).toEqual([]);

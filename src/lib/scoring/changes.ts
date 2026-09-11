@@ -8,7 +8,9 @@ import {
   CROSSED_ZERO,
   type ChangeSeverity,
 } from "./change-thresholds";
-import { div, round, sub } from "./math";
+import { div, round } from "./math";
+import { periodLabel } from "../fundamentals/period-label";
+import { freeCashFlowOf } from "./returns";
 
 /**
  * What moved between two reported periods.
@@ -197,8 +199,8 @@ function describeQuarters(
   const anchor = latest.facts.revenue ?? latest.facts.netIncome;
   return {
     kind,
-    toLabel: quarterLabel(latest),
-    fromLabel: quarterLabel(earlier),
+    toLabel: periodLabel(latest),
+    fromLabel: periodLabel(earlier),
     form: latest.form ?? null,
     filedAt: latest.filedAt ?? null,
     sourceFilingUrl: anchor?.sourceFilingUrl ?? null,
@@ -208,11 +210,6 @@ function describeQuarters(
 
 function isQuarterLabel(fiscalPeriod: string): boolean {
   return /^Q[1-3]$/.test(fiscalPeriod);
-}
-
-/** "Q3 FY2026". */
-export function quarterLabel(period: FinancialPeriod): string {
-  return `${period.fiscalPeriod} FY${period.fiscalYear}`;
 }
 
 /** Q2 after Q1, or Q3 after Q2, in the same fiscal year. */
@@ -357,8 +354,8 @@ export function comparePeriods(
     amountChange({
       key: "freeCashFlow",
       label: "Free cash flow",
-      from: freeCashFlow(p("operatingCashFlow"), p("capex")),
-      to: freeCashFlow(f("operatingCashFlow"), f("capex")),
+      from: freeCashFlowOf(p("operatingCashFlow"), p("capex")),
+      to: freeCashFlowOf(f("operatingCashFlow"), f("capex")),
       format: amount,
       rising: "better",
       meaning:
@@ -452,12 +449,6 @@ export function comparePeriods(
   );
 
   return { changes: changes.sort(bySeverity), steady };
-}
-
-/** Operating cash flow after capital spending, with capex taken as an outflow. */
-function freeCashFlow(ocf: number | null, capex: number | null): number | null {
-  // A minority of filers tag capex negative; the magnitude is what matters.
-  return sub(ocf, absOrNull(capex));
 }
 
 /** Profit per share, only where there is a positive share count to divide by. */

@@ -1,4 +1,5 @@
 import type { SectorKind } from "../scoring/applicability";
+import { periodLabel } from "./period-label";
 import type { CanonicalField, FinancialPeriod, NormalizedFundamentals } from "./types";
 
 /**
@@ -33,13 +34,6 @@ const DAY_MS = 86_400_000;
 
 const pct = (value: number) => `${(Math.abs(value) * 100).toFixed(1)}%`;
 
-function label(period: FinancialPeriod): string {
-  if (period.fiscalPeriod === "FY") return `FY${period.fiscalYear}`;
-  return /^Q[1-4]$/.test(period.fiscalPeriod)
-    ? `${period.fiscalPeriod} FY${period.fiscalYear}`
-    : `the quarter to ${period.end}`;
-}
-
 const value = (period: FinancialPeriod | undefined, field: CanonicalField) => {
   const fact = period?.facts[field];
   return fact && Number.isFinite(fact.value) ? fact.value : null;
@@ -55,7 +49,7 @@ export function validateFundamentals(
   const periods = [...fundamentals.annual.slice(0, 3), ...(fundamentals.quarterly ?? []).slice(0, 4)];
 
   for (const period of periods) {
-    const name = label(period);
+    const name = periodLabel(period, { inSentence: true });
     const facts = Object.entries(period.facts) as [CanonicalField, NonNullable<FinancialPeriod["facts"][CanonicalField]>][];
 
     if (facts.some(([, fact]) => !Number.isFinite(fact.value))) {
@@ -80,7 +74,7 @@ export function validateFundamentals(
 
   const annual = fundamentals.annual.slice(0, 3);
   annual.forEach((period, index) => {
-    const name = label(period);
+    const name = periodLabel(period, { inSentence: true });
     const assets = value(period, "assets");
     const liabilities = value(period, "liabilities");
     const equity = value(period, "equity");
@@ -157,7 +151,7 @@ export function validateFundamentals(
       checks.push({
         key: "stale-annual",
         severity: "note",
-        period: label(latest),
+        period: periodLabel(latest, { inSentence: true }),
         message: `The latest annual report on file covers the year to ${latest.end}, more than eighteen months ago. These figures may be out of date.`,
       });
     }

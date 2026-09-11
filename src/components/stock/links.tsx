@@ -4,23 +4,19 @@ import type { Filing, NewsItem } from "@/lib/providers/types";
 import type { StockPageData } from "@/lib/stock-data";
 import { Card, CardHeader, EmptyState } from "@/components/ui";
 import { LocalTime } from "@/components/local-time";
+import { classifyFiling } from "@/lib/filings/timeline";
 
-/** Plain-English label for each filing type, so the form codes mean something. */
-const FORM_LABELS: Record<string, string> = {
-  "10-K": "Annual report",
-  "10-Q": "Quarterly report",
-  "8-K": "Major event announcement",
-  "20-F": "Annual report (foreign company)",
-  "40-F": "Annual report (Canadian company)",
-  "6-K": "Interim update (foreign company)",
-  "DEF 14A": "Shareholder voting information",
-  "S-1": "Share registration",
-};
-
-function formLabel(form: string): string {
-  const base = form.replace(/\/A$/, "");
-  const label = FORM_LABELS[base] ?? "Filing";
-  return form.endsWith("/A") ? `${label} (amended)` : label;
+/**
+ * A filing in plain English, in the same words the filing timeline uses.
+ *
+ * This table had its own label map, which called every 8-K a "Major event
+ * announcement" while the timeline called the same filing "Earnings" or
+ * "Executive change". One classifier now names a filing wherever it appears.
+ */
+function formLabel(filing: Filing): string | null {
+  const label = classifyFiling(filing).label;
+  if (label === filing.form) return null;
+  return /\/A$/.test(filing.form) ? `${label} (amended)` : label;
 }
 
 export function FilingsList({ filings }: { filings: Filing[] }) {
@@ -72,9 +68,9 @@ export function FilingsList({ filings }: { filings: Filing[] }) {
                     >
                       <FileText aria-hidden className="size-4 shrink-0 text-muted" />
                       <span className="font-medium group-hover:underline">
-                        {formLabel(f.form)}
+                        {formLabel(f) ?? f.form}
                       </span>
-                      <span className="text-muted">({f.form})</span>
+                      {formLabel(f) && <span className="text-muted">({f.form})</span>}
                       <ExternalLink aria-hidden className="size-3.5 shrink-0 text-muted" />
                     </a>
                   </td>
@@ -97,26 +93,39 @@ export function NewsList({
   symbol,
   status = { state: "ok", message: null },
   source = null,
+  filingsShownAbove = false,
 }: {
   news: NewsItem[];
   symbol: string;
   status?: StockPageData["newsStatus"];
   source?: string | null;
+  /** True when the page already lists the company's filings in its timeline. */
+  filingsShownAbove?: boolean;
 }) {
   // When the chain falls through to EDGAR these are the company's own filings,
   // not press coverage. Saying so matters: "the company reported a major event"
   // is a legally required announcement, which carries quite different weight
   // from somebody's write-up of it, and a newcomer would not guess that.
   const fromFilings = source === "SEC EDGAR";
-  const subtitle = fromFilings
-    ? "Announcements the company filed itself, from the last 30 days"
-    : "Coverage from the last 30 days";
+  // And when the filing timeline is already on the page, listing those same
+  // filings again here as "news" is a duplicate, so the panel says there was
+  // no coverage instead.
+  const repeatsFilings = fromFilings && filingsShownAbove;
+  const items = repeatsFilings ? [] : news;
+  const subtitle =
+    fromFilings && !repeatsFilings
+      ? "Announcements the company filed itself, from the last 30 days"
+      : "Coverage from the last 30 days";
   // Telling a reader who has already set a key to go and set a key sends them
   // to fix something that is not broken. Each case gets its own wording, and
   // the quiet one — a company simply not in the news this month — is stated as
   // the unremarkable thing it is rather than dressed up as a setup problem.
-  const empty =
-    status.state === "not-configured"
+  const empty = repeatsFilings
+    ? {
+        title: "No news coverage in the last 30 days",
+        description: `No articles about ${symbol} were found this month. The company's own announcements are in the filing timeline above.`,
+      }
+    : status.state === "not-configured"
       ? {
           title: "News needs a key",
           description:
@@ -135,11 +144,11 @@ export function NewsList({
   return (
     <Card>
       <CardHeader title="Recent news" subtitle={subtitle} />
-      {news.length === 0 ? (
+      {items.length === 0 ? (
         <EmptyState title={empty.title} description={empty.description} />
       ) : (
         <ul className="divide-y divide-border">
-          {news.map((n) => (
+          {items.map((n) => (
             <li key={n.id}>
               <a
                 href={n.url}

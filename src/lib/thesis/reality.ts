@@ -3,7 +3,7 @@ import { fieldValue } from "../fundamentals/normalize";
 import type { FinancialPeriod, NormalizedFundamentals } from "../fundamentals/types";
 import { money } from "../format";
 import { div } from "../scoring/math";
-import { debtToEbitda, returnOnInvestedCapital } from "../scoring/returns";
+import { debtToEbitda, freeCashFlowOf, returnOnInvestedCapital } from "../scoring/returns";
 import {
   describeTarget,
   THESIS_METRICS,
@@ -78,9 +78,7 @@ export function metricValue(
   const p = (field: Parameters<typeof fieldValue>[1]) => fieldValue(consecutive, field);
 
   const revenue = v("revenue");
-  const ocf = v("operatingCashFlow");
-  const capex = v("capex");
-  const fcf = ocf == null || capex == null ? null : ocf - Math.abs(capex);
+  const fcf = freeCashFlowOf(v("operatingCashFlow"), v("capex"));
   const percent = (x: number | null) => (x == null ? null : x * 100);
 
   switch (metric) {

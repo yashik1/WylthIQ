@@ -119,14 +119,23 @@ describe("what it points at first", () => {
     quarterly: [],
   });
 
-  it("puts a severe filing ahead of everything", () => {
+  it("puts a severe filing ahead of everything, pointing to the warning signs rather than repeating one", () => {
     const warnings: Warning[] = [
       { text: "Non-reliance on previously issued financial statements, in a filing on 2026-08-01.", evidence: "Form 8-K, item 4.02", level: "severe", url: "https://sec.gov/8k" },
     ];
     const brief = buildInvestorBrief(
       inputs({ warnings, changes: changes([change({ key: "netIncome", label: "Profit", delta: "turned negative", severity: "critical" })]) }),
     );
-    expect(brief.watch).toMatchObject({ evidence: "Form 8-K, item 4.02", url: "https://sec.gov/8k" });
+    expect(brief.watch).toMatchObject({ url: "#warning-signs", evidence: "Includes one rated severe" });
+    expect(brief.watch?.text).toMatch(/^One warning sign/);
+    expect(brief.watch?.text).not.toContain(warnings[0].text);
+  });
+
+  it("counts the warning signs it points to", () => {
+    const warning = (text: string): Warning => ({ text, evidence: "…", level: "notable" });
+    const brief = buildInvestorBrief(inputs({ warnings: [warning("First."), warning("Second.")] }));
+    expect(brief.watch).toMatchObject({ url: "#warning-signs", evidence: "None rated severe" });
+    expect(brief.watch?.text).toMatch(/^2 warning signs/);
   });
 
   it("then a critical deterioration in the figures", () => {
@@ -145,6 +154,20 @@ describe("what it points at first", () => {
     const brief = buildInvestorBrief(inputs({ report: thin }));
     expect(brief.health.unassessed).toEqual(["Accounting"]);
     expect(brief.health.assessed).toBe(3);
+    expect(brief.health.summary).toMatch(/accounting could not be rated\.$/);
+    expect(brief.health.summary).not.toMatch(/weak on [^;]*accounting/);
+  });
+
+  it("names the areas in one sentence, in the same words as every other panel", () => {
+    const report = buildHealthReport(aapl, sector, MARKET_CAP);
+    const rated: HealthReport = {
+      ...report,
+      questions: report.questions.map((q) =>
+        q.key === "growing" ? { ...q, rating: "fair" } : q.key === "valuation" ? q : { ...q, rating: "good" },
+      ),
+    };
+    const brief = buildInvestorBrief(inputs({ report: rated }));
+    expect(brief.health.summary).toBe("Strong on profitability, debt and accounting; mixed on growth.");
   });
 
   it("has nothing to compare for a company with a single filing", () => {

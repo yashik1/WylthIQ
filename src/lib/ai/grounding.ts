@@ -3,7 +3,7 @@ import type { ChangeReport } from "../scoring/changes";
 import type { HealthReport } from "../scoring/health";
 import type { HealthHistory } from "../scoring/health-history";
 import type { KeyFigures } from "../scoring/key-figures";
-import type { Rating } from "../scoring/types";
+import { RATING_WORD } from "../scoring/ratings";
 import { AI_QUESTIONS, type AiQuestionKey } from "./questions";
 
 /**
@@ -39,13 +39,6 @@ export interface GroundingInput {
   price: { freshness: string | null; marketCap: number | null } | null;
 }
 
-const RATING_WORD: Record<Rating, string> = {
-  good: "strong",
-  fair: "mixed",
-  poor: "weak",
-  unknown: "not enough data",
-};
-
 export function buildGrounding(input: GroundingInput): Grounding {
   const { symbol, name, currency, latest, report, changes, keyFigures, history, price } = input;
   const page = `/stock/${encodeURIComponent(symbol)}`;
@@ -77,7 +70,7 @@ export function buildGrounding(input: GroundingInput): Grounding {
   for (const question of report.questions.filter((q) => q.key !== "valuation")) {
     const figures = question.metrics.map((m) => `${m.label} ${m.value}`).join("; ");
     lines.push(
-      `[${health}] ${question.question} Rated ${RATING_WORD[question.rating]}. ${question.answer} Figures: ${figures}.`,
+      `[${health}] ${question.question} Rated ${RATING_WORD[question.rating].toLowerCase()}. ${question.answer} Figures: ${figures}.`,
     );
   }
 

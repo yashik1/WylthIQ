@@ -9,7 +9,7 @@ import { listHoldings } from "@/lib/portfolio/actions";
 import type { PortfolioIntelligence } from "@/lib/portfolio/intelligence";
 import { loadPortfolio } from "@/lib/portfolio/load";
 import type { CurrencyTotal } from "@/lib/portfolio/math";
-import type { Rating } from "@/lib/scoring/types";
+import { healthRating } from "@/lib/scoring/ratings";
 import { listTheses } from "@/lib/thesis/actions";
 import { cn } from "@/lib/utils";
 
@@ -20,13 +20,6 @@ export const metadata: Metadata = {
   description: "What you hold, what it is worth, and what it is exposed to — described from company filings.",
   robots: { index: false, follow: false },
 };
-
-function healthRating(score: number | null): Rating {
-  if (score == null) return "unknown";
-  if (score >= 7.5) return "good";
-  if (score >= 5) return "fair";
-  return "poor";
-}
 
 function signedAmount(value: number, currency: string): string {
   return `${value > 0 ? "+" : value < 0 ? "−" : ""}${fmtPrice(Math.abs(value), currency)}`;

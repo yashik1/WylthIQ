@@ -163,24 +163,12 @@ export function buildHighlights(
     }
   }
 
-  if (report.altman.value?.zone === "distress") {
-    watch.push({
-      text: "A widely used bankruptcy-risk model places it in its distress range.",
-      evidence: `Altman Z ${report.altman.value.z.toFixed(2)}`,
-    });
-  } else if (report.altman.value?.zone === "safe") {
-    working.push({
-      text: "A widely used bankruptcy-risk model places it well clear of distress.",
-      evidence: `Altman Z ${report.altman.value.z.toFixed(2)}`,
-    });
-  }
-
-  if (report.beneish.value?.flagged) {
-    watch.push({
-      text: "Its accounting patterns resemble those of companies that later restated earnings. That is a prompt to read the filings, not evidence of wrongdoing.",
-      evidence: `Beneish M ${report.beneish.value.m.toFixed(2)}`,
-    });
-  }
+  /*
+    The Altman and Beneish readings are not repeated here. A distress zone or
+    an accounting flag is already listed in the warning signs at the top of
+    the page, and both models' full readings are in the scorecard — this
+    column restating them put the same flag on the page three times.
+  */
 
   // A page showing five strengths and no risks reads as a recommendation. Both
   // columns are capped so neither can dominate by sheer length.

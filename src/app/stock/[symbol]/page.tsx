@@ -5,7 +5,8 @@ import { parseExchangeSuffix } from "@/lib/exchange-suffix";
 import { BalanceSheetVisual } from "@/components/stock/balance-sheet";
 import { FundamentalsChart, type TrendSeries } from "@/components/stock/fundamentals-chart";
 import { FilingsList, NewsList, ResearchLinks } from "@/components/stock/links";
-import { QuestionCard, QuestionSummary, VerdictCard } from "@/components/stock/verdict";
+import { QuestionCard, VerdictCard } from "@/components/stock/verdict";
+import { healthRating } from "@/lib/scoring/ratings";
 import { Scorecard } from "@/components/stock/scorecard";
 import { WhatChanged } from "@/components/stock/what-changed";
 import { FilingTimeline } from "@/components/stock/filing-timeline";
@@ -540,7 +541,9 @@ async function StockBody({
     { key: "netIncome", label: "Profit", data: yearlySeries(fundamentals, "netIncome"), format: "money", kind: "bar" },
     { key: "operatingCashFlow", label: "Cash flow", data: yearlySeries(fundamentals, "operatingCashFlow"), format: "money", kind: "bar" },
     { key: "assets", label: "Total assets", data: yearlySeries(fundamentals, "assets"), format: "money", kind: "line" },
-    { key: "liabilities", label: "Total debt", data: yearlySeries(fundamentals, "liabilities"), format: "money", kind: "line" },
+    // Total liabilities, and labelled as such: "Total debt" in the statement
+    // explorer is borrowings alone, and one label must not mean two numbers.
+    { key: "liabilities", label: "Total liabilities", data: yearlySeries(fundamentals, "liabilities"), format: "money", kind: "line" },
     { key: "equity", label: "Shareholder equity", data: yearlySeries(fundamentals, "equity"), format: "money", kind: "line" },
   ];
 
@@ -623,7 +626,9 @@ async function StockBody({
             ? { label: market.label, change: marketQuote.changePercent }
             : null,
         filings: data.filings,
-        news: data.news,
+        // News that fell back to EDGAR is the filings again; listing both
+        // would put each filing in the panel twice.
+        news: data.newsSource === "SEC EDGAR" ? [] : data.news,
         now: new Date(),
       })
     : null;
@@ -666,9 +671,10 @@ async function StockBody({
     statements && { id: "statements", label: "Statements" },
     filesAccounts && data.peers.length > 0 && { id: "peers", label: "Peers" },
     data.assetClass === "equity" && { id: "early-signals", label: "Early signals" },
-    timeline.length > 0 && { id: "timeline", label: "Timeline" },
+    // One entry for filings: the timeline when there is one, the table otherwise.
+    timeline.length > 0 && { id: "timeline", label: "Filings" },
     report && !isFund && { id: "thesis", label: "Thesis" },
-    filesAccounts && { id: "filings", label: "Filings" },
+    filesAccounts && timeline.length === 0 && { id: "filings", label: "Filings" },
     !filesAccounts && { id: "sources", label: "News" },
   ].filter((s): s is StockSection => Boolean(s));
 
@@ -756,7 +762,7 @@ async function StockBody({
             </span>
             {report?.score != null && (
               <RatingBadge
-                rating={report.score >= 7.5 ? "good" : report.score >= 5 ? "fair" : "poor"}
+                rating={healthRating(report.score)}
                 label={`Health ${report.score.toFixed(1)} / 10`}
               />
             )}
@@ -992,15 +998,12 @@ async function StockBody({
             title="The five questions that matter"
             description="Each answered from the filings, with the numbers behind it."
           />
-          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-            <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2">
-              {report.questions.map((q) => (
-                <QuestionCard key={q.key} question={q} />
-              ))}
-            </div>
-            <div className="xl:sticky xl:top-20 xl:self-start">
-              <QuestionSummary questions={report.questions} />
-            </div>
+          {/* No "at a glance" summary beside the cards: each card carries its
+              own rating, and the health section above already lists all five. */}
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {report.questions.map((q) => (
+              <QuestionCard key={q.key} question={q} />
+            ))}
           </div>
         </section>
       )}
@@ -1106,33 +1109,39 @@ async function StockBody({
         title={filesAccounts ? "Sources and further reading" : "News and further reading"}
         description={
           filesAccounts
-            ? "Every figure above traces back to one of these filings."
+            ? timeline.length > 0
+              ? "Every figure above traces back to a filing in the timeline, each linked to the document itself."
+              : "Every figure above traces back to one of these filings."
             : "There are no filings to trace back to, but the market still gets written about."
         }
       />
       {subsidiaries && <Subsidiaries report={subsidiaries} />}
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
-        {filesAccounts && (
+        {/*
+          The filings table only when there is no timeline. The timeline above
+          already lists every filing, labelled and linked, and the same
+          documents twice under two different names was a duplicate.
+        */}
+        {filesAccounts && timeline.length === 0 && (
           <div id="filings">
             <FilingsList filings={data.filings} />
           </div>
         )}
-        <div className="space-y-4">
-          <NewsList
-            news={data.news}
+        <NewsList
+          news={data.news}
+          symbol={upper}
+          status={data.newsStatus}
+          source={data.newsSource}
+          filingsShownAbove={timeline.length > 0}
+        />
+        {filesAccounts && (
+          <ResearchLinks
             symbol={upper}
-            status={data.newsStatus}
-            source={data.newsSource}
+            cik={profile?.cik ?? null}
+            website={profile?.website ?? null}
           />
-          {filesAccounts && (
-            <ResearchLinks
-              symbol={upper}
-              cik={profile?.cik ?? null}
-              website={profile?.website ?? null}
-            />
-          )}
-        </div>
+        )}
       </div>
       </Section>
 

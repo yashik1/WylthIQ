@@ -3,15 +3,8 @@ import { Card, CardHeader, RatingBadge } from "@/components/ui";
 import { multiple, percent } from "@/lib/format";
 import { describeAgainstPeers, median, type PeerFigures } from "@/lib/peer-context";
 import type { PeerRow } from "@/lib/peers";
-import type { Rating } from "@/lib/scoring/types";
+import { healthRating } from "@/lib/scoring/ratings";
 import { cn } from "@/lib/utils";
-
-function healthRating(score: number | null): Rating {
-  if (score == null) return "unknown";
-  if (score >= 7.5) return "good";
-  if (score >= 5) return "fair";
-  return "poor";
-}
 
 /**
  * This company beside similar ones.
