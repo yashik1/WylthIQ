@@ -3,7 +3,6 @@ import { MetricGuideBody } from "@/components/metric-guide-body";
 import { calendarDate, multiple } from "@/lib/format";
 import { SEVERITY_LABEL } from "@/lib/scoring/change-thresholds";
 import type { BriefMove, InvestorBrief } from "@/lib/scoring/investor-brief";
-import type { Rating } from "@/lib/scoring/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -11,8 +10,12 @@ import { cn } from "@/lib/utils";
  *
  * Two columns — where the company stands on the left, what is moving on the
  * right — so the whole of it fits on one screen above the detail it
- * summarises. Every rating is a word as well as a colour, every move carries
- * the comparison it came from, and the card closes by saying what it is not.
+ * summarises. Every move carries the comparison it came from, and the card
+ * closes by saying what it is not.
+ *
+ * It summarises and points; it does not repeat. Health areas are named in a
+ * sentence that links to the breakdown, and warning signs are counted and
+ * linked rather than copied, since both sit directly beneath this card.
  */
 export function InvestorBriefCard({
   brief,
@@ -73,27 +76,12 @@ export function InvestorBriefCard({
               </Explain>
             </div>
             <p className="mt-1.5 text-sm text-muted-strong">{health.headline}</p>
-
-            <dl className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-1.5 sm:grid-cols-2">
-              {health.areas.map((area) => (
-                <div key={area.key} className="flex items-baseline justify-between gap-3 text-sm">
-                  <dt className="text-muted">{area.label}</dt>
-                  <dd className="flex items-center gap-1.5 font-medium">
-                    <span aria-hidden className={cn("size-1.5 rounded-full", DOT[area.rating])} />
-                    {area.verdict}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-
-            {health.unassessed.length > 0 && (
-              <p className="mt-2 text-xs leading-relaxed text-faint">
-                Scored on {health.assessed} of {health.areas.length} areas.{" "}
-                {joinList(health.unassessed)} had too little reported data, so{" "}
-                {health.unassessed.length === 1 ? "it was" : "they were"} left out
-                rather than counted as weak.
-              </p>
-            )}
+            <p className="mt-2 text-sm leading-relaxed">
+              {health.summary}{" "}
+              <a href="#health" className="text-accent hover:underline">
+                What the score is made of
+              </a>
+            </p>
           </Block>
 
           <Block title="Bottom line">
@@ -135,14 +123,20 @@ export function InvestorBriefCard({
                   {brief.watch.url && (
                     <>
                       {" · "}
-                      <a
-                        href={brief.watch.url}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="text-accent hover:underline"
-                      >
-                        read the filing
-                      </a>
+                      {brief.watch.url.startsWith("#") ? (
+                        <a href={brief.watch.url} className="text-accent hover:underline">
+                          see the warning signs
+                        </a>
+                      ) : (
+                        <a
+                          href={brief.watch.url}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="text-accent hover:underline"
+                        >
+                          read the filing
+                        </a>
+                      )}
                     </>
                   )}
                 </p>
@@ -186,13 +180,6 @@ export function InvestorBriefCard({
   );
 }
 
-const DOT: Record<Rating, string> = {
-  good: "bg-good",
-  fair: "bg-fair",
-  poor: "bg-poor",
-  unknown: "bg-unknown",
-};
-
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
@@ -229,9 +216,4 @@ function Moves({
       ))}
     </ul>
   );
-}
-
-function joinList(items: string[]): string {
-  if (items.length <= 1) return items[0] ?? "";
-  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }

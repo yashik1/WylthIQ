@@ -1,5 +1,7 @@
 import type { MetricGuideId } from "../learn/metric-guide";
+import { freeCashFlowOf } from "../scoring/returns";
 import { fieldValue } from "./normalize";
+import { periodLabel } from "./period-label";
 import type { StatementRowKind } from "./statement-change";
 import type { CanonicalField, FinancialPeriod, NormalizedFundamentals } from "./types";
 
@@ -75,11 +77,8 @@ interface RowSpec extends StatementRow {
 const ratio = (a: number | null, b: number | null): number | null =>
   a == null || b == null || b === 0 ? null : a / b;
 
-const freeCashFlow = (v: Getter): number | null => {
-  const ocf = v("operatingCashFlow");
-  const capex = v("capex");
-  return ocf == null || capex == null ? null : ocf - Math.abs(capex);
-};
+const freeCashFlow = (v: Getter): number | null =>
+  freeCashFlowOf(v("operatingCashFlow"), v("capex"));
 
 const totalDebt = (v: Getter): number | null => {
   const longTerm = v("longTermDebt");
@@ -159,19 +158,13 @@ function cellFor(row: RowSpec, period: FinancialPeriod): StatementCell {
   return { value: value != null && Number.isFinite(value) ? value : null, concept: null, derived: true };
 }
 
-function labelFor(period: FinancialPeriod): string {
-  if (/^Q[1-4]$/.test(period.fiscalPeriod)) return `${period.fiscalPeriod} FY${period.fiscalYear}`;
-  if (period.fiscalPeriod === "FY") return `FY${period.fiscalYear}`;
-  return `Quarter to ${period.end}`;
-}
-
 function columnFor(period: FinancialPeriod): StatementColumn {
   const anchor = period.facts.revenue ?? period.facts.netIncome ?? period.facts.assets;
   const anyUrl = Object.values(period.facts).find((fact) => fact?.sourceFilingUrl)?.sourceFilingUrl;
 
   return {
     key: period.end,
-    label: labelFor(period),
+    label: periodLabel(period),
     fiscalPeriod: period.fiscalPeriod,
     end: period.end,
     form: period.form,

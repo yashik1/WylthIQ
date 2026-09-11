@@ -67,8 +67,12 @@ describe("investor brief card", () => {
     expect(html).toContain("read the filing");
   });
 
-  it("rates health areas in words, not colour alone", () => {
-    expect(text).toMatch(/Profitability\s+(Strong|Mixed|Weak|Not enough data)/);
+  it("names health areas in a sentence that links to the breakdown, rather than repeating it", () => {
+    expect(text).toContain(brief.health.summary);
+    expect(brief.health.summary).toMatch(/^(Strong|Mixed|Weak) on [a-z]/);
+    expect(html).toContain('href="#health"');
+    // The area-by-area grid lives in the health section, not here.
+    expect(text).not.toMatch(/Profitability\s+(Strong|Mixed|Weak|Not enough data)/);
   });
 
   it("links its explanations to Learn", () => {

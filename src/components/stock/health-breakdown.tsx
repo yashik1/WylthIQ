@@ -40,7 +40,7 @@ export function HealthBreakdownCard({ breakdown }: { breakdown: HealthBreakdown 
         ))}
       </dl>
       <p className="border-t border-border px-5 py-3 text-xs leading-relaxed text-muted">
-        The score averages profitability, growth, leverage and accounting risk.{" "}
+        The score averages profitability, growth, debt and accounting.{" "}
         {unavailable.length === 0
           ? "All four had enough reported figures."
           : `${joinList(unavailable)} ${unavailable.length === 1 ? "had" : "had"} too few reported figures and ${unavailable.length === 1 ? "is" : "are"} left out of the average rather than counted as a weakness, so a company is never marked down for a figure it did not publish.`}{" "}

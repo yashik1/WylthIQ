@@ -1,6 +1,7 @@
 import { fieldValue } from "../fundamentals/normalize";
 import type { NormalizedFundamentals } from "../fundamentals/types";
 import type { SectorKind } from "./applicability";
+import { freeCashFlow } from "./returns";
 
 /**
  * What growth the current price is already assuming.
@@ -175,11 +176,6 @@ function solveGrowth(base: number, target: number, discount: number): number | n
   return (low + high) / 2;
 }
 
-/** Capital expenditure as a positive amount; filers disagree about the sign. */
-function capexMagnitude(value: number | null): number | null {
-  return value == null ? null : Math.abs(value);
-}
-
 /**
  * Free cash flow per fiscal year, newest first, skipping any year that did not
  * report both halves of it.
@@ -189,11 +185,8 @@ function freeCashFlowSeries(
 ): { fiscalYear: number; value: number }[] {
   return fundamentals.annual
     .map((period) => {
-      const ocf = fieldValue(period, "operatingCashFlow");
-      const capex = capexMagnitude(fieldValue(period, "capex"));
-      return ocf == null || capex == null
-        ? null
-        : { fiscalYear: period.fiscalYear, value: ocf - capex };
+      const value = freeCashFlow(period);
+      return value == null ? null : { fiscalYear: period.fiscalYear, value };
     })
     .filter((entry): entry is { fiscalYear: number; value: number } => entry !== null);
 }

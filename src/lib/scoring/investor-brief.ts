@@ -8,6 +8,7 @@ import type { HealthReport, Question } from "./health";
 import type { Highlights } from "./highlights";
 import type { KeyFigures } from "./key-figures";
 import { div } from "./math";
+import { RATING_WORD } from "./ratings";
 import type { Rating } from "./types";
 import type { Warning } from "./warnings";
 
@@ -51,6 +52,7 @@ export interface BriefMove {
 export interface BriefWatch {
   text: string;
   evidence: string;
+  /** A filing, or an anchor on this page when it starts with "#". */
   url: string | null;
 }
 
@@ -67,6 +69,12 @@ export interface InvestorBrief {
   health: {
     score: number | null;
     headline: string;
+    /**
+     * One sentence naming the strong and weak areas. The card shows this
+     * rather than a grid of ratings: the breakdown in the health section
+     * lists every area, and the grid repeated it a scroll above.
+     */
+    summary: string;
     areas: BriefArea[];
     /** How many areas had enough data to be rated. */
     assessed: number;
@@ -95,13 +103,6 @@ const AREA_LABEL: Record<Area, string> = {
   growing: "Growth",
   debt: "Debt",
   accounting: "Accounting",
-};
-
-const VERDICT: Record<Rating, string> = {
-  good: "Strong",
-  fair: "Mixed",
-  poor: "Weak",
-  unknown: "Not enough data",
 };
 
 /** How a strong area reads inside a sentence. */
@@ -139,7 +140,7 @@ export function buildInvestorBrief(input: {
       key: q.key,
       label: AREA_LABEL[q.key],
       rating: q.rating,
-      verdict: VERDICT[q.rating],
+      verdict: RATING_WORD[q.rating],
       answer: q.answer,
     }));
 
@@ -153,6 +154,7 @@ export function buildInvestorBrief(input: {
     health: {
       score: report.score,
       headline: report.headline,
+      summary: areaSummaryOf(areas),
       areas,
       assessed: areas.filter((a) => a.rating !== "unknown").length,
       unassessed: areas.filter((a) => a.rating === "unknown").map((a) => a.label),
@@ -211,24 +213,54 @@ function movesFrom(changes: ChangeReport | null, direction: "better" | "worse"):
 }
 
 /**
+ * "Strong on profitability and debt; mixed on growth; accounting could not be
+ * rated." Areas that could not be rated are named as such, never as weak.
+ */
+function areaSummaryOf(areas: BriefArea[]): string {
+  const labelled = (rating: Rating) =>
+    areas.filter((a) => a.rating === rating).map((a) => a.label.toLowerCase());
+
+  const groups: [string, string[]][] = [
+    ["strong on", labelled("good")],
+    ["mixed on", labelled("fair")],
+    ["weak on", labelled("poor")],
+  ];
+  const parts = groups
+    .filter(([, labels]) => labels.length > 0)
+    .map(([lead, labels]) => `${lead} ${list(labels)}`);
+
+  const unrated = labelled("unknown");
+  if (unrated.length > 0) parts.push(`${list(unrated)} could not be rated`);
+  if (parts.length === 0) return "No area had enough reported figures to rate.";
+
+  const sentence = parts.join("; ");
+  return `${sentence[0].toUpperCase()}${sentence.slice(1)}.`;
+}
+
+/**
  * The one thing most worth a reader's attention, in order of weight.
  *
  * A company's own severe filing — a restatement, an auditor change — outranks
  * everything, because it is the company saying it. Then a critical
- * deterioration in its figures, then a model's flag, then the watch list.
+ * deterioration in its figures, then any other warning sign, then the watch
+ * list.
+ *
+ * A warning sign is pointed to rather than restated. The warning signs sit
+ * directly beneath this brief, and copying the first of them here put the
+ * same sentence on the page twice, one above the other.
  */
 function biggestWatch(
   warnings: Warning[],
   deteriorating: BriefMove[],
   highlights: Highlights | null,
 ): BriefWatch | null {
-  const severe = warnings.find((w) => w.level === "severe");
-  if (severe) return fromWarning(severe);
+  const severe = warnings.some((w) => w.level === "severe");
+  if (severe) return toWarnings(warnings, true);
 
   const critical = deteriorating.find((m) => m.severity === "critical");
   if (critical) return fromMove(critical);
 
-  if (warnings[0]) return fromWarning(warnings[0]);
+  if (warnings.length > 0) return toWarnings(warnings, false);
 
   const flagged = highlights?.watch[0];
   if (flagged) return { text: flagged.text, evidence: flagged.evidence, url: null };
@@ -238,8 +270,17 @@ function biggestWatch(
   return null;
 }
 
-function fromWarning(warning: Warning): BriefWatch {
-  return { text: warning.text, evidence: warning.evidence, url: warning.url ?? null };
+/** Points at the warning signs below; `url` is an anchor on this page. */
+function toWarnings(warnings: Warning[], severe: boolean): BriefWatch {
+  const count = warnings.length;
+  return {
+    text:
+      count === 1
+        ? "One warning sign is worth reading first. It is listed just below this brief."
+        : `${count} warning signs are worth reading first. They are listed just below this brief.`,
+    evidence: severe ? "Includes one rated severe" : "None rated severe",
+    url: "#warning-signs",
+  };
 }
 
 function fromMove(move: BriefMove): BriefWatch {

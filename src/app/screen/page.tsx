@@ -22,7 +22,7 @@ import {
   RatingBadge,
 } from "@/components/ui";
 import { money, multiple, percent, price as fmtPrice, signedPercent } from "@/lib/format";
-import type { Rating } from "@/lib/scoring/types";
+import { healthRating } from "@/lib/scoring/ratings";
 import {
   PRESETS,
   runScreen,
@@ -90,13 +90,6 @@ const COUNTRIES = [
   { value: "US", label: "US only" },
   { value: "CA", label: "Canada only" },
 ];
-
-function healthRating(score: number | null): Rating {
-  if (score == null) return "unknown";
-  if (score >= 7.5) return "good";
-  if (score >= 5) return "fair";
-  return "poor";
-}
 
 export default async function ScreenPage({ searchParams }: PageProps<"/screen">) {
   const params = await searchParams;

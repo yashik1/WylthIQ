@@ -5,7 +5,7 @@ import { EquityChart } from "@/components/backtest/equity-chart";
 import { LocalTime } from "@/components/local-time";
 import { runFullScreenerBacktest } from "@/lib/backtest/run-screener";
 import { money, signedPercent } from "@/lib/format";
-import type { Rating } from "@/lib/scoring/types";
+import { healthRating } from "@/lib/scoring/ratings";
 import { getEntitlement, hasAccess } from "@/lib/billing/entitlement";
 import { Paywall } from "@/components/billing/paywall";
 
@@ -25,12 +25,6 @@ const SUGGESTIONS = [
 
 function suggestionHref(s: (typeof SUGGESTIONS)[number]) {
   return `/backtest/screener?start=${s.start}&amount=10000&topN=${s.topN}`;
-}
-
-function healthRating(score: number): Rating {
-  if (score >= 7.5) return "good";
-  if (score >= 5) return "fair";
-  return "poor";
 }
 
 export default async function ScreenerBacktestPage({

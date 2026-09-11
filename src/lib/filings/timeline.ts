@@ -1,6 +1,7 @@
+import { periodLabel } from "../fundamentals/period-label";
 import type { FinancialPeriod, NormalizedFundamentals } from "../fundamentals/types";
 import type { Filing } from "../providers/types";
-import { comparePeriods, quarterLabel, type Change } from "../scoring/changes";
+import { comparePeriods, type Change } from "../scoring/changes";
 import { describeEightK, type ItemSeverity } from "../signals/eight-k-items";
 
 /**
@@ -50,6 +51,8 @@ export interface TimelineEvent extends ClassifiedFiling {
   period: string | null;
   /** The period the highlights are measured against. */
   comparedWith: string | null;
+  /** The date the filing's own period ends, as filed, when it has one. */
+  periodOfReport: string | null;
   /** "Revenue +8.2%", "Operating margin −0.7 pts". */
   highlights: string[];
   url: string;
@@ -194,6 +197,7 @@ function toEvent(
     form: filing.form,
     period: report ? periodLabel(report.period) : null,
     comparedWith: report?.earlier ? periodLabel(report.earlier) : null,
+    periodOfReport: filing.periodOfReport,
     highlights: comparison ? highlightsOf(comparison.changes) : [],
     url: filing.url,
   };
@@ -238,10 +242,6 @@ function reportPeriods(
   }
 
   return null;
-}
-
-function periodLabel(period: FinancialPeriod): string {
-  return period.fiscalPeriod === "FY" ? `FY${period.fiscalYear}` : quarterLabel(period);
 }
 
 function daysBetween(earlierEnd: string, laterEnd: string): number {

@@ -7,7 +7,7 @@ import type { SectorKind } from "../scoring/applicability";
 import { bySeverity } from "../scoring/change-thresholds";
 import { comparePeriods, type Change } from "../scoring/changes";
 import { buildHealthReport } from "../scoring/health";
-import type { Rating } from "../scoring/types";
+import { ACCOUNTING_FLAG, DISTRESS_FLAG } from "../scoring/model-flags";
 import type { SavedCompany } from "./actions";
 
 /**
@@ -106,13 +106,8 @@ function asSectorKind(value: string): SectorKind {
   return SECTOR_KINDS.has(value) ? (value as SectorKind) : "other";
 }
 
-/** The same bands the screener table uses. */
-export function healthRating(score: number | null): Rating {
-  if (score == null) return "unknown";
-  if (score >= 7.5) return "good";
-  if (score >= 5) return "fair";
-  return "poor";
-}
+/** Re-exported so the watchlist and research pages keep one import. */
+export { healthRating } from "../scoring/ratings";
 
 /**
  * The stored fiscal years as scorable periods, newest first.
@@ -196,17 +191,15 @@ export function alertsFor(
   if (company?.mApplicable && company.mFlagged) {
     alerts.push({
       kind: "accounting",
-      label: "Accounting flag",
-      detail:
-        "The Beneish M-Score finds patterns seen in companies that overstated earnings. It is a prompt to read the filing, not evidence of a problem.",
+      label: ACCOUNTING_FLAG.label,
+      detail: ACCOUNTING_FLAG.text,
     });
   }
   if (company?.zApplicable && company.zZone === "distress") {
     alerts.push({
       kind: "distress",
-      label: "Distress zone",
-      detail:
-        "The Altman Z-Score puts the company in its distress zone, a pattern seen before financial trouble. It is a statistical reading, not a forecast.",
+      label: DISTRESS_FLAG.label,
+      detail: DISTRESS_FLAG.text,
     });
   }
   if (healthChange && healthChange.points <= -HEALTH_DROP) {

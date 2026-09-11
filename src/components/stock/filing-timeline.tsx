@@ -56,6 +56,11 @@ export function FilingTimeline({ years }: { years: TimelineYear[] }) {
                     </time>
                     <Badge tone={TONE[event.severity]}>{event.label}</Badge>
                     <span className="text-xs text-faint">{event.form}</span>
+                    {!event.period && event.periodOfReport && (
+                      <span className="text-xs text-faint">
+                        covers to {calendarDate(event.periodOfReport) ?? event.periodOfReport}
+                      </span>
+                    )}
                   </div>
                   <p className="mt-1 text-sm font-medium leading-snug">{event.title}</p>
                   {event.highlights.length > 0 && (

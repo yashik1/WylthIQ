@@ -1,15 +1,9 @@
 import type { HealthReport, Question } from "@/lib/scoring/health";
+import { healthRating } from "@/lib/scoring/ratings";
 import type { Rating } from "@/lib/scoring/types";
-import { Card, MeterBar, Metric, RatingBadge } from "@/components/ui";
+import { Card, Metric, RatingBadge } from "@/components/ui";
 import { MetricGuideBody } from "@/components/metric-guide-body";
 import { cn } from "@/lib/utils";
-
-/** Where a score sits on the rating scale. */
-function scoreTone(score: number): Rating {
-  if (score >= 7.5) return "good";
-  if (score >= 5) return "fair";
-  return "poor";
-}
 
 /**
  * The headline verdict.
@@ -18,6 +12,10 @@ function scoreTone(score: number): Rating {
  * on the page and sits above everything else. The number is financial health
  * only — valuation is scored separately, because an expensive share price says
  * nothing about whether the business underneath is sound.
+ *
+ * The three model figures — Piotroski, Altman and Beneish — are not repeated
+ * here. They sat in this card and again in the scorecard beneath it; the
+ * scorecard is where they belong, with every check and threshold beside them.
  */
 export function VerdictCard({
   report,
@@ -26,108 +24,25 @@ export function VerdictCard({
   report: HealthReport;
   companyName: string;
 }) {
-  /*
-    Market value deliberately takes no reporting currency. It is the traded
-    price multiplied by the share count, so it is denominated in whatever the
-    shares change hands in — SK hynix files in won but its US listing trades in
-    dollars, and labelling that figure ₩ would be a new error in place of the
-    old one.
-  */
   const score = report.score;
-  const tone = score == null ? "unknown" : scoreTone(score);
+  const tone = healthRating(score);
 
   return (
     <Card>
-      <div>
-        <div className="flex flex-col gap-6 p-6 lg:flex-row lg:items-center">
-          {/* Hero score */}
-          <div className="flex items-center gap-5">
-            <ScoreDial score={score} tone={tone} />
-            <div className="min-w-0">
-              <p className="eyebrow">Financial health</p>
-              <p className="font-display mt-1.5 text-2xl sm:text-[1.75rem]">
-                {report.headline}
-              </p>
-              <p className="mt-1.5 text-xs text-muted">
-                From {companyName}&apos;s
-                {report.fiscalYear ? ` FY${report.fiscalYear} ` : " latest "}
-                annual filing · share price scored separately
-              </p>
-            </div>
-          </div>
-
-          {/* Model scores */}
-          <dl className="grid grid-cols-3 gap-4 border-t border-border pt-4 lg:w-auto lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-            <Metric
-              label="Piotroski"
-              value={
-                report.piotroski.maxScore
-                  ? `${report.piotroski.score}/${report.piotroski.maxScore}`
-                  : "—"
-              }
-              hint={
-                <MetricGuideBody
-                  id="piotroski"
-                  note="Nine yes-or-no checks of whether the finances improved this year. More is better."
-                />
-              }
-            />
-            <Metric
-              label={
-                report.altman.value?.variant === "manufacturing-book"
-                  ? "Altman Z′"
-                  : "Altman Z"
-              }
-              value={report.altman.value ? report.altman.value.z.toFixed(2) : "n/a"}
-              hint={
-                report.altman.value ? (
-                  <MetricGuideBody id="altman" note={altmanHint(report.altman.value.variant)} />
-                ) : (
-                  report.altman.reason
-                )
-              }
-            />
-            <Metric
-              label="Beneish M"
-              value={report.beneish.value ? report.beneish.value.m.toFixed(2) : "n/a"}
-              hint={
-                report.beneish.value ? (
-                  <MetricGuideBody id="beneish" note="Screens for unusual accounting. Below −1.78 is normal." />
-                ) : (
-                  report.beneish.reason
-                )
-              }
-            />
-          </dl>
+      <div className="flex items-center gap-5 p-6">
+        <ScoreDial score={score} tone={tone} />
+        <div className="min-w-0">
+          <p className="eyebrow">Financial health</p>
+          <p className="font-display mt-1.5 text-2xl sm:text-[1.75rem]">{report.headline}</p>
+          <p className="mt-1.5 text-xs text-muted">
+            From {companyName}&apos;s
+            {report.fiscalYear ? ` FY${report.fiscalYear} ` : " latest "}
+            annual filing · share price scored separately
+          </p>
         </div>
       </div>
     </Card>
   );
-}
-
-/**
- * Which Altman model produced the number, and why it matters.
- *
- * The book-value variant reads very differently for companies that have bought
- * back a lot of stock — buybacks shrink book equity, dragging the score down
- * without the business having changed. Naming the model stops that looking like
- * an error.
- */
-function altmanHint(
-  variant: "manufacturing" | "manufacturing-book" | "non-manufacturing",
-): string {
-  switch (variant) {
-    case "manufacturing":
-      return "Distance from bankruptcy risk, using market value. Above 2.99 is the safe zone.";
-    case "manufacturing-book":
-      return (
-        "Distance from bankruptcy risk. No share price is available, so this uses Altman's " +
-        "book-value model (Z′), where above 2.9 is the safe zone. Companies that have bought " +
-        "back a lot of shares score lower on this variant."
-      );
-    case "non-manufacturing":
-      return "Distance from bankruptcy risk, using the model for non-manufacturers. Above 2.6 is safe.";
-  }
 }
 
 function ScoreDial({ score, tone }: { score: number | null; tone: Rating }) {
@@ -214,37 +129,6 @@ export function QuestionCard({ question }: { question: Question }) {
           />
         ))}
       </dl>
-    </Card>
-  );
-}
-
-/** Compact summary of all five questions, for scanning before reading. */
-export function QuestionSummary({ questions }: { questions: Question[] }) {
-  const points: Record<Rating, number | null> = {
-    good: 1,
-    fair: 0.6,
-    poor: 0.2,
-    unknown: null,
-  };
-
-  return (
-    <Card className="p-5">
-      <p className="eyebrow mb-3">At a glance</p>
-      <ul className="space-y-3">
-        {questions.map((q) => (
-          <li key={q.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5">
-            <span className="truncate text-sm font-medium">{q.question}</span>
-            <RatingBadge rating={q.rating} />
-            <div className="col-span-2">
-              <MeterBar
-                value={points[q.rating]}
-                rating={q.rating}
-                label={`${q.question} rated ${q.rating}`}
-              />
-            </div>
-          </li>
-        ))}
-      </ul>
     </Card>
   );
 }

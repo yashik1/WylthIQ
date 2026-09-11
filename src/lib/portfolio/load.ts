@@ -3,6 +3,7 @@ import { getDb, isDatabaseConfigured } from "../db";
 import { companies, financials, scores } from "../db/schema";
 import { getRate } from "../fx";
 import { getProvider } from "../providers";
+import { freeCashFlowOf } from "../scoring/returns";
 import type { SavedHolding } from "./actions";
 import { buildIntelligence, type HoldingProfile, type PortfolioIntelligence } from "./intelligence";
 import { valueHoldings, type CurrencyTotal, type PricedHolding, type ValuedHolding } from "./math";
@@ -106,12 +107,7 @@ async function storedScores(symbols: string[]): Promise<{
 
     const freeCashFlow = new Map<number, number | null>();
     for (const [companyId, year] of latest) {
-      freeCashFlow.set(
-        companyId,
-        year.operatingCashFlow != null && year.capex != null
-          ? year.operatingCashFlow - Math.abs(year.capex)
-          : null,
-      );
+      freeCashFlow.set(companyId, freeCashFlowOf(year.operatingCashFlow, year.capex));
     }
 
     return { bySymbol: new Map(rows.map((row) => [row.symbol, row])), freeCashFlow };

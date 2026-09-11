@@ -7,6 +7,7 @@ import { type SectorKind } from "./applicability";
 import { beneishMScore } from "./beneish";
 import { div, round, sub } from "./math";
 import { piotroskiFScore } from "./piotroski";
+import { freeCashFlowOf } from "./returns";
 import type { AltmanResult, BeneishResult, PiotroskiResult, Rating, ScoreResult } from "./types";
 
 /** One of the five plain-English questions shown on a stock page. */
@@ -126,7 +127,7 @@ function profitabilityQuestion(f: Getter, amount: Amount): Question {
   // written, those companies would appear to generate cash by spending it.
   const capexRaw = f("capex");
   const capex = capexRaw == null ? null : Math.abs(capexRaw);
-  const freeCashFlow = ocf == null || capex == null ? null : ocf - capex;
+  const freeCashFlow = freeCashFlowOf(ocf, capexRaw);
 
   let rating: Rating = "unknown";
   let answer = "This company has not reported enough detail to tell.";

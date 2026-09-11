@@ -11,14 +11,14 @@ interface Step {
 /**
  * A quiet guide through a company page.
  *
- * Seven steps in the order the roadmap's research loop runs — understand,
- * check health, see what changed, compare, read the filing, save, write a
- * thesis — each a link to the part of the page that answers it. Saving and a
- * thesis show as done when they are, since those are the two a reader does
- * rather than reads.
+ * Seven steps in the order the research loop runs — understand, check health,
+ * see what changed, compare, read the filing, save, write a thesis — each a
+ * link to the part of the page that answers it. Saving and a thesis show as
+ * done when they are, since those are the two a reader does rather than reads.
  *
- * Beneath it, collapsed, the eight questions a newcomer can work through, each
- * pointing at the section that answers it and at the guide that explains how.
+ * The newcomer's eight-question checklist is not repeated here. It lives on
+ * the Learn page, and a single link points there, rather than a second copy
+ * sitting beside the section strip and these steps.
  */
 export function ResearchJourney({
   symbol,
@@ -49,55 +49,24 @@ export function ResearchJourney({
     { label: hasThesis ? "Review your thesis" : "Build a thesis", href: "#thesis", done: hasThesis },
   ];
 
-  const questions: { question: string; section: string; guide: { label: string; href: string } }[] = [
-    { question: "What does the company do?", section: hasOverview ? "#overview" : "#what-it-does", guide: { label: "How to analyze a company", href: "/how-to-analyze-a-company" } },
-    { question: "Is it profitable?", section: "#questions", guide: { label: "Reading an income statement", href: "/how-to-read-an-income-statement" } },
-    { question: "Is it growing?", section: hasChanges ? "#what-changed" : "#questions", guide: { label: "Revenue", href: "/learn#revenue" } },
-    { question: "Does it generate cash?", section: "#statements", guide: { label: "What is free cash flow?", href: "/what-is-free-cash-flow" } },
-    { question: "How much debt does it have?", section: "#questions", guide: { label: "Reading a balance sheet", href: "/how-to-read-a-balance-sheet" } },
-    { question: "How is it valued?", section: "#key-figures", guide: { label: "What is the P/E ratio?", href: "/what-is-price-to-earnings" } },
-    { question: "What changed?", section: hasChanges ? "#what-changed" : "#timeline", guide: { label: "Financial health score", href: "/learn#health-score" } },
-    { question: "What risks should I investigate?", section: "#warning-signs", guide: { label: "What is the Beneish M-Score?", href: "/what-is-beneish-m-score" } },
-  ];
-
   return (
-    <div className="space-y-2">
-      <nav aria-label="Research steps">
-        <ol className="flex list-none flex-wrap items-center gap-x-1 gap-y-1.5 text-xs">
-          {steps.map((step, index) => (
-            <li key={step.label} className="flex items-center gap-1">
-              {index > 0 && (
-                <span aria-hidden className="px-0.5 text-faint">
-                  ›
-                </span>
-              )}
-              <StepLink step={step} number={index + 1} />
-            </li>
-          ))}
-        </ol>
-      </nav>
-
-      <details className="group text-xs">
-        <summary className="cursor-pointer text-muted transition-colors hover:text-foreground">
-          New to financial analysis? Eight questions to work through
-        </summary>
-        <ol className="mt-2 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,17rem),1fr))] gap-x-6 gap-y-1.5">
-          {questions.map((item, index) => (
-            <li key={item.question} className="flex gap-2">
-              <span className="tnum w-4 shrink-0 text-faint">{index + 1}.</span>
-              <span className="min-w-0">
-                <a href={item.section} className="font-medium text-foreground hover:text-accent hover:underline">
-                  {item.question}
-                </a>{" "}
-                <Link href={item.guide.href} className="text-muted underline-offset-2 hover:text-accent hover:underline">
-                  {item.guide.label}
-                </Link>
+    <nav aria-label="Research steps" className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+      <ol className="flex list-none flex-wrap items-center gap-x-1 gap-y-1.5">
+        {steps.map((step, index) => (
+          <li key={step.label} className="flex items-center gap-1">
+            {index > 0 && (
+              <span aria-hidden className="px-0.5 text-faint">
+                ›
               </span>
-            </li>
-          ))}
-        </ol>
-      </details>
-    </div>
+            )}
+            <StepLink step={step} number={index + 1} />
+          </li>
+        ))}
+      </ol>
+      <Link href="/learn#checklist" className="text-muted underline-offset-2 hover:text-accent hover:underline">
+        New to financial analysis?
+      </Link>
+    </nav>
   );
 }
 
