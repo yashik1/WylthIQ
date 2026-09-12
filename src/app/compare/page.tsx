@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CompareChart } from "@/components/compare-chart";
+import { FundComparisonCard } from "@/components/compare/fund-comparison";
+import { loadFundComparison } from "@/lib/etf/compare-funds";
 import { Badge, Card, CardHeader, Change, NotReported, PageHeader, RatingBadge } from "@/components/ui";
 import { loadComparison, MAX_COMPARE, parseSymbols, type CompareItem } from "@/lib/compare";
 import { money, multiple, percent, price as fmtPrice } from "@/lib/format";
@@ -32,6 +34,22 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
   const charted = items.filter((i) => !i.error);
   const chartable = charted.map((i) => i.symbol);
   const fundsOnly = charted.length > 0 && charted.every((i) => i.type === "etf");
+
+  /*
+    Funds get their own table.
+
+    Every row of the company comparison below — revenue growth, margin, debt —
+    is inapplicable to a fund, so comparing two ETFs answered the reader with
+    a screen of dashes and a note explaining the dashes. Cost, income, spread
+    and record are the rows they can actually be compared on.
+  */
+  const fundItems = charted.filter((i) => i.type === "etf");
+  const fundComparison =
+    fundItems.length >= 2
+      ? await loadFundComparison(
+          fundItems.map((i) => ({ symbol: i.symbol, name: i.name, quote: i.quote })),
+        ).catch(() => null)
+      : null;
 
   return (
     <div className="space-y-5">
@@ -118,10 +136,22 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
             </Card>
           )}
 
-          <Card>
-            <CardHeader title="Side by side" subtitle="Latest annual figures from each company's filings" />
-            <ComparisonTable items={items} />
-          </Card>
+          {fundComparison && <FundComparisonCard comparison={fundComparison} />}
+
+          {/*
+            The company table only when there is a company in the comparison.
+
+            Every row of it is a question about a business — revenue, margin,
+            debt — so a comparison of nothing but funds rendered it as a grid
+            of dashes under a note explaining the dashes. The fund table above
+            asks what these holdings can actually answer.
+          */}
+          {!fundsOnly && (
+            <Card>
+              <CardHeader title="Side by side" subtitle="Latest annual figures from each company's filings" />
+              <ComparisonTable items={items} />
+            </Card>
+          )}
 
           <PeerContextCard items={items} />
 
