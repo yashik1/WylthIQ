@@ -321,11 +321,30 @@ export function addressSearchResults<T extends ListingPlace & { symbol: string }
 }
 
 /**
+ * Whether a listing sits on a venue that mainly carries other exchanges' listings.
+ *
+ * Cboe Canada to Toronto: most Toronto ETFs are quoted there as well, at a
+ * fraction of the volume. Which one a reader means is the home exchange.
+ */
+export function isSecondaryVenue(place: ListingPlace): boolean {
+  const suffix = suffixForListing(place);
+  return suffix ? Boolean(EXCHANGES[suffix]?.secondary) : false;
+}
+
+/**
  * The listing a bare ticker names, out of every listing with that ticker.
  *
  * The US one when there is one, because a bare ticker is a US ticker on this
- * site and a suffixed one is everything else. Otherwise the first, which the
- * symbol directory orders primary venue first.
+ * site and a suffixed one is everything else. Then the home exchange, ahead of
+ * a venue that merely also carries the listing.
+ *
+ * That second rule used to be "whichever the directory returned first", on the
+ * assumption that it orders primary venue first. It does not. Asked about
+ * three Canadian dividend ETFs it put Toronto first for VDY and XEI and Cboe
+ * Canada first for ZDV — so ZDV alone resolved to ZDV.NE, where the fund
+ * trades so rarely that a year of history came back as a single print. Two of
+ * the three charted a year, the third charted one dot, and nothing on the page
+ * could explain why.
  */
 export function listingForBareTicker<T extends ListingPlace & { symbol: string }>(
   symbol: string,
@@ -333,5 +352,11 @@ export function listingForBareTicker<T extends ListingPlace & { symbol: string }
 ): T | null {
   const upper = symbol.trim().toUpperCase();
   const same = listings.filter((l) => l.symbol.toUpperCase() === upper);
-  return same.find((l) => isUsListing(l)) ?? same[0] ?? null;
+
+  return (
+    same.find((l) => isUsListing(l)) ??
+    same.find((l) => !isSecondaryVenue(l)) ??
+    same[0] ??
+    null
+  );
 }

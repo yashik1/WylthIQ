@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addressSearchResults,
+  isSecondaryVenue,
   listingForBareTicker,
   listingSymbol,
   matchesListing,
@@ -230,8 +231,40 @@ describe("the listing a bare ticker names", () => {
     expect(listingForBareTicker("QQC", listings)?.exchange).toBe("TSX");
   });
 
+  /*
+    The directory's order is not a ranking. Asked about three Canadian
+    dividend ETFs it put Toronto first for VDY and XEI and Cboe Canada first
+    for ZDV, where that fund trades so rarely that a year of history came back
+    as a single print — one chart out of three drew a dot.
+  */
+  it("is the home exchange even when the directory lists the secondary venue first", () => {
+    const listings = [
+      { symbol: "ZDV", exchange: "NEO", country: "Canada" },
+      { symbol: "ZDV", exchange: "TSX", country: "Canada" },
+    ];
+    expect(listingForBareTicker("ZDV", listings)?.exchange).toBe("TSX");
+  });
+
+  it("is the secondary venue when that is the only place it trades", () => {
+    const listings = [{ symbol: "HBIT", exchange: "NEO", country: "Canada" }];
+    expect(listingForBareTicker("HBIT", listings)?.exchange).toBe("NEO");
+  });
+
   it("ignores listings of other tickers", () => {
     const listings = [{ symbol: "QQCC", exchange: "NASDAQ", country: "United States" }];
     expect(listingForBareTicker("QQC", listings)).toBeNull();
+  });
+});
+
+describe("venues that carry another exchange's listings", () => {
+  it("knows Cboe Canada from Toronto", () => {
+    expect(isSecondaryVenue({ exchange: "NEO", country: "Canada" })).toBe(true);
+    expect(isSecondaryVenue({ exchange: "Cboe Canada", country: "Canada" })).toBe(true);
+    expect(isSecondaryVenue({ exchange: "TSX", country: "Canada" })).toBe(false);
+  });
+
+  it("treats a US listing and an unplaceable one as primary", () => {
+    expect(isSecondaryVenue({ exchange: "NYSE", country: "United States" })).toBe(false);
+    expect(isSecondaryVenue({ exchange: "SOME-NEW-VENUE", country: "Narnia" })).toBe(false);
   });
 });
