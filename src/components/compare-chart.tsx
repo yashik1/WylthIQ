@@ -43,7 +43,21 @@ const RANGES: { label: string; days: RangeDays; timeframe: Timeframe }[] = [
   { label: "YTD", days: daysSinceStartOfYear, timeframe: "1Day" },
   { label: "1Y", days: 365, timeframe: "1Day" },
   { label: "5Y", days: 365 * 5, timeframe: "1Week" },
+  /*
+    The whole of it.
+
+    A fund is judged on what it has done since it launched, and the chart
+    stopped at five years — so comparing three dividend ETFs, the one question
+    they exist to answer could not be asked here. Weekly, because twenty-five
+    years of daily bars is tens of thousands of points to draw one line, and
+    labelled "Since inception" when every line is a fund, which is what the
+    window then actually is.
+  */
+  { label: "Max", days: 365 * 25, timeframe: "1Week" },
 ];
+
+/** A gap wider than this between first prices is worth telling the reader about. */
+const STAGGER_SECONDS = 45 * 86_400;
 
 interface Series {
   symbol: string;
@@ -151,7 +165,14 @@ function cssVar(name: string, fallback: string) {
  * not comparable — a $600 share moving $6 and a $60 share moving $6 are very
  * different events, and plotting them together would imply otherwise.
  */
-export function CompareChart({ symbols }: { symbols: string[] }) {
+export function CompareChart({
+  symbols,
+  fundsOnly = false,
+}: {
+  symbols: string[];
+  /** True when every symbol charted is a fund, which gives "Max" its real name. */
+  fundsOnly?: boolean;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRefs = useRef<ISeriesApi<"Line">[]>([]);
@@ -164,6 +185,19 @@ export function CompareChart({ symbols }: { symbols: string[] }) {
   const range =
     RANGES.find((r) => r.label === rangeLabel) ??
     RANGES.find((r) => r.label === "1Y")!;
+
+  /*
+    Whether the lines start at the same time.
+
+    Every line is rebased to its own first price, so two funds of different
+    ages both start at 0% — and over a full-history window one of them may
+    have had a decade longer to get where it is. Weekly bars rarely land on
+    the same day, so this is judged in weeks rather than by an exact date.
+  */
+  const starts = series
+    .map((s) => s.bars[0]?.time)
+    .filter((t): t is number => typeof t === "number");
+  const staggered = starts.length > 1 && Math.max(...starts) - Math.min(...starts) > STAGGER_SECONDS;
   const key = symbols.join(",");
   // Resolved once per render so the request and the effect's dependency agree,
   // and so year-to-date is measured at one instant rather than twice.
@@ -305,7 +339,7 @@ export function CompareChart({ symbols }: { symbols: string[] }) {
                 rangeLabel === r.label ? "bg-accent text-accent-fg" : "text-muted hover:text-foreground",
               )}
             >
-              {r.label}
+              {r.label === "Max" && fundsOnly ? "Since inception" : r.label}
             </button>
           ))}
         </div>
@@ -325,10 +359,15 @@ export function CompareChart({ symbols }: { symbols: string[] }) {
                 if (!base || !last) return null;
                 const pct = ((last - base) / base) * 100;
                 return (
-                  <span className={cn("tnum", pct >= 0 ? "text-up" : "text-down")}>
-                    {pct >= 0 ? "+" : ""}
-                    {pct.toFixed(1)}%
-                  </span>
+                  <>
+                    <span className={cn("tnum", pct >= 0 ? "text-up" : "text-down")}>
+                      {pct >= 0 ? "+" : ""}
+                      {pct.toFixed(1)}%
+                    </span>
+                    {staggered && (
+                      <span className="font-normal text-faint">from {monthOf(s.bars[0].time)}</span>
+                    )}
+                  </>
                 );
               })()}
             </li>
@@ -375,9 +414,29 @@ export function CompareChart({ symbols }: { symbols: string[] }) {
         )}
       </div>
 
-      {status === "ready" && <BasisNote basis={basisOf(series)} />}
+      {status === "ready" && (
+        <>
+          {staggered && (
+            <p className="text-xs leading-relaxed text-muted">
+              These lines do not all start at the same date — each begins at its own
+              first price, which for a fund is close to when it launched. A longer
+              line has had longer to compound, so the percentages are each symbol&apos;s
+              own record rather than a like-for-like race.
+            </p>
+          )}
+          <BasisNote basis={basisOf(series)} />
+        </>
+      )}
     </div>
   );
+}
+
+/** "Nov 2012" — the month a line starts, matching the chart's own axis. */
+function monthOf(time: number): string {
+  return new Date(time * 1000).toLocaleDateString(undefined, {
+    month: "short",
+    year: "numeric",
+  });
 }
 
 /**

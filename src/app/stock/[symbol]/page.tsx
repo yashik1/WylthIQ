@@ -56,6 +56,7 @@ import { getFundReport, loadFundMap } from "@/lib/etf/fund-filings";
 import { getEtfProfile, yahoo } from "@/lib/providers";
 import { isSameListing, summariseIncome } from "@/lib/etf/income";
 import { getFundAnalytics } from "@/lib/etf/fund-analytics";
+import { getSinceInception } from "@/lib/etf/since-inception";
 import { getSubsidiaries } from "@/lib/company/subsidiaries";
 import { EarlySignals } from "@/components/stock/early-signals";
 import { displayName } from "@/lib/company-name";
@@ -435,9 +436,15 @@ async function StockBody({
     read and the price history it already fetches. Last, because the valuation
     needs the holdings list the profile above carries.
   */
-  const analytics = isFund
-    ? await getFundAnalytics(upper, fundProfile?.holdings ?? []).catch(() => null)
-    : null;
+  const [analytics, sinceLaunch] = isFund
+    ? await Promise.all([
+        getFundAnalytics(upper, fundProfile?.holdings ?? []).catch(() => null),
+        // What it has returned over its whole life, which is the one figure a
+        // fund is usually judged on and the only one that does not depend on
+        // where the chart window happens to start.
+        getSinceInception(upper, fundProfile?.inceptionDate ?? null),
+      ])
+    : [null, null];
   const signedIn = Boolean(session?.user?.id);
   const alreadySaved = saved.some((s) => s.symbol === upper);
 
@@ -907,6 +914,7 @@ async function StockBody({
               quote={quote}
               income={income}
               range={usableIncome}
+              since={sinceLaunch}
               analytics={analytics}
               currency={data.displayCurrency}
               filesWithSec={Boolean(fund)}

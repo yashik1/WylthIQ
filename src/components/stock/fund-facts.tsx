@@ -1,5 +1,7 @@
 import { Card, CardHeader, Metric } from "@/components/ui";
-import { count, money, num, percent, price } from "@/lib/format";
+import { count, money, num, percent, price, signedPercent } from "@/lib/format";
+import type { SinceInception } from "@/lib/etf/since-inception";
+import { cn } from "@/lib/utils";
 import { feeOn, type IncomeSummary } from "@/lib/etf/income";
 import { describeBeta } from "@/lib/etf/beta";
 import type { FundAnalytics } from "@/lib/etf/fund-analytics";
@@ -29,6 +31,7 @@ export function FundFacts({
   quote,
   income,
   range: yearRange,
+  since,
   analytics,
   currency,
   filesWithSec,
@@ -40,6 +43,8 @@ export function FundFacts({
     fiftyTwoWeekLow: number | null;
     fiftyTwoWeekHigh: number | null;
   } | null;
+  /** What it has returned over its whole life, where the launch date is known. */
+  since: SinceInception | null;
   analytics: FundAnalytics | null;
   /**
    * The currency this listing trades in.
@@ -145,7 +150,12 @@ export function FundFacts({
         </p>
       )}
 
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-4 px-5 py-4 sm:grid-cols-4">
+      <dl
+        className={cn(
+          "grid grid-cols-2 gap-x-4 gap-y-4 px-5 py-4 sm:grid-cols-4",
+          since && "lg:grid-cols-5",
+        )}
+      >
         <Metric
           label="Expense ratio"
           value={
@@ -167,6 +177,15 @@ export function FundFacts({
           value={launched(profile?.inceptionDate ?? null)}
           size="lg"
         />
+        {since && (
+          <Metric
+            label={since.inceptionDate ? "Since inception" : "Full history"}
+            value={signedPercent(since.totalReturn, 0)}
+            size="lg"
+            tone={since.totalReturn >= 0 ? "up" : "down"}
+            hint={sinceHint(since)}
+          />
+        )}
         <Metric
           label="Turnover"
           value={profile?.turnover == null ? "—" : percent(profile.turnover, 0)}
@@ -420,6 +439,38 @@ function FigureSource({ source }: { source: EtfProfileSource }) {
  * `1999-03-10` in a row of percentages reads as a serial number. Formatted
  * from the string's own parts, so no timezone can move it.
  */
+/**
+ * What the since-inception figure actually covers, in a sentence.
+ *
+ * Three things a reader cannot see in the number itself: the window it covers
+ * — which is the dates priced, not always the life of the fund — the pace
+ * that works out at, and whether distributions are in it. The last matters
+ * most here: this card sits beside a dividend yield, and on a fund paying 4%
+ * a price-only decade is missing about half of what a holder received.
+ */
+function sinceHint(since: SinceInception): string {
+  const window =
+    since.inceptionDate == null
+      ? `From ${launched(since.from, true)}, the earliest price on record. This fund's manager does not publish a launch date to the sources this page reads, so the window may start after it actually launched.`
+      : since.partial
+        ? `From ${launched(since.from, true)}, the earliest price on record; the fund launched ${launched(since.inceptionDate)}.`
+        : `From its launch in ${launched(since.inceptionDate)}.`;
+
+  const pace =
+    since.perYear != null
+      ? ` That works out at ${signedPercent(since.perYear, 1)} a year over ${since.years.toFixed(1)} years.`
+      : "";
+
+  const basis =
+    since.includesDividends === true
+      ? " Distributions are reinvested in the prices behind it."
+      : since.includesDividends === false
+        ? " Price only: distributions are not included, so a fund paying an income has returned more than this."
+        : " Whether distributions are in the prices behind it is not known.";
+
+  return `${window}${pace}${basis}`;
+}
+
 function launched(date: string | null, withDay = false): string {
   if (!date) return "—";
   const [y, m, d] = date.split("-").map(Number);

@@ -29,7 +29,9 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
   const params = await searchParams;
   const symbols = parseSymbols(params.symbols);
   const items = symbols.length > 0 ? await loadComparison(symbols) : [];
-  const chartable = items.filter((i) => !i.error).map((i) => i.symbol);
+  const charted = items.filter((i) => !i.error);
+  const chartable = charted.map((i) => i.symbol);
+  const fundsOnly = charted.length > 0 && charted.every((i) => i.type === "etf");
 
   return (
     <div className="space-y-5">
@@ -110,7 +112,8 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
                 subtitle="Rebased so every symbol starts at 0%"
               />
               <div className="p-5">
-                <CompareChart symbols={chartable} />
+                {/* Funds have a launch date, so their full history has a name. */}
+                <CompareChart symbols={chartable} fundsOnly={fundsOnly} />
               </div>
             </Card>
           )}

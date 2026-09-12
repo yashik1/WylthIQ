@@ -183,6 +183,26 @@ async function resolveYahooSymbol(symbol: string): Promise<string | null> {
 }
 
 /**
+ * Whether a chart response is Yahoo's placeholder rather than a real listing.
+ *
+ * Asked for a bare foreign ticker, Yahoo does not answer 404. It answers with
+ * a stub: `instrumentType: "ECNQUOTE"`, no currency, and an exchange of
+ * "NasdaqGS" whatever the ticker. The stub carries no history — or, now and
+ * then, a single stray off-exchange print.
+ *
+ * That one print was enough to satisfy "did the direct lookup work?" below,
+ * so the exchange-suffixed lookup after it never ran: ZDV drew as a single
+ * dot, while VDY and XEI, whose stubs came back empty, fell through and drew
+ * a full year from Toronto. Three funds of the same kind, two charts and one
+ * dot, for no reason a reader could see.
+ *
+ * A placeholder is not a listing, so it counts as no answer at all.
+ */
+function isPlaceholderListing(meta: { instrumentType?: string } | undefined): boolean {
+  return meta?.instrumentType === "ECNQUOTE";
+}
+
+/**
  * Reads an RSS feed without pulling in an XML parser.
  *
  * The feed is a fixed, narrow shape — a flat list of items with five fields —
@@ -358,6 +378,8 @@ export class YahooProvider {
 
       const json = (await res.json()) as YahooChart;
       const result = json.chart?.result?.[0];
+      if (isPlaceholderListing(result?.meta)) return [];
+
       const quote = result?.indicators?.quote?.[0];
       if (!result?.timestamp || !quote) return [];
 
@@ -608,7 +630,7 @@ export class YahooProvider {
 
       const json = (await res.json()) as YahooChart;
       const meta = json.chart?.result?.[0]?.meta;
-      if (!meta?.regularMarketPrice) return null;
+      if (!meta?.regularMarketPrice || isPlaceholderListing(meta)) return null;
 
       const previous = meta.chartPreviousClose ?? meta.previousClose ?? null;
       const change = previous != null ? meta.regularMarketPrice - previous : null;
@@ -756,6 +778,8 @@ interface YahooChart {
         regularMarketVolume?: number;
         regularMarketTime?: number;
         currency?: string;
+        /** "EQUITY", "ETF", "CRYPTOCURRENCY" — or "ECNQUOTE" for a stub. */
+        instrumentType?: string;
       };
       timestamp?: number[];
       indicators?: {
