@@ -101,6 +101,9 @@ const SECURITY_HEADERS = [
   // Standards-based stylesheet delivery keeps the visual alignment layer
   // separate from the application's data and component logic.
   { key: "Link", value: "</ui-polish.css>; rel=stylesheet" },
+  // Visual-system layer: compact chrome, card hierarchy and control/table
+  // density. It is additive and intentionally separate from route logic.
+  { key: "Link", value: "</visual-system.css>; rel=stylesheet" },
 ];
 
 const nextConfig: NextConfig = {
