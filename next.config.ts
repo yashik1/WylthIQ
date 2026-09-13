@@ -5,9 +5,9 @@ import type { NextConfig } from "next";
  *
  * Everything the browser loads here is same-origin: next/font self-hosts the
  * faces, there are no `remotePatterns` so no external images, and the only
- * outbound calls a page makes are to this app's own /api routes — the
- * providers are all reached server-side. That makes a tight policy realistic
- * rather than aspirational.
+ * outbound calls a page makes are to this app's own /api routes — the providers
+ * are all reached server-side. That makes a tight policy realistic rather than
+ * aspirational.
  *
  * The Content-Security-Policy is deliberately split in two, which is the part
  * worth explaining.
@@ -98,6 +98,9 @@ const SECURITY_HEADERS = [
   // Off by default in modern browsers and actively harmful in old ones, but
   // scanners still flag its absence.
   { key: "X-DNS-Prefetch-Control", value: "off" },
+  // Standards-based stylesheet delivery keeps the visual alignment layer
+  // separate from the application's data and component logic.
+  { key: "Link", value: "</ui-polish.css>; rel=stylesheet" },
 ];
 
 const nextConfig: NextConfig = {
