@@ -121,39 +121,40 @@
 /* -------------------------------------------------------------------------
    BACKTEST
    Parameters form a persistent left rail; results become the primary right
-   column. The explanatory caveat remains attached to the result column so it
-   never floats underneath an unrelated control.
+   column. `#amount` is unique to the backtest form; journal also has a
+   `#symbol` field, so the selector intentionally does not key off that shared
+   id.
    ------------------------------------------------------------------------- */
 
 @media (min-width: 1024px) {
-  main:has(#symbol) > .space-y-5 {
+  main:has(#amount) > .space-y-5 {
     display: grid;
     grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
     gap: 20px;
     align-items: start;
   }
 
-  main:has(#symbol) > .space-y-5 > header {
+  main:has(#amount) > .space-y-5 > header {
     grid-column: 1 / -1;
     grid-row: 1;
   }
 
-  main:has(#symbol) > .space-y-5 > .rounded-xl:has(#symbol) {
+  main:has(#amount) > .space-y-5 > .rounded-xl:has(#amount) {
     grid-column: 1;
     grid-row: 2 / span 8;
     position: sticky;
     top: calc(var(--header-h) + 20px);
   }
 
-  main:has(#symbol) > .space-y-5 > :not(header):not(.rounded-xl:has(#symbol)) {
+  main:has(#amount) > .space-y-5 > :not(header):not(.rounded-xl:has(#amount)) {
     grid-column: 2;
   }
 
-  main:has(#symbol) > .space-y-5 > .space-y-4 {
+  main:has(#amount) > .space-y-5 > .space-y-4 {
     min-width: 0;
   }
 
-  main:has(#symbol) > .space-y-5 .scroll-x {
+  main:has(#amount) > .space-y-5 .scroll-x {
     min-width: 0;
   }
 }
@@ -230,14 +231,14 @@
 
 @media (min-width: 1024px) {
   main:has(#symbols) form,
-  main:has(#symbol) form,
+  main:has(#amount) form,
   main:has(#entryDate) form {
     min-width: 0;
   }
 
   main:has(#symbols) input,
-  main:has(#symbol) input,
-  main:has(#symbol) select,
+  main:has(#amount) input,
+  main:has(#amount) select,
   main:has(#entryDate) input,
   main:has(#entryDate) select,
   main:has(#entryDate) textarea {
@@ -250,19 +251,19 @@
    The rail stops sticking so it cannot trap the reader above the results. */
 @media (max-width: 1023px) {
   main:has(#symbols) > .space-y-5,
-  main:has(#symbol) > .space-y-5,
+  main:has(#amount) > .space-y-5,
   main:has(#entryDate) > .space-y-5 {
     display: block;
   }
 
   main:has(#symbols) > .space-y-5 > *,
-  main:has(#symbol) > .space-y-5 > *,
+  main:has(#amount) > .space-y-5 > *,
   main:has(#entryDate) > .space-y-5 > * {
     margin-bottom: 20px;
   }
 
   main:has(#symbols) > .space-y-5 > .rounded-xl:has(#symbols),
-  main:has(#symbol) > .space-y-5 > .rounded-xl:has(#symbol) {
+  main:has(#amount) > .space-y-5 > .rounded-xl:has(#amount) {
     position: static;
   }
 }
@@ -270,7 +271,7 @@
 /* Prevent long labels, symbols and status messages from creating accidental
    horizontal expansion in a grid cell. */
 main:has(#symbols) .min-w-0,
-main:has(#symbol) .min-w-0,
+main:has(#amount) .min-w-0,
 main:has(#entryDate) .min-w-0 {
   min-width: 0;
 }
