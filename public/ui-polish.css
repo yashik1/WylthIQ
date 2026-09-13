@@ -1,0 +1,277 @@
+/*
+ * WylthIQ workspace alignment layer.
+ *
+ * The application already has the right components and visual language; this
+ * layer standardises the geometry of the research-heavy pages without
+ * changing their data, copy, or interaction model. The :has() selectors use
+ * stable form ids to scope the layout to the intended route, so the shared
+ * component markup remains reusable.
+ */
+
+/* Shared table geometry: one vertical rhythm, one alignment contract. */
+.scroll-x > table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.scroll-x th,
+.scroll-x td {
+  vertical-align: middle;
+}
+
+.scroll-x thead th {
+  white-space: nowrap;
+}
+
+.scroll-x tbody td,
+.scroll-x tbody th {
+  line-height: 1.35;
+}
+
+/* -------------------------------------------------------------------------
+   SCREENER
+   Keep the filter rail stable while the results table owns the remaining
+   width. The existing page already uses this split; these rules make the
+   table's columns deterministic instead of letting long company names push
+   numeric columns around between viewport widths.
+   ------------------------------------------------------------------------- */
+
+@media (min-width: 1024px) {
+  main:has(#minHealth) .scroll-x > table {
+    table-layout: fixed;
+    min-width: 58rem;
+  }
+
+  main:has(#minHealth) .scroll-x th:nth-child(1),
+  main:has(#minHealth) .scroll-x td:nth-child(1) { width: 27%; }
+
+  main:has(#minHealth) .scroll-x th:nth-child(2),
+  main:has(#minHealth) .scroll-x td:nth-child(2) { width: 14%; }
+
+  main:has(#minHealth) .scroll-x th:nth-child(3),
+  main:has(#minHealth) .scroll-x td:nth-child(3) { width: 11%; }
+
+  main:has(#minHealth) .scroll-x th:nth-child(4),
+  main:has(#minHealth) .scroll-x td:nth-child(4) { width: 12%; }
+
+  main:has(#minHealth) .scroll-x th:nth-child(5),
+  main:has(#minHealth) .scroll-x td:nth-child(5),
+  main:has(#minHealth) .scroll-x th:nth-child(6),
+  main:has(#minHealth) .scroll-x td:nth-child(6),
+  main:has(#minHealth) .scroll-x th:nth-child(7),
+  main:has(#minHealth) .scroll-x td:nth-child(7),
+  main:has(#minHealth) .scroll-x th:nth-child(8),
+  main:has(#minHealth) .scroll-x td:nth-child(8) { width: 8%; }
+
+  main:has(#minHealth) .scroll-x th:nth-child(9),
+  main:has(#minHealth) .scroll-x td:nth-child(9) { width: 10%; }
+}
+
+/* -------------------------------------------------------------------------
+   COMPARE
+   Search/selection stays in a compact left rail; the evidence table and
+   contextual cards occupy a single, aligned research column. This removes
+   the large empty horizontal band created by a full-width ticker form.
+   ------------------------------------------------------------------------- */
+
+@media (min-width: 1024px) {
+  main:has(#symbols) > .space-y-5 {
+    display: grid;
+    grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+  }
+
+  main:has(#symbols) > .space-y-5 > header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  main:has(#symbols) > .space-y-5 > .rounded-xl:has(#symbols) {
+    grid-column: 1;
+    grid-row: 2 / span 8;
+    position: sticky;
+    top: calc(var(--header-h) + 20px);
+  }
+
+  main:has(#symbols) > .space-y-5 > .rounded-xl:not(:has(#symbols)) {
+    grid-column: 2;
+  }
+
+  main:has(#symbols) .scroll-x > table {
+    table-layout: fixed;
+    min-width: 48rem;
+  }
+
+  main:has(#symbols) .scroll-x th:first-child,
+  main:has(#symbols) .scroll-x td:first-child {
+    width: 25%;
+  }
+
+  main:has(#symbols) .scroll-x th:not(:first-child),
+  main:has(#symbols) .scroll-x td:not(:first-child) {
+    width: auto;
+  }
+
+  main:has(#symbols) .scroll-x td:not(:first-child) {
+    white-space: nowrap;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   BACKTEST
+   Parameters form a persistent left rail; results become the primary right
+   column. `#amount` is unique to the backtest form; journal also has a
+   `#symbol` field, so the selector intentionally does not key off that shared
+   id.
+   ------------------------------------------------------------------------- */
+
+@media (min-width: 1024px) {
+  main:has(#amount) > .space-y-5 {
+    display: grid;
+    grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+  }
+
+  main:has(#amount) > .space-y-5 > header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  main:has(#amount) > .space-y-5 > .rounded-xl:has(#amount) {
+    grid-column: 1;
+    grid-row: 2 / span 8;
+    position: sticky;
+    top: calc(var(--header-h) + 20px);
+  }
+
+  main:has(#amount) > .space-y-5 > :not(header):not(.rounded-xl:has(#amount)) {
+    grid-column: 2;
+  }
+
+  main:has(#amount) > .space-y-5 > .space-y-4 {
+    min-width: 0;
+  }
+
+  main:has(#amount) > .space-y-5 .scroll-x {
+    min-width: 0;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   JOURNAL
+   The journal has more than a table, so the layout separates the personal
+   dashboard (stats, adherence and breakdowns) from the working log. This is
+   deliberately a wider main column rather than a narrow two-column squeeze.
+   ------------------------------------------------------------------------- */
+
+@media (min-width: 1100px) {
+  main:has(#entryDate) > .space-y-5 {
+    display: grid;
+    grid-template-columns: minmax(270px, 340px) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+  }
+
+  main:has(#entryDate) > .space-y-5 > header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  /* StatsHeadline, EquityCurve, AdherencePanel and the breakdown grid form
+     the compact research rail. */
+  main:has(#entryDate) > .space-y-5 > :nth-child(2),
+  main:has(#entryDate) > .space-y-5 > :nth-child(3),
+  main:has(#entryDate) > .space-y-5 > :nth-child(4),
+  main:has(#entryDate) > .space-y-5 > :nth-child(5) {
+    grid-column: 1;
+  }
+
+  /* Import, entry form, trade log, strategies and notes are the working area. */
+  main:has(#entryDate) > .space-y-5 > :nth-child(n + 6) {
+    grid-column: 2;
+  }
+
+  main:has(#entryDate) > .space-y-5 > :nth-child(5) {
+    min-width: 0;
+  }
+
+  main:has(#entryDate) .scroll-x > table {
+    table-layout: fixed;
+    min-width: 56rem;
+  }
+
+  main:has(#entryDate) .scroll-x th:nth-child(1),
+  main:has(#entryDate) .scroll-x td:nth-child(1) { width: 29%; }
+
+  main:has(#entryDate) .scroll-x th:nth-child(2),
+  main:has(#entryDate) .scroll-x td:nth-child(2) { width: 14%; }
+
+  main:has(#entryDate) .scroll-x th:nth-child(3),
+  main:has(#entryDate) .scroll-x td:nth-child(3),
+  main:has(#entryDate) .scroll-x th:nth-child(4),
+  main:has(#entryDate) .scroll-x td:nth-child(4) { width: 10%; }
+
+  main:has(#entryDate) .scroll-x th:nth-child(5),
+  main:has(#entryDate) .scroll-x td:nth-child(5),
+  main:has(#entryDate) .scroll-x th:nth-child(6),
+  main:has(#entryDate) .scroll-x td:nth-child(6) { width: 8%; }
+
+  main:has(#entryDate) .scroll-x th:nth-child(7),
+  main:has(#entryDate) .scroll-x td:nth-child(7) { width: 8%; }
+
+  main:has(#entryDate) .scroll-x th:nth-child(8),
+  main:has(#entryDate) .scroll-x td:nth-child(8) { width: 13%; }
+}
+
+/* -------------------------------------------------------------------------
+   Shared form polish inside the three workspaces.
+   ------------------------------------------------------------------------- */
+
+@media (min-width: 1024px) {
+  main:has(#symbols) form,
+  main:has(#amount) form,
+  main:has(#entryDate) form {
+    min-width: 0;
+  }
+
+  main:has(#symbols) input,
+  main:has(#amount) input,
+  main:has(#amount) select,
+  main:has(#entryDate) input,
+  main:has(#entryDate) select,
+  main:has(#entryDate) textarea {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+/* On smaller screens every workspace becomes a single readable column again.
+   The rail stops sticking so it cannot trap the reader above the results. */
+@media (max-width: 1023px) {
+  main:has(#symbols) > .space-y-5,
+  main:has(#amount) > .space-y-5,
+  main:has(#entryDate) > .space-y-5 {
+    display: block;
+  }
+
+  main:has(#symbols) > .space-y-5 > *,
+  main:has(#amount) > .space-y-5 > *,
+  main:has(#entryDate) > .space-y-5 > * {
+    margin-bottom: 20px;
+  }
+
+  main:has(#symbols) > .space-y-5 > .rounded-xl:has(#symbols),
+  main:has(#amount) > .space-y-5 > .rounded-xl:has(#amount) {
+    position: static;
+  }
+}
+
+/* Prevent long labels, symbols and status messages from creating accidental
+   horizontal expansion in a grid cell. */
+main:has(#symbols) .min-w-0,
+main:has(#amount) .min-w-0,
+main:has(#entryDate) .min-w-0 {
+  min-width: 0;
+}
