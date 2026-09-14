@@ -20,6 +20,18 @@ export function InvestorBriefCard({
   const filed = calendarDate(source.filedAt);
   const filing = `${companyName}'s FY${source.fiscalYear} ${source.form}${filed ? `, filed ${filed}` : ""}`;
 
+  const rated = health.areas.filter((area) => area.rating !== "unknown");
+  const good = rated.filter((area) => area.rating === "good").map((area) => area.label.toLowerCase());
+  const fair = rated.filter((area) => area.rating === "fair").map((area) => area.label.toLowerCase());
+  const poor = rated.filter((area) => area.rating === "poor").map((area) => area.label.toLowerCase());
+
+  const conclusion =
+    good.length > 0
+      ? `The financial picture is led by ${list(good)}${fair.length ? `, with ${list(fair)} worth watching` : ""}${poor.length ? `, while ${list(poor)} remain weak` : ""}.`
+      : fair.length > 0
+        ? `The financial picture is mixed, with ${list(fair)} needing attention${poor.length ? ` and ${list(poor)} weaker` : ""}.`
+        : "The filing does not provide enough evidence for a clear financial conclusion.";
+
   return (
     <Card>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border px-5 py-3.5">
@@ -42,7 +54,7 @@ export function InvestorBriefCard({
         </p>
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+      <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-2">
         <div className="space-y-5 p-5">
           {brief.business && (
             <Block title="Business">
@@ -50,37 +62,32 @@ export function InvestorBriefCard({
             </Block>
           )}
 
-          <Block title="Financial health">
-            <p className="text-sm font-medium text-muted-strong">{health.headline}</p>
-            <p className="mt-2 text-sm leading-relaxed">
-              {health.summary}{" "}
-              <a href="#health" className="text-accent hover:underline">
-                See the health breakdown
-              </a>
-            </p>
-          </Block>
-
-          <Block title="Bottom line">
-            <p className="text-[0.9375rem] leading-relaxed">{brief.bottomLine}</p>
+          <Block title="Conclusion">
+            <p className="text-[0.9375rem] leading-relaxed">{conclusion}</p>
           </Block>
         </div>
 
-        <div className="p-5">
+        <div className="border-t border-border p-5 lg:border-l lg:border-t-0">
           <Block title="Research path">
             <p className="text-sm leading-relaxed text-muted-strong">
-              The detailed evidence is below: warnings, health, year-over-year
-              changes, the five questions, valuation and financial statements.
+              Use the sections below for the evidence: risks, health scoring, what changed,
+              price and expectations, five questions, key figures and financial statements.
             </p>
           </Block>
         </div>
       </div>
 
       <p className="border-t border-border px-5 py-3 text-xs leading-relaxed text-faint">
-        A summary of what the filings show, not a recommendation. The detailed
-        evidence appears in the sections below.
+        A conclusion from the filings, not a recommendation. Detailed figures and supporting
+        evidence appear in their dedicated sections below.
       </p>
     </Card>
   );
+}
+
+function list(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
