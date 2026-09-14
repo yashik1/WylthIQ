@@ -1,21 +1,17 @@
-import { Card, Explain, Metric } from "@/components/ui";
-import { MetricGuideBody } from "@/components/metric-guide-body";
-import { calendarDate, multiple } from "@/lib/format";
+import { Card } from "@/components/ui";
+import { calendarDate } from "@/lib/format";
 import { SEVERITY_LABEL } from "@/lib/scoring/change-thresholds";
 import type { BriefMove, InvestorBrief } from "@/lib/scoring/investor-brief";
 import { cn } from "@/lib/utils";
 
 /**
- * The first thing on a company page: what the filings say, in one card.
+ * The first thing on a company page: what the filings say, in one compact
+ * conclusion card.
  *
- * Two columns — where the company stands on the left, what is moving on the
- * right — so the whole of it fits on one screen above the detail it
- * summarises. Every move carries the comparison it came from, and the card
- * closes by saying what it is not.
- *
- * It summarises and points; it does not repeat. Health areas are named in a
- * sentence that links to the breakdown, and warning signs are counted and
- * linked rather than copied, since both sit directly beneath this card.
+ * This card is deliberately conclusion-only. Numeric health, valuation and
+ * operating metrics have authoritative homes lower on the page (Financial
+ * Health, Five Questions and Standard Figures). Repeating those numbers here
+ * made the same evidence appear in several different cards.
  */
 export function InvestorBriefCard({
   brief,
@@ -24,7 +20,7 @@ export function InvestorBriefCard({
   brief: InvestorBrief;
   companyName: string;
 }) {
-  const { source, health, valuation } = brief;
+  const { source, health } = brief;
   const filed = calendarDate(source.filedAt);
   const filing = `${companyName}'s FY${source.fiscalYear} ${source.form}${filed ? `, filed ${filed}` : ""}`;
 
@@ -55,31 +51,15 @@ export function InvestorBriefCard({
           {brief.business && (
             <Block title="Business">
               <p className="text-[0.9375rem] leading-relaxed">{brief.business}</p>
-              {brief.scale.length > 0 && (
-                <dl className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,120px),1fr))] gap-3">
-                  {brief.scale.map((s) => (
-                    <Metric key={s.label} label={s.label} value={s.value} hint={s.hint} size="sm" />
-                  ))}
-                </dl>
-              )}
             </Block>
           )}
 
           <Block title="Financial health">
-            <div className="flex flex-wrap items-baseline gap-x-2">
-              <span className="font-display tnum text-[1.75rem] leading-none">
-                {health.score == null ? "—" : health.score.toFixed(1)}
-              </span>
-              <span className="text-sm text-muted">out of 10</span>
-              <Explain term="Financial health score">
-                <MetricGuideBody id="health-score" filing={`From ${filing}`} />
-              </Explain>
-            </div>
-            <p className="mt-1.5 text-sm text-muted-strong">{health.headline}</p>
+            <p className="text-sm font-medium text-muted-strong">{health.headline}</p>
             <p className="mt-2 text-sm leading-relaxed">
               {health.summary}{" "}
               <a href="#health" className="text-accent hover:underline">
-                What the score is made of
+                See the health breakdown
               </a>
             </p>
           </Block>
@@ -145,36 +125,12 @@ export function InvestorBriefCard({
               <p className="text-sm text-muted">Nothing in the filings stands out as a concern.</p>
             )}
           </Block>
-
-          <Block title="Valuation context">
-            <dl className="grid grid-cols-3 gap-3">
-              <Metric
-                label="P/E"
-                value={multiple(valuation.pe, 1)}
-                size="sm"
-                hint={<MetricGuideBody id="pe" />}
-              />
-              <Metric
-                label="P/FCF"
-                value={multiple(valuation.priceToFreeCashFlow, 1)}
-                size="sm"
-                hint={<MetricGuideBody id="price-to-fcf" />}
-              />
-              <Metric
-                label="P/S"
-                value={multiple(valuation.priceToSales, 1)}
-                size="sm"
-                hint={<MetricGuideBody id="ps" />}
-              />
-            </dl>
-            <p className="mt-2 text-sm leading-relaxed text-muted">{valuation.summary}</p>
-          </Block>
         </div>
       </div>
 
       <p className="border-t border-border px-5 py-3 text-xs leading-relaxed text-faint">
-        A summary of what the filings show, not a recommendation. Each point is
-        worked through in the panels below.
+        A summary of what the filings show, not a recommendation. The detailed
+        evidence appears in the sections below.
       </p>
     </Card>
   );
