@@ -1,17 +1,13 @@
 import { Card } from "@/components/ui";
 import { calendarDate } from "@/lib/format";
-import { SEVERITY_LABEL } from "@/lib/scoring/change-thresholds";
-import type { BriefMove, InvestorBrief } from "@/lib/scoring/investor-brief";
-import { cn } from "@/lib/utils";
+import type { InvestorBrief } from "@/lib/scoring/investor-brief";
 
 /**
- * The first thing on a company page: what the filings say, in one compact
- * conclusion card.
+ * The first thing on a company page: a compact conclusion card.
  *
- * This card is deliberately conclusion-only. Numeric health, valuation and
- * operating metrics have authoritative homes lower on the page (Financial
- * Health, Five Questions and Standard Figures). Repeating those numbers here
- * made the same evidence appear in several different cards.
+ * Numeric health, valuation, operating metrics, year-over-year changes and
+ * warning details each have an authoritative section below. The brief should
+ * orient the reader, not print those same data points a second time.
  */
 export function InvestorBriefCard({
   brief,
@@ -69,61 +65,12 @@ export function InvestorBriefCard({
           </Block>
         </div>
 
-        <div className="space-y-5 p-5">
-          <Block title="What's improving">
-            <Moves
-              moves={brief.improving}
-              direction="better"
-              empty={
-                brief.compared
-                  ? "No measure improved by a notable amount."
-                  : "There is no earlier filing to compare against."
-              }
-            />
-          </Block>
-
-          <Block title="What's deteriorating">
-            <Moves
-              moves={brief.deteriorating}
-              direction="worse"
-              empty={
-                brief.compared
-                  ? "No measure deteriorated by a notable amount."
-                  : "There is no earlier filing to compare against."
-              }
-            />
-          </Block>
-
-          <Block title="Biggest thing to watch">
-            {brief.watch ? (
-              <>
-                <p className="text-sm leading-relaxed">{brief.watch.text}</p>
-                <p className="tnum mt-1 text-xs text-faint">
-                  {brief.watch.evidence}
-                  {brief.watch.url && (
-                    <>
-                      {" · "}
-                      {brief.watch.url.startsWith("#") ? (
-                        <a href={brief.watch.url} className="text-accent hover:underline">
-                          see the warning signs
-                        </a>
-                      ) : (
-                        <a
-                          href={brief.watch.url}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="text-accent hover:underline"
-                        >
-                          read the filing
-                        </a>
-                      )}
-                    </>
-                  )}
-                </p>
-              </>
-            ) : (
-              <p className="text-sm text-muted">Nothing in the filings stands out as a concern.</p>
-            )}
+        <div className="p-5">
+          <Block title="Research path">
+            <p className="text-sm leading-relaxed text-muted-strong">
+              The detailed evidence is below: warnings, health, year-over-year
+              changes, the five questions, valuation and financial statements.
+            </p>
           </Block>
         </div>
       </div>
@@ -142,34 +89,5 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
       <h3 className="eyebrow text-[0.625rem]">{title}</h3>
       <div className="mt-2">{children}</div>
     </div>
-  );
-}
-
-function Moves({
-  moves,
-  direction,
-  empty,
-}: {
-  moves: BriefMove[];
-  direction: "better" | "worse";
-  empty: string;
-}) {
-  if (moves.length === 0) return <p className="text-sm text-muted">{empty}</p>;
-
-  return (
-    <ul className="space-y-2.5">
-      {moves.map((move) => (
-        <li key={`${move.period}-${move.key}`} className="text-sm">
-          <span className="font-medium">{move.label}</span>{" "}
-          <span className={cn("tnum font-semibold", direction === "better" ? "text-good" : "text-poor")}>
-            <span className="sr-only">{direction === "better" ? "improved" : "deteriorated"}: </span>
-            {move.delta}
-          </span>
-          <span className="tnum mt-0.5 block text-xs text-muted">
-            {move.from} → {move.to} · {move.period} · {SEVERITY_LABEL[move.severity]}
-          </span>
-        </li>
-      ))}
-    </ul>
   );
 }
