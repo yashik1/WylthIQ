@@ -1,5 +1,6 @@
 import { Card } from "@/components/ui";
 import type { BusinessSummary } from "@/lib/scoring/business";
+import type { Highlights } from "@/lib/scoring/highlights";
 
 /**
  * The business description is deliberately qualitative. Financial scale
@@ -19,10 +20,14 @@ export function WhatItDoes({ summary }: { summary: BusinessSummary }) {
 }
 
 /**
- * Compatibility export for older callers. The stock page now gets its
- * authoritative strengths and risks from the Investor Brief and Five
- * Questions, so rendering another copy here only duplicates data.
+ * Compatibility export for older callers.
+ *
+ * The stock page still passes the previously computed highlights object, so
+ * keep the prop in the public component signature while deliberately not
+ * rendering it. Strengths and risks now have their authoritative homes in
+ * the Investor Brief and Five Questions; rendering this block again would
+ * reintroduce the duplication that the stock-page cleanup removed.
  */
-export function StrengthsAndRisks() {
+export function StrengthsAndRisks(_props: { highlights?: Highlights }) {
   return null;
 }
