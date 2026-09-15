@@ -14,7 +14,7 @@ import type { MarketSnapshot, Mover, SectorPerformance } from "@/lib/market";
  * real time.
  */
 export function MarketOverview({ snapshot }: { snapshot: MarketSnapshot }) {
-  const { gainers, losers, sectors, asOf, covered, behind, ageDays, stale } = snapshot;
+  const { gainers, losers, sectors, asOf, covered, behind, ahead, ageDays, stale } = snapshot;
 
   /*
     Says so when the numbers are old, rather than leaving the timestamp to
@@ -42,9 +42,10 @@ export function MarketOverview({ snapshot }: { snapshot: MarketSnapshot }) {
             <>
               Across {covered} companies, as of{" "}
               <LocalTime value={asOf} mode="datetime" showZone />.
-              {/* A company with no price from that day is left out rather than
-                  ranked on an older day's move. */}
-              {behind > 0 && ` ${behind} more have no price from that day and are left out.`}
+              {/* The day shown is the one most companies share. Companies priced
+                  on any other day are counted here rather than ranked beside it. */}
+              {ahead > 0 && ` ${ahead} have a newer price, too few to rank on their own.`}
+              {behind > 0 && ` ${behind} more have only an older price and are left out.`}
             </>
           ) : (
             `Across ${covered} companies.`
