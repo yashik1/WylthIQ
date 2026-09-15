@@ -9,27 +9,26 @@ name: Refresh quotes
 # heatmap were frozen at whenever somebody last ran `npm run quotes` by hand,
 # which is why the same five risers sat there for eleven days.
 #
+# The scheduled refresh no longer runs here. It runs on Railway, as the
+# `quote-refresh` cron service beside the app (weekdays at 21:30 UTC), using
+# the same provider keys the live site uses. This workflow is kept only for a
+# refresh started by hand.
+#
+# Why it moved: this workflow read its own copies of the provider keys from
+# the repo's Actions secrets, separate from the keys the site proves work every
+# day. For weeks it brought in no current price while the site quoted fine.
+# Keeping one set of keys in one place fixes that. A second scheduler writing
+# the same rows would only compete with the first for the same free rate
+# limits.
+#
+# Weekdays only, now that a stored price carries its own date: a weekend run
+# re-fetches Friday's close, and the dashboard no longer mistakes a Friday
+# close read on Monday for a stale one.
+#
 # Runs outside Railway's private network, so DATABASE_URL must be the public
 # connection string — the internal .railway.internal host does not resolve here.
 
 on:
-  schedule:
-    # Every day at 21:30 UTC — after the US close (16:00 ET / 20:00 UTC) plus
-    # enough slack for end-of-day prices to settle.
-    #
-    # This ran weekdays only to begin with, on the reasoning that a weekend run
-    # would just re-fetch Friday's closing prices. True of the prices and
-    # wrong about everything else: the dashboard shows when the figures were
-    # last refreshed, and the staleness notice judges the data by that
-    # timestamp rather than by whether the numbers changed. Skipping the
-    # weekend left Monday morning reading three days behind, which is
-    # indistinguishable from a scheduler that has quietly stopped — the exact
-    # thing that notice exists to catch.
-    #
-    # A weekend pass costs one run against a free price tier to write back
-    # figures that mostly match what is already stored. That is a small price
-    # for a timestamp nobody has to explain away.
-    - cron: "30 21 * * *"
   workflow_dispatch:
     inputs:
       limit:
