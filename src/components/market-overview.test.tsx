@@ -47,6 +47,7 @@ const snapshot = (over: Partial<MarketSnapshot> = {}): MarketSnapshot => ({
   // appear in the cases that are about something else.
   ageDays: 0,
   behind: 0,
+  ahead: 0,
   stale: false,
   ...over,
 });
@@ -190,10 +191,18 @@ describe("prices from different days", () => {
   });
 
   it("says how many companies were left out for having only an older price", () => {
-    expect(render(snapshot({ behind: 12 }))).toContain("12 more have no price from that day");
+    expect(render(snapshot({ behind: 12 }))).toContain("12 more have only an older price");
   });
 
   it("mentions nobody left out when every price is from the same day", () => {
     expect(render(snapshot({ behind: 0 }))).not.toContain("left out");
+  });
+});
+
+describe("a refresh that only reached some companies", () => {
+  it("says how many have a newer price than the day it ranks", () => {
+    const html = render(snapshot({ ahead: 16, behind: 3 }));
+    expect(html).toContain("16 have a newer price, too few to rank on their own");
+    expect(html).toContain("3 more have only an older price");
   });
 });
