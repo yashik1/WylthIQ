@@ -13,16 +13,8 @@ import type { MarketSnapshot, Mover, SectorPerformance } from "@/lib/market";
  * rather than live, which the timestamp states outright instead of implying
  * real time.
  */
-/**
- * How old a quote can be before "how things moved" stops being true.
- *
- * Three days rather than one, so a Monday morning reading Friday's close is
- * not flagged as broken — that is the normal state over a weekend.
- */
-const STALE_AFTER_DAYS = 3;
-
 export function MarketOverview({ snapshot }: { snapshot: MarketSnapshot }) {
-  const { gainers, losers, sectors, asOf, covered, ageDays } = snapshot;
+  const { gainers, losers, sectors, asOf, covered, behind, ageDays, stale } = snapshot;
 
   /*
     Says so when the numbers are old, rather than leaving the timestamp to
@@ -37,7 +29,6 @@ export function MarketOverview({ snapshot }: { snapshot: MarketSnapshot }) {
     The age arrives on the snapshot rather than being read from the clock
     here — see MarketSnapshot for why.
   */
-  const stale = ageDays != null && ageDays >= STALE_AFTER_DAYS;
 
   return (
     <section aria-labelledby="market-heading">
@@ -51,6 +42,9 @@ export function MarketOverview({ snapshot }: { snapshot: MarketSnapshot }) {
             <>
               Across {covered} companies, as of{" "}
               <LocalTime value={asOf} mode="datetime" showZone />.
+              {/* A company with no price from that day is left out rather than
+                  ranked on an older day's move. */}
+              {behind > 0 && ` ${behind} more have no price from that day and are left out.`}
             </>
           ) : (
             `Across ${covered} companies.`
@@ -61,7 +55,7 @@ export function MarketOverview({ snapshot }: { snapshot: MarketSnapshot }) {
       {stale && (
         <p className="mb-4 border border-fair px-3.5 py-2.5 text-sm leading-relaxed text-muted-strong">
           These prices are {Math.floor(ageDays!)} days old, so this is how things moved on
-          that day rather than today. The scheduled refresh has not run since then.
+          that day rather than today. No refresh since has brought in a newer price.
         </p>
       )}
 

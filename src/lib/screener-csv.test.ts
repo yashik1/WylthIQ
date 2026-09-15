@@ -22,6 +22,8 @@ const row = (over: Partial<ScreenRow> = {}): ScreenRow => ({
   headline: "Strong finances across the board.",
   price: 319.7,
   changePercent: 0.0335,
+  priceUpdatedAt: null,
+  priceStale: false,
   fScore: 8,
   fScoreMax: 9,
   zZone: "safe",

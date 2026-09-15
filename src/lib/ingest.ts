@@ -3,7 +3,10 @@ import { getDb } from "./db";
 import { companies, financials, ingestRuns, scores } from "./db/schema";
 import { fieldValue } from "./fundamentals/normalize";
 import type { CanonicalField, NormalizedFundamentals } from "./fundamentals/types";
-import { finnhub, getProvider, secEdgar } from "./providers";
+import { finnhub, getProvider, quoteSourcesFor, secEdgar } from "./providers";
+import { fetchQuoteWithFailover } from "./providers/failover";
+import type { Quote } from "./providers/types";
+import { priceTime } from "./quote-session";
 import { cikForSymbol } from "./providers/sec-edgar";
 import { sectorFromSic } from "./scoring/applicability";
 import { displaySectorFromSic } from "./scoring/sectors";
@@ -375,19 +378,70 @@ export async function getStaleSymbols(limit: number): Promise<string[]> {
  * providers rather than SEC EDGAR, and the free plans there are the tighter
  * constraint — Finnhub allows 60 requests a minute.
  */
+export interface QuoteRefreshResult {
+  /** Rows written with a current price. */
+  updated: number;
+  /** Quotes that came back too old to be current, whether or not they were saved. */
+  stale: number;
+  /** Symbols for which no provider had any price at all. */
+  unavailable: number;
+  failed: number;
+  errors: string[];
+  /** Which provider supplied each current price. */
+  answeredBy: Record<string, number>;
+  /**
+   * Provider failures, as "Provider=CATEGORY", counted across symbols.
+   *
+   * Categories only. A provider's own error text can quote the request URL,
+   * and several carry the API key in it, so the raw message is never counted
+   * or printed.
+   */
+  providerFailures: Record<string, number>;
+  /** The newest date among the stale quotes, when some came back stale. */
+  newestStale: string | null;
+}
+
 export async function refreshQuotes(
   symbols: string[],
   onProgress?: (done: number, total: number) => void,
-): Promise<{ updated: number; failed: number; errors: string[] }> {
+  options: {
+    /**
+     * Most quote lookups to start per minute. Unset means as fast as the
+     * workers go, which is right for a small batch and wrong for the universe.
+     */
+    perMinute?: number;
+  } = {},
+): Promise<QuoteRefreshResult> {
   const db = getDb();
   const errors: string[] = [];
+  const answeredBy: Record<string, number> = {};
+  const providerFailures: Record<string, number> = {};
   let updated = 0;
+  let stale = 0;
+  let unavailable = 0;
+  let newestStale: string | null = null;
   let done = 0;
 
+  /*
+    What is stored already, so a stale quote can be judged against it.
+
+    An old close is only worth saving when it is newer than the row, or when
+    it is the same price the row already holds — in which case saving it
+    replaces a refresh-time stamp with the date the price is really from.
+  */
   const companyRows = await db
-    .select({ id: companies.id, symbol: companies.symbol })
-    .from(companies);
+    .select({
+      id: companies.id,
+      symbol: companies.symbol,
+      price: scores.price,
+      priceUpdatedAt: scores.priceUpdatedAt,
+    })
+    .from(companies)
+    .leftJoin(scores, eq(scores.companyId, companies.id));
   const idBySymbol = new Map(companyRows.map((r) => [r.symbol, r.id]));
+  const storedById = new Map(
+    companyRows.map((r) => [r.id, { price: r.price, priceUpdatedAt: r.priceUpdatedAt }]),
+  );
 
   /*
     The latest reported figures a fresh price can be divided into.
@@ -422,6 +476,17 @@ export async function refreshQuotes(
     ]),
   );
 
+  // Start times are handed out one slot apart, shared by every worker.
+  const gapMs = options.perMinute && options.perMinute > 0 ? 60_000 / options.perMinute : 0;
+  let nextSlot = 0;
+  const waitForSlot = async () => {
+    if (!gapMs) return;
+    const now = Date.now();
+    const slot = Math.max(now, nextSlot);
+    nextSlot = slot + gapMs;
+    if (slot > now) await new Promise((resolve) => setTimeout(resolve, slot - now));
+  };
+
   await mapLimit(symbols, 2, async (symbol) => {
     const upper = symbol.toUpperCase();
     const companyId = idBySymbol.get(upper);
@@ -431,18 +496,49 @@ export async function refreshQuotes(
     }
 
     try {
-      const quote = await getProvider().getQuote(upper);
-      if (quote?.price != null) {
-        await db
-          .update(scores)
-          .set({
-            price: quote.price,
-            changePercent: quote.changePercent,
-            priceUpdatedAt: new Date(),
-            ...priceDerived(quote.price, fundamentalsById.get(companyId)),
-          })
-          .where(eq(scores.companyId, companyId));
+      await waitForSlot();
+
+      // The same chain every page quotes through, called directly so the run
+      // can say which provider answered and why the others did not.
+      const { value: quote, source, attempts } = await fetchQuoteWithFailover(
+        quoteSourcesFor(upper),
+        upper,
+      );
+      for (const attempt of attempts) {
+        const key = `${attempt.provider}=${attempt.category}`;
+        providerFailures[key] = (providerFailures[key] ?? 0) + 1;
+      }
+
+      if (quote?.price == null) {
+        unavailable++;
+        return;
+      }
+
+      const { outcome, at } = quoteWrite(
+        { price: quote.price, asOf: quote.asOf, freshness: quote.freshness },
+        storedById.get(companyId),
+      );
+
+      if (outcome !== "fresh") {
+        stale++;
+        const day = at.toISOString().slice(0, 10);
+        if (!newestStale || day > newestStale) newestStale = day;
+        if (outcome === "stale-skipped") return;
+      }
+
+      await db
+        .update(scores)
+        .set({
+          price: quote.price,
+          changePercent: quote.changePercent,
+          priceUpdatedAt: at,
+          ...priceDerived(quote.price, fundamentalsById.get(companyId)),
+        })
+        .where(eq(scores.companyId, companyId));
+
+      if (outcome === "fresh") {
         updated++;
+        if (source) answeredBy[source] = (answeredBy[source] ?? 0) + 1;
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -457,7 +553,48 @@ export async function refreshQuotes(
     }
   });
 
-  return { updated, failed: errors.length, errors };
+  return {
+    updated,
+    stale,
+    unavailable,
+    failed: errors.length,
+    errors,
+    answeredBy,
+    providerFailures,
+    newestStale,
+  };
+}
+
+type QuoteOutcome = "fresh" | "stale-recorded" | "stale-skipped";
+
+/**
+ * Whether a quote may be saved over the stored row, and the date to save.
+ *
+ * The date is always the price's own. It used to be the moment the refresh
+ * ran, so when every provider that could supply a current price failed and
+ * the chain fell back to an old close, the old close went in with a fresh
+ * time. The dashboard's "as of" and its staleness notice both read that time,
+ * so both said current while every price on it was a month old.
+ *
+ * A stale quote is saved only when it is newer than what is stored, or when it
+ * is the very price already there — saving that corrects the row's date
+ * without changing a figure, which is how rows stamped wrongly before this fix
+ * get their true date back. A stale quote that would replace a newer,
+ * different price is skipped.
+ */
+function quoteWrite(
+  quote: Pick<Quote, "asOf" | "freshness"> & { price: number },
+  stored: { price: number | null; priceUpdatedAt: Date | string | null } | undefined,
+  now: Date = new Date(),
+): { outcome: QuoteOutcome; at: Date } {
+  const at = priceTime(quote.asOf, now);
+  if (quote.freshness !== "stale") return { outcome: "fresh", at };
+
+  const storedAt = stored?.priceUpdatedAt ? new Date(stored.priceUpdatedAt).getTime() : null;
+  const newer = storedAt == null || !Number.isFinite(storedAt) || at.getTime() > storedAt;
+  const samePrice = stored?.price != null && Math.abs(stored.price - quote.price) < 1e-6;
+
+  return { outcome: newer || samePrice ? "stale-recorded" : "stale-skipped", at };
 }
 
 /**
@@ -500,4 +637,4 @@ function priceDerived(
 }
 
 /** Exposed for tests only. */
-export const __testing = { priceDerived };
+export const __testing = { priceDerived, quoteWrite };

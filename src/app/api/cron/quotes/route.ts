@@ -43,6 +43,8 @@ export async function GET(request: Request) {
       ok: true,
       requested: symbols.length,
       updated: result.updated,
+      stale: result.stale,
+      unavailable: result.unavailable,
       failed: result.failed,
       errors: result.errors.slice(0, 5),
     });

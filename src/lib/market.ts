@@ -1,6 +1,7 @@
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, sql } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "./db";
 import { companies, scores } from "./db/schema";
+import { isPriceStale } from "./quote-session";
 
 /**
  * Market-wide views for the dashboard.
@@ -34,10 +35,19 @@ export interface MarketSnapshot {
   gainers: Mover[];
   losers: Mover[];
   sectors: SectorPerformance[];
-  /** When the underlying quotes were last written. */
+  /** When the newest stored price is from — the price's own date, not a refresh time. */
   asOf: Date | null;
-  /** How many companies have a usable quote. */
+  /** How many companies have a price from that same trading session. */
   covered: number;
+  /**
+   * Companies whose stored price is from an earlier session, left out.
+   *
+   * Movers and sectors rank one day's moves against each other. Mixing in a
+   * company whose latest price is weeks old ranks that old day's move beside
+   * today's — which is how a month-old stock split sat at the top of "biggest
+   * fallers" as a 48% fall.
+   */
+  behind: number;
   /**
    * How many days old the stored quotes are, or null when unknown.
    *
@@ -47,6 +57,8 @@ export interface MarketSnapshot {
    * frozen at whenever that page was built.
    */
   ageDays: number | null;
+  /** True when the newest price is more than two trading days old. */
+  stale: boolean;
 }
 
 /** Days between a stored timestamp and now, or null when it is unusable. */
@@ -63,7 +75,9 @@ const EMPTY: MarketSnapshot = {
   sectors: [],
   asOf: null,
   covered: 0,
+  behind: 0,
   ageDays: null,
+  stale: false,
 };
 
 /**
@@ -78,17 +92,42 @@ const MIN_MARKET_CAP = 2e9;
 /** Companies needed in a sector before its average means anything. */
 const MIN_SECTOR_MEMBERS = 3;
 
+/**
+ * How close to the newest price a stored price must be to share its session.
+ *
+ * Providers date the same close differently — a bare day read as the 4pm
+ * close, a last-trade time a few hours into the evening — so an exact match
+ * would split one session in two. Consecutive closes are twenty-four hours
+ * apart, so eighteen keeps a session together without reaching the day before.
+ */
+const SESSION_WINDOW_MS = 18 * 60 * 60 * 1000;
+
 export async function getMarketSnapshot(limit = 5): Promise<MarketSnapshot> {
   if (!isDatabaseConfigured()) return EMPTY;
 
   try {
     const db = getDb();
 
-    const base = and(
+    const priced = and(
       eq(companies.isActive, true),
       isNotNull(scores.changePercent),
       isNotNull(scores.price),
     );
+
+    const [meta] = await db
+      .select({
+        asOf: sql<Date | string | null>`max(${scores.priceUpdatedAt})`,
+        priced: sql<number>`count(*)::int`,
+      })
+      .from(companies)
+      .innerJoin(scores, eq(scores.companyId, companies.id))
+      .where(priced);
+
+    const asOf = meta?.asOf ? new Date(meta.asOf) : null;
+    if (!asOf || !Number.isFinite(asOf.getTime())) return EMPTY;
+
+    // Only prices from the newest session — see `behind` for why.
+    const base = and(priced, gt(scores.priceUpdatedAt, new Date(asOf.getTime() - SESSION_WINDOW_MS)));
 
     const select = {
       symbol: companies.symbol,
@@ -100,7 +139,7 @@ export async function getMarketSnapshot(limit = 5): Promise<MarketSnapshot> {
       marketCap: scores.marketCap,
     };
 
-    const [gainers, losers, sectorRows, meta] = await Promise.all([
+    const [gainers, losers, sectorRows, counted] = await Promise.all([
       db
         .select(select)
         .from(companies)
@@ -131,14 +170,13 @@ export async function getMarketSnapshot(limit = 5): Promise<MarketSnapshot> {
         .having(sql`count(*) >= ${MIN_SECTOR_MEMBERS}`),
 
       db
-        .select({
-          asOf: sql<Date | null>`max(${scores.priceUpdatedAt})`,
-          covered: sql<number>`count(${scores.price})::int`,
-        })
-        .from(scores),
+        .select({ covered: sql<number>`count(*)::int` })
+        .from(companies)
+        .innerJoin(scores, eq(scores.companyId, companies.id))
+        .where(base),
     ]);
 
-    const asOf = meta[0]?.asOf ? new Date(meta[0].asOf) : null;
+    const covered = counted[0]?.covered ?? 0;
 
     return {
       gainers,
@@ -149,8 +187,10 @@ export async function getMarketSnapshot(limit = 5): Promise<MarketSnapshot> {
         .map((s) => ({ ...s, averageChange: Number(s.averageChange) }))
         .sort((a, b) => b.averageChange - a.averageChange),
       asOf,
-      covered: meta[0]?.covered ?? 0,
+      covered,
+      behind: Math.max(0, (meta?.priced ?? 0) - covered),
       ageDays: ageInDays(asOf),
+      stale: isPriceStale(asOf),
     };
   } catch {
     // Missing tables or an unreachable database: the dashboard hides these
