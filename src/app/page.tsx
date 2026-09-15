@@ -37,7 +37,7 @@ export default async function HomePage() {
       <StructuredData data={[organisationLd(), websiteLd()]} />
       <TranslationHero />
 
-      <IndexStrip readings={indices} universeCount={universeCount} asOf={market.asOf} ageDays={market.ageDays} />
+      <IndexStrip readings={indices} universeCount={universeCount} asOf={market.asOf} stale={market.stale} />
 
       <div className="space-y-11 pt-11">
         {hasMarketData(market) ? (
@@ -124,14 +124,14 @@ function IndexStrip({
   readings,
   universeCount,
   asOf,
-  ageDays,
+  stale,
 }: {
   readings: IndexReading[];
   universeCount: number | null;
   asOf: Date | string | null;
-  ageDays: number | null;
+  /** Judged in trading days on the snapshot, so a weekend is not a warning. */
+  stale: boolean;
 }) {
-  const stale = ageDays != null && ageDays >= 3;
 
   return (
     <div className="full-bleed border-b border-border">

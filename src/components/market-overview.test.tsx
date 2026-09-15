@@ -46,6 +46,8 @@ const snapshot = (over: Partial<MarketSnapshot> = {}): MarketSnapshot => ({
   // Fresh unless a case says otherwise, so the staleness notice does not
   // appear in the cases that are about something else.
   ageDays: 0,
+  behind: 0,
+  stale: false,
   ...over,
 });
 
@@ -152,7 +154,7 @@ describe("staleness", () => {
     as the only signal.
   */
   it("says plainly when the prices are days old", () => {
-    const html = render(snapshot({ asOf: new Date(Date.now() - 11 * 86_400_000), ageDays: 11 }));
+    const html = render(snapshot({ asOf: new Date(Date.now() - 11 * 86_400_000), ageDays: 11, stale: true }));
 
     expect(html).toContain("11 days old");
     expect(html).toContain("rather than today");
@@ -177,5 +179,21 @@ describe("staleness", () => {
     const html = render(snapshot({ asOf: "not a date" as never, ageDays: null }));
     expect(html).not.toContain("days old");
     expect(html).not.toContain("NaN");
+  });
+});
+
+describe("prices from different days", () => {
+  it("warns from the snapshot's own verdict, which counts trading days", () => {
+    // Four calendar days across a weekend is not stale; the snapshot says so.
+    expect(render(snapshot({ ageDays: 4, stale: false }))).not.toContain("days old");
+    expect(render(snapshot({ ageDays: 32, stale: true }))).toContain("32 days old");
+  });
+
+  it("says how many companies were left out for having only an older price", () => {
+    expect(render(snapshot({ behind: 12 }))).toContain("12 more have no price from that day");
+  });
+
+  it("mentions nobody left out when every price is from the same day", () => {
+    expect(render(snapshot({ behind: 0 }))).not.toContain("left out");
   });
 });

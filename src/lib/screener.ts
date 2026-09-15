@@ -1,3 +1,4 @@
+import { isPriceStale } from "./quote-session";
 import { and, asc, desc, eq, gte, isNotNull, lte, or, sql, type SQL } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "./db";
 import { companies, scores } from "./db/schema";
@@ -200,6 +201,15 @@ export interface ScreenRow {
   /** Latest quote, refreshed by the quotes cron rather than the nightly pass. */
   price: number | null;
   changePercent: number | null;
+  /** When that price is from. */
+  priceUpdatedAt: Date | string | null;
+  /**
+   * True when the price is more than two trading days old.
+   *
+   * Decided when the rows are read, so the table can date an old price rather
+   * than present it — and its one-day move — as today's.
+   */
+  priceStale: boolean;
   fScore: number | null;
   fScoreMax: number | null;
   zZone: string | null;
@@ -461,6 +471,7 @@ export async function runScreen(filters: ScreenFilters, limit = 100): Promise<Sc
         headline: scores.headline,
         price: scores.price,
         changePercent: scores.changePercent,
+        priceUpdatedAt: scores.priceUpdatedAt,
         fScore: scores.fScore,
         fScoreMax: scores.fScoreMax,
         zZone: scores.zZone,
@@ -487,7 +498,11 @@ export async function runScreen(filters: ScreenFilters, limit = 100): Promise<Sc
       .limit(limit);
 
     if (rows.length > 0) {
-      return { status: "ok", rows, total: rows.length };
+      return {
+        status: "ok",
+        rows: rows.map((row) => ({ ...row, priceStale: isPriceStale(row.priceUpdatedAt) })),
+        total: rows.length,
+      };
     }
 
     // Distinguish "nothing qualifies" from "this preset can never match,

@@ -21,7 +21,7 @@ import {
   PageHeader,
   RatingBadge,
 } from "@/components/ui";
-import { money, multiple, percent, price as fmtPrice, signedPercent } from "@/lib/format";
+import { calendarDate, money, multiple, percent, price as fmtPrice, signedPercent } from "@/lib/format";
 import { healthRating } from "@/lib/scoring/ratings";
 import {
   PRESETS,
@@ -617,14 +617,25 @@ function ResultsTable({ rows }: { rows: ScreenRow[] }) {
                 {r.price != null ? (
                   <>
                     <span className="block">{fmtPrice(r.price)}</span>
-                    {r.changePercent != null && (
-                      <span
-                        className={`block text-xs ${
-                          r.changePercent >= 0 ? "text-up" : "text-down"
-                        }`}
-                      >
-                        {signedPercent(r.changePercent)}
+                    {/*
+                      An old price says how old it is, and drops its move: a
+                      one-day change from weeks ago is not today's, and a stock
+                      split priced on that day reads as a collapse.
+                    */}
+                    {r.priceStale && r.priceUpdatedAt ? (
+                      <span className="block text-xs text-faint">
+                        as of {calendarDate(new Date(r.priceUpdatedAt).toISOString().slice(0, 10))}
                       </span>
+                    ) : (
+                      r.changePercent != null && (
+                        <span
+                          className={`block text-xs ${
+                            r.changePercent >= 0 ? "text-up" : "text-down"
+                          }`}
+                        >
+                          {signedPercent(r.changePercent)}
+                        </span>
+                      )
                     )}
                   </>
                 ) : (
