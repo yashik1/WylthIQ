@@ -1,4 +1,6 @@
 import type { NormalizedFundamentals } from "../fundamentals/types";
+import { alpaca } from "./alpaca";
+import { readBarCache, writeBarCache } from "./bar-cache";
 import { eodhd } from "./eodhd";
 import { alphaVantage } from "./alphavantage";
 import { finnhub } from "./finnhub";
@@ -14,7 +16,9 @@ import {
   fetchNewsWithFailover,
   type NewsSource,
   type PriceSource,
+  type ProviderAttempt,
 } from "./failover";
+import type { ProviderErrorCategory } from "./errors";
 import type {
   Bar,
   CompanyProfile,
@@ -36,7 +40,8 @@ import type { AnalystView } from "../signals/analysts";
  * No one free source covers everything, so each job goes to the source that
  * does it best at zero cost:
  *   fundamentals + filings + sector -> SEC EDGAR   (authoritative, no key, no cap)
- *   price bars + quotes             -> Twelve Data (full intraday range, free)
+ *   price bars                      -> Alpaca, then Twelve Data (see BAR_SOURCES)
+ *   quotes                          -> Twelve Data, then Finnhub
  *   news + logo + peers             -> Finnhub     (free tier covers these)
  *
  * Anything unavailable degrades to empty rather than throwing, so a missing
@@ -253,6 +258,33 @@ function sourcesFor(symbol: string): PriceSource[] {
 }
 
 /**
+ * The sources that can draw a chart.
+ *
+ * Alpaca leads for US listings because it has the most room: its free plan
+ * allows 200 requests a minute, against Twelve Data's 8 and Tiingo's 50 an
+ * hour, so a reader clicking through a few charts used the whole chain up in a
+ * minute. Leading costs nothing when it is not configured (it is skipped) or
+ * cannot help (it is left out for a Toronto listing, an index or a coin), and a
+ * refused key costs one request before the next source answers.
+ *
+ * Finnhub is left out entirely. Its free tier refuses candles, so it only ever
+ * added a wasted attempt to every chart that reached it.
+ */
+const BAR_SOURCES: PriceSource[] = [alpaca, twelveData, tiingo, yahoo];
+
+/** The chart chain for one symbol, in the order it is asked. */
+export function barSourcesFor(symbol: string): PriceSource[] {
+  const yahooOwn = symbol.startsWith("^") || classify(symbol) !== null;
+  const ordered = yahooOwn ? [yahoo, ...BAR_SOURCES.filter((s) => s !== yahoo)] : BAR_SOURCES;
+  return ordered.filter((s) => s !== alpaca || alpaca.covers(symbol));
+}
+
+/** Whether any source that can draw a chart is configured. */
+export function hasAnyBarSource(): boolean {
+  return BAR_SOURCES.some((s) => s.isConfigured());
+}
+
+/**
  * Statements, falling back past EDGAR for listings it does not cover.
  *
  * This used to live in the stock page's own loader, so it ran for that page and
@@ -396,38 +428,80 @@ export async function getBarsWithSource(
   from: Date,
   to: Date,
 ): Promise<{ bars: Bar[]; source: string | null; includesDividends: boolean }> {
-  const result = await fetchBarsWithFailover(sourcesFor(symbol), symbol, timeframe, from, to);
+  // History anybody has already fetched, on any instance, since it last changed.
+  const stored = await readBarCache(symbol, timeframe, from, to);
+  if (stored) return stored;
+
+  const sources = barSourcesFor(symbol);
+  const result = await fetchBarsWithFailover(sources, symbol, timeframe, from, to);
   if (result.value.length === 0 && result.attempts.length > 0) {
     // Every provider failed. Report why rather than returning an empty chart,
     // which reads as "this symbol has no history".
-    throw new Error(describeFailure(result.attempts));
+    throw new Error(describeBarFailure(result.attempts));
   }
 
   /*
     Which source answered decides how the closes must be read.
 
-    Failover means the answer can come from any of four providers, and they do
-    not all adjust alike — Tiingo's are a total-return series with dividends
+    Failover means the answer can come from any of several providers, and they
+    do not all adjust alike — Tiingo's are a total-return series with dividends
     already reinvested, the rest are price series. Returning the bars without
     saying which kind they are leaves every caller to guess, and the guess is
     invisible when wrong.
   */
-  const answered = PRICE_SOURCES.find((s) => s.name === result.source);
-
-  return {
+  const answered = sources.find((s) => s.name === result.source);
+  const answer = {
     bars: result.value,
     source: result.source,
     includesDividends: answered?.barsIncludeDividends ?? false,
   };
+
+  // Stored without waiting, so the reader's chart does not pay for the write.
+  if (answer.bars.length > 0) void writeBarCache(symbol, timeframe, from, to, answer);
+
+  return answer;
 }
 
-/** Summarises a total failure across every provider. */
-function describeFailure(attempts: { provider: string; error: string }[]): string {
-  const detail = attempts.map((a) => `${a.provider}: ${a.error}`).join("; ");
-  return attempts.some((a) => /rate limit|quota|credit/i.test(a.error))
-    ? `All price providers are rate limited right now. ${detail}. ` +
-        `Adding TIINGO_API_KEY (free) gives more headroom.`
-    : `Could not load price data. ${detail}`;
+/** A provider's failure in a reader's words. The provider's own message is never shown. */
+const FAILURE_WORDS: Record<ProviderErrorCategory, string> = {
+  RATE_LIMITED: "is rate limited",
+  TIMEOUT: "did not answer in time",
+  NOT_FOUND: "does not know this symbol",
+  PROVIDER_ERROR: "returned an error",
+  INVALID_DATA: "returned data that did not match the request",
+  NO_DATA: "has no data for it",
+};
+
+/**
+ * Summarises a total failure across every chart source.
+ *
+ * This used to end every rate-limit failure with "Adding TIINGO_API_KEY (free)
+ * gives more headroom", including on the live site, which already had Tiingo
+ * configured, so the advice sent a reader looking for a key that was already
+ * set. It now suggests only sources that are actually missing, and describes
+ * each attempt by category rather than repeating a provider's message, which
+ * can carry the request URL.
+ */
+export function describeBarFailure(
+  attempts: Pick<ProviderAttempt, "provider" | "category">[],
+): string {
+  const detail = attempts.map((a) => `${a.provider} ${FAILURE_WORDS[a.category]}`).join("; ");
+
+  if (!attempts.some((a) => a.category === "RATE_LIMITED")) {
+    return `Could not load price data: ${detail}.`;
+  }
+
+  const unused = [
+    alpaca.isConfigured()
+      ? null
+      : "ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY (free, 200 requests a minute)",
+    tiingo.isConfigured() ? null : "TIINGO_API_KEY (free)",
+  ].filter((hint): hint is string => hint !== null);
+
+  return (
+    `Chart data is rate limited right now: ${detail}. Try again in a minute.` +
+    (unused.length > 0 ? ` For more headroom, set ${unused.join(" or ")}.` : "")
+  );
 }
 
 const freeStack = new FreeStackProvider();
@@ -698,16 +772,18 @@ export function providerStatus() {
       ? "US and Canadian from the free stack, worldwide from EODHD where that has nothing"
       : "US and Canadian cross-listed",
     fundamentals: true,
-    charts: global || twelveData.isConfigured() || tiingo.isConfigured() || yahoo.isConfigured(),
+    charts: hasAnyBarSource(),
     news: global || finnhub.isConfigured(),
     priceSources: PRICE_SOURCES.filter((s) => s.isConfigured()).map((s) => s.name),
+    chartSources: BAR_SOURCES.filter((s) => s.isConfigured()).map((s) => s.name),
     missing: [
       ...(global || twelveData.isConfigured() ? [] : ["TWELVEDATA_API_KEY"]),
       ...(global || finnhub.isConfigured() ? [] : ["FINNHUB_API_KEY"]),
       ...(global || tiingo.isConfigured() ? [] : ["TIINGO_API_KEY (optional fallback)"]),
+      ...(alpaca.isConfigured() ? [] : ["ALPACA_API_KEY_ID + ALPACA_API_SECRET_KEY (optional, chart headroom)"]),
     ],
   };
 }
 
-export { secEdgar, twelveData, finnhub, tiingo, yahoo, eodhd };
+export { secEdgar, twelveData, finnhub, tiingo, yahoo, eodhd, alpaca };
 export * from "./types";

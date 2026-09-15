@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { refuseIfRateLimited } from "@/lib/security/guard";
-import { getBarsWithSource } from "@/lib/providers";
-import { eodhd, twelveData } from "@/lib/providers";
+import { getBarsWithSource, hasAnyBarSource } from "@/lib/providers";
 import type { Timeframe } from "@/lib/providers/types";
 
 const VALID: Timeframe[] = ["1Min", "5Min", "15Min", "1Hour", "1Day", "1Week"];
@@ -41,14 +40,16 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!twelveData.isConfigured() && !eodhd.isConfigured()) {
+  // Any one chart source is enough; the chain uses whichever are configured.
+  if (!hasAnyBarSource()) {
     return NextResponse.json(
       {
         bars: [],
         error: "not-configured",
         message:
-          "Price charts need a Twelve Data key. Get a free one at twelvedata.com " +
-          "(email signup, no brokerage account) and set TWELVEDATA_API_KEY.",
+          "Price charts need a price source. Any one of these works, and each is free: " +
+          "ALPACA_API_KEY_ID with ALPACA_API_SECRET_KEY, TWELVEDATA_API_KEY, TIINGO_API_KEY, " +
+          "or ENABLE_YAHOO_FALLBACK=true.",
       },
       { status: 200 },
     );
