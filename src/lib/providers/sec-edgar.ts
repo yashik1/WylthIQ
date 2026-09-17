@@ -332,6 +332,7 @@ export class SecEdgarProvider implements MarketDataProvider {
       website: null,
       logo: null,
       marketCap: null,
+      marketCapCurrency: null,
       sharesOutstanding: null,
       cik,
       description: null,

@@ -1,5 +1,6 @@
 import { fieldValue } from "./fundamentals/normalize";
 import { getInstrumentType, getProvider } from "./providers";
+import { restateCompany } from "./company-currency";
 import type { InstrumentType, Quote } from "./providers/types";
 import { sectorFromSic, type SectorKind } from "./scoring/applicability";
 import { buildHealthReport, type HealthReport } from "./scoring/health";
@@ -120,12 +121,25 @@ async function loadOne(symbol: string): Promise<CompareItem> {
     };
   }
 
-  const [profile, fundamentals, quote, type] = await Promise.all([
+  const [profile, filed, quote, type] = await Promise.all([
     provider.getProfile(upper).catch(() => null),
     provider.getFundamentals(upper).catch(() => null),
     provider.getQuote(upper).catch(() => null),
     getInstrumentType(upper).catch(() => "unknown" as InstrumentType),
   ]);
+
+  /*
+    Read in one currency, the same way the company page reads it.
+
+    This used to divide the market's US-dollar valuation of Royal Bank into the
+    Canadian dollars it files in, so the two pages put the same bank on 19 and
+    27 times earnings on the same afternoon. Both now ask the same function.
+  */
+  const { fundamentals, marketCap } = await restateCompany({
+    fundamentals: filed,
+    quote,
+    profile,
+  });
 
   const hasFinancials = Boolean(fundamentals?.annual.length);
   const resolvedType = resolveType(type, hasFinancials, profile?.entityType, profile?.sicCode);
@@ -139,12 +153,6 @@ async function loadOne(symbol: string): Promise<CompareItem> {
   }
 
   const sector = sectorFromSic(profile?.sicCode);
-
-  let marketCap = profile?.marketCap ?? null;
-  if (marketCap == null && quote?.price && fundamentals) {
-    const shares = fieldValue(fundamentals.annual[0], "sharesOutstanding");
-    if (shares) marketCap = quote.price * shares;
-  }
 
   if (!hasFinancials || !fundamentals) {
     return {

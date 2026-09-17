@@ -12,9 +12,7 @@ import {
 } from "./providers";
 import type { CompanyProfile, Filing, InstrumentType, NewsItem, Quote } from "./providers/types";
 import { ProviderNotConfiguredError } from "./providers/types";
-import { convertFundamentals } from "./fundamentals/convert";
-import { currencyForExchange } from "./exchange-currency";
-import { getRate } from "./fx";
+import { restateCompany } from "./company-currency";
 import { sectorFromSic, type SectorKind } from "./scoring/applicability";
 import { buildHealthReport, type HealthReport } from "./scoring/health";
 import { buildImpliedExpectations, type ImpliedExpectations } from "./scoring/expectations";
@@ -203,49 +201,22 @@ export async function getStockPageData(symbol: string): Promise<StockPageData> {
     ]);
 
   /*
-    Figures are shown in the currency the shares trade in.
+    One currency for the filings, the valuation and the ratios built on them.
 
-    SK hynix keeps its books in won and lists in New York; reporting ₩42.92T is
-    faithful to the filing and close to useless to somebody deciding whether to
-    buy it in dollars. One rate, today's, is used for every year — an accountant
-    would use each year's own rate, but that mixes business performance with
-    currency movement, and the comparison a reader is making is between the
-    years, not between the currencies. The page says the figures are converted.
+    See company-currency.ts for why this is a shared step rather than a few
+    lines here: the compare page had its own copy of the arithmetic and drew a
+    different P/E for the same company.
   */
-  const reportingCurrency = fundamentals.currency;
-  const listingCurrency = quote?.currency ?? currencyForExchange(profile?.exchange) ?? "USD";
-
-  let resolvedFundamentals = fundamentals.fundamentals;
-  let converted: { from: string; rate: number } | null = null;
-
-  if (
-    resolvedFundamentals &&
-    reportingCurrency &&
-    reportingCurrency.toUpperCase() !== listingCurrency.toUpperCase()
-  ) {
-    const rate = await getRate(reportingCurrency, listingCurrency).catch(() => null);
-    // No rate means the figures stay as filed. A converted number at an invented
-    // rate would be worse than an honest one in an unfamiliar currency.
-    if (rate) {
-      resolvedFundamentals = convertFundamentals(resolvedFundamentals, rate, listingCurrency);
-      converted = { from: reportingCurrency, rate };
-    }
-  }
-
-  const displayCurrency = converted ? listingCurrency : (reportingCurrency ?? listingCurrency);
+  const restated = await restateCompany({
+    fundamentals: fundamentals.fundamentals,
+    reportingCurrency: fundamentals.currency,
+    quote,
+    profile,
+  });
+  const resolvedFundamentals = restated.fundamentals;
+  const { converted, displayCurrency, marketCap } = restated;
 
   const sector = sectorFromSic(profile?.sicCode);
-
-  // Prefer the provider's market cap; otherwise derive it from the live price
-  // and the share count in the filings.
-  let marketCap = profile?.marketCap ?? null;
-  if (marketCap == null && quote?.price && resolvedFundamentals) {
-    const shares =
-      fieldValue(resolvedFundamentals.annual[0], "sharesOutstanding") ??
-      profile?.sharesOutstanding ??
-      null;
-    if (shares) marketCap = quote.price * shares;
-  }
 
   const report = resolvedFundamentals?.annual.length
     ? buildHealthReport(resolvedFundamentals, sector, marketCap)
@@ -302,7 +273,7 @@ export async function getStockPageData(symbol: string): Promise<StockPageData> {
     assetClass: instrumentType === "etf" ? "etf" : "equity",
     instrument: null,
     earlySignals: { insider, stakes, upcoming },
-    reportingCurrency,
+    reportingCurrency: fundamentals.currency,
     displayCurrency,
     converted,
   };

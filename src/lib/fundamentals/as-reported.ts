@@ -5,6 +5,7 @@ import type {
   FinancialPeriod,
   NormalizedFundamentals,
 } from "./types";
+import { COUNT_FIELDS } from "./concept-map";
 
 /**
  * Reading as-reported snapshots back as ordinary periods.
@@ -14,8 +15,6 @@ import type {
  * and marks every one with the snapshot's own date, so nothing downstream can
  * mistake a reconstruction for the live figures.
  */
-
-const COUNT_FIELDS: ReadonlySet<CanonicalField> = new Set(["sharesOutstanding"]);
 
 /** A snapshot's years as periods, newest first. */
 export function snapshotPeriods(snapshot: AsReportedSnapshot): FinancialPeriod[] {

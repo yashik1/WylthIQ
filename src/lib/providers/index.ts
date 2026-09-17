@@ -89,6 +89,7 @@ class FreeStackProvider implements MarketDataProvider {
       website: fin?.website ?? null,
       logo: fin?.logo ?? null,
       marketCap: fin?.marketCap ?? null,
+      marketCapCurrency: fin?.marketCapCurrency ?? null,
       sharesOutstanding: fin?.sharesOutstanding ?? null,
       cik: sec?.cik ?? null,
       description: fin?.description ?? null,
@@ -359,7 +360,7 @@ export async function getFundamentalsWithSource(symbol: string): Promise<{
  * Balance-sheet items are checked before income items because a filer with no
  * revenue tagged still has assets.
  */
-function reportedIn(f: NormalizedFundamentals): string | null {
+export function reportedIn(f: NormalizedFundamentals): string | null {
   for (const period of f.annual) {
     for (const field of ["assets", "equity", "revenue", "netIncome"] as const) {
       const unit = period.facts[field]?.unit;
@@ -743,6 +744,15 @@ export async function getCompanyProfile(symbol: string): Promise<CompanyProfile 
 
   if (!sec && !fin && !eod) return null;
 
+  /*
+    The market value and its currency come from one provider, never two.
+
+    Taken field by field, `marketCap` could be Finnhub's while `currency` was
+    EODHD's, and the pair would look consistent while describing two different
+    venues. Whichever provider supplies the figure supplies the label.
+  */
+  const cap = fin?.marketCap != null ? fin : eod?.marketCap != null ? eod : null;
+
   return {
     symbol: symbol.toUpperCase(),
     // EDGAR wins on identity: it is the filing of record.
@@ -756,7 +766,8 @@ export async function getCompanyProfile(symbol: string): Promise<CompanyProfile 
     industry: fin?.industry ?? eod?.industry ?? sec?.sicDescription ?? null,
     website: fin?.website ?? eod?.website ?? null,
     logo: fin?.logo ?? eod?.logo ?? null,
-    marketCap: fin?.marketCap ?? eod?.marketCap ?? null,
+    marketCap: cap?.marketCap ?? null,
+    marketCapCurrency: cap?.marketCapCurrency ?? cap?.currency ?? null,
     sharesOutstanding: fin?.sharesOutstanding ?? eod?.sharesOutstanding ?? null,
     cik: sec?.cik ?? eod?.cik ?? null,
     description: fin?.description ?? eod?.description ?? null,

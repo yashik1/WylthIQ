@@ -124,3 +124,63 @@ describe("Yahoo's placeholder rows", () => {
     expect(quote?.price).toBe(33.1);
   });
 });
+
+/**
+ * What Yahoo calls a share count.
+ *
+ * Its timeseries tags every point with the filer's currency, including
+ * `annualOrdinarySharesNumber`. That label travels with the fact, and the
+ * currency conversion downstream multiplies anything labelled as money — so
+ * SK hynix's 701,691,780 shares became 512,235 and the page reported earnings
+ * of $61,165 a share against a real figure near $45.
+ */
+describe("Yahoo's annual figures", () => {
+  const point = (value: number) => ({
+    asOfDate: "2025-12-31",
+    currencyCode: "KRW",
+    reportedValue: { raw: value },
+  });
+
+  const timeseries = {
+    timeseries: {
+      result: [
+        {
+          meta: { type: ["annualTotalRevenue"] },
+          annualTotalRevenue: [point(97_146_675_000_000)],
+        },
+        {
+          meta: { type: ["annualOrdinarySharesNumber"] },
+          annualOrdinarySharesNumber: [point(701_691_780)],
+        },
+      ],
+    },
+  };
+
+  beforeEach(() => {
+    process.env.ENABLE_YAHOO_FALLBACK = "true";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => timeseries }) as Response),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.ENABLE_YAHOO_FALLBACK;
+  });
+
+  it("keeps the filer's currency on the money", async () => {
+    const f = await yahoo.getFundamentals("000660.KS");
+
+    expect(f?.annual[0].facts.revenue?.unit).toBe("KRW");
+    expect(f?.annual[0].facts.revenue?.value).toBe(97_146_675_000_000);
+  });
+
+  it("calls a share count a share count, whatever the currency on it", async () => {
+    const f = await yahoo.getFundamentals("000660.KS");
+    const shares = f?.annual[0].facts.sharesOutstanding;
+
+    expect(shares?.unit).toBe("shares");
+    expect(shares?.value).toBe(701_691_780);
+  });
+});

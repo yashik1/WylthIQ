@@ -75,8 +75,10 @@ export class FinnhubProvider implements MarketDataProvider {
       industry: p.finnhubIndustry ?? null,
       website: p.weburl ?? null,
       logo: p.logo ?? null,
-      // Finnhub reports market cap in millions.
+      // Finnhub reports market cap in millions, in the currency of whichever
+      // venue it priced — which is not always the one this ticker trades on.
       marketCap: p.marketCapitalization != null ? p.marketCapitalization * 1e6 : null,
+      marketCapCurrency: p.currency ?? null,
       sharesOutstanding: p.shareOutstanding != null ? p.shareOutstanding * 1e6 : null,
       cik: null,
       description: null,

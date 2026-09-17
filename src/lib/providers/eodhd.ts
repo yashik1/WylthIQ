@@ -187,6 +187,7 @@ export class EodhdProvider implements MarketDataProvider {
       website: g.WebURL ?? null,
       logo: g.LogoURL ? `https://eodhd.com${g.LogoURL}` : null,
       marketCap: raw.Highlights?.MarketCapitalization ?? null,
+      marketCapCurrency: g.CurrencyCode ?? null,
       sharesOutstanding: raw.SharesStats?.SharesOutstanding ?? null,
       cik: g.CIK ?? null,
       description: g.Description ?? null,

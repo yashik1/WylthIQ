@@ -67,6 +67,32 @@ describe("converting a filer's figures", () => {
     expect(shares.unit).toBe("shares");
   });
 
+  /*
+    The same protection, for a source that labels a share count as money.
+
+    Yahoo supplies the filers EDGAR does not hold, and tags every figure it
+    returns with the filer's currency — share counts included. Trusting the
+    unit alone turned SK hynix's 701,691,780 shares into 512,235 and reported
+    earnings of $61,165 a share.
+  */
+  it("leaves it alone even when the source called it money", () => {
+    const mislabelled: NormalizedFundamentals = {
+      ...won,
+      annual: [
+        {
+          ...won.annual[0],
+          facts: { ...won.annual[0].facts, sharesOutstanding: fact(701_691_780, "KRW") },
+        },
+      ],
+    };
+
+    const shares = convertFundamentals(mislabelled, RATE, "USD").annual[0].facts
+      .sharesOutstanding!;
+
+    expect(shares.value).toBe(701_691_780);
+    expect(shares.unit).toBe("KRW");
+  });
+
   it("returns the figures untouched for a nonsensical rate", () => {
     for (const bad of [0, -1, NaN, Infinity]) {
       const out = convertFundamentals(won, bad, "USD");

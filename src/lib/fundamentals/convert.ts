@@ -1,4 +1,5 @@
 import type { CanonicalField, Fact, FinancialPeriod, NormalizedFundamentals } from "./types";
+import { COUNT_FIELDS } from "./concept-map";
 
 /**
  * Restates a filer's figures in another currency.
@@ -22,6 +23,19 @@ import type { CanonicalField, Fact, FinancialPeriod, NormalizedFundamentals } fr
  */
 const NOT_MONEY = new Set(["shares", "pure", "PURE", "SHARES"]);
 
+/**
+ * The unit alone was not enough to catch it.
+ *
+ * SEC filings tag a share count as `shares`, so the set above covered every
+ * company that files with the SEC. Yahoo, which supplies the filers EDGAR does
+ * not hold, tags every figure in its response with the filer's currency —
+ * share counts included. SK hynix therefore arrived with 701,691,780 shares
+ * marked `KRW`, was multiplied by the won-to-dollar rate along with the money,
+ * and the page reported 512,235 shares outstanding and earnings of $61,165 a
+ * share. Checking the field's own identity as well means no source can make
+ * that mistake again, whatever it puts in the unit.
+ */
+
 export function convertFundamentals(
   fundamentals: NormalizedFundamentals,
   rate: number,
@@ -37,7 +51,7 @@ export function convertFundamentals(
       Fact | undefined,
     ][]) {
       if (!fact) continue;
-      facts[field] = isMoney(fact.unit)
+      facts[field] = isMoney(field, fact.unit)
         ? { ...fact, value: fact.value * rate, unit: target }
         : fact;
     }
@@ -56,7 +70,8 @@ export function convertFundamentals(
   };
 }
 
-function isMoney(unit: string | null | undefined): boolean {
+function isMoney(field: CanonicalField, unit: string | null | undefined): boolean {
+  if (COUNT_FIELDS.has(field)) return false;
   if (!unit) return false;
   return !NOT_MONEY.has(unit);
 }
