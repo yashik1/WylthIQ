@@ -102,10 +102,16 @@ export interface StockPageData {
    */
   reportingCurrency: string | null;
   /**
-   * The currency every figure on the page is shown in — the one the shares
-   * trade in, not necessarily the one the books are kept in.
+   * The currency every figure on the page is shown in: the one the shares
+   * trade in, the one the books are kept in, or the one the reader chose.
    */
   displayCurrency: string;
+  /**
+   * The currency the shares trade in. Prices keep this whatever the reader
+   * asks to read the filings in — a converted share price is not a price
+   * anybody can pay.
+   */
+  priceCurrency: string;
   /** Set when figures were restated from another currency, for the footnote. */
   converted: { from: string; rate: number } | null;
   /**
@@ -133,7 +139,16 @@ export interface StockPageData {
  * Optional sources fail soft: missing news or an unset price key degrades that
  * section only, never the page.
  */
-export async function getStockPageData(symbol: string): Promise<StockPageData> {
+export async function getStockPageData(
+  symbol: string,
+  options: {
+    /**
+     * A currency the reader chose, from CURRENCY_CHOICES. Left unset, figures
+     * are shown in the currency the shares trade in.
+     */
+    currency?: string | null;
+  } = {},
+): Promise<StockPageData> {
   const provider = getProvider();
   const upper = symbol.toUpperCase();
 
@@ -212,9 +227,10 @@ export async function getStockPageData(symbol: string): Promise<StockPageData> {
     reportingCurrency: fundamentals.currency,
     quote,
     profile,
+    target: options.currency,
   });
   const resolvedFundamentals = restated.fundamentals;
-  const { converted, displayCurrency, marketCap } = restated;
+  const { converted, displayCurrency, listingCurrency, marketCap } = restated;
 
   const sector = sectorFromSic(profile?.sicCode);
 
@@ -275,6 +291,7 @@ export async function getStockPageData(symbol: string): Promise<StockPageData> {
     earlySignals: { insider, stakes, upcoming },
     reportingCurrency: fundamentals.currency,
     displayCurrency,
+    priceCurrency: listingCurrency,
     converted,
   };
 }
@@ -343,6 +360,8 @@ async function getInstrumentPageData(
     ),
   ]);
 
+  // A coin or a contract has no filings to restate, so the only currency in
+  // play is the one it is quoted in.
   const displayCurrency = quote?.currency ?? "USD";
 
   return {
@@ -376,6 +395,7 @@ async function getInstrumentPageData(
     earlySignals: { insider: { trades: [], pendingSales: [] }, stakes: [], upcoming: [] },
     reportingCurrency: null,
     displayCurrency,
+    priceCurrency: displayCurrency,
     converted: null,
   };
 }

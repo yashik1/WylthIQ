@@ -77,6 +77,9 @@ import { LocalTime } from "@/components/local-time";
 import { describeQuoteTime } from "@/lib/quote-time";
 import { MarketExpects, hasMarketExpectations } from "@/components/stock/market-expects";
 import { Section, SectionNav, type StockSection } from "@/components/stock/section-nav";
+import { cookies } from "next/headers";
+import { CURRENCY_COOKIE, supportedCurrency } from "@/lib/currency-choice";
+import { CurrencyPicker } from "@/components/currency-picker";
 
 export const revalidate = 900;
 
@@ -204,8 +207,22 @@ export async function generateMetadata({
  * after that renders the right page under a 200. The lookup itself is cheap —
  * the EDGAR ticker map is memoised for the life of the process.
  */
-export default async function StockPage({ params }: PageProps<"/stock/[symbol]">) {
+export default async function StockPage({
+  params,
+  searchParams,
+}: PageProps<"/stock/[symbol]">) {
   const { symbol } = await params;
+  /*
+    A currency in the URL, which beats the saved one.
+
+    It makes the choice shareable — "look at this one in pounds" is a link
+    rather than an instruction — and it is the path that still works when the
+    picker's JavaScript has not loaded.
+  */
+  const query = await searchParams;
+  const requested = supportedCurrency(
+    typeof query.currency === "string" ? query.currency : null,
+  );
   const upper = decodeURIComponent(symbol).toUpperCase();
 
   /*
@@ -279,7 +296,7 @@ export default async function StockPage({ params }: PageProps<"/stock/[symbol]">
     <Suspense
       fallback={<StockSkeleton label={assetClass ? "Loading price history…" : undefined} />}
     >
-      <StockBody symbol={upper} unsupported={unsupported} />
+      <StockBody symbol={upper} unsupported={unsupported} currency={requested} />
     </Suspense>
   );
 }
@@ -340,12 +357,26 @@ function formatRate(rate: number): string {
 async function StockBody({
   symbol: upper,
   unsupported,
+  currency: requested,
 }: {
   symbol: string;
   unsupported: UnsupportedSymbol | null;
+  /** From the URL, when the reader arrived on a link that names one. */
+  currency: string | null;
 }) {
+  /*
+    The reader's currency, read before anything is fetched.
+
+    Figures are converted on the server, so this has to be known before the
+    page renders rather than adjusted afterwards in the browser. An unset or
+    unrecognised cookie means "as traded", which is the default and the
+    behaviour every page had before the choice existed.
+  */
+  const chosen =
+    requested ?? supportedCurrency((await cookies()).get(CURRENCY_COOKIE)?.value);
+
   const [data, session, saved] = await Promise.all([
-    getStockPageData(upper),
+    getStockPageData(upper, { currency: chosen }),
     auth().catch(() => null),
     listWatchlist(),
   ]);
@@ -785,7 +816,7 @@ async function StockBody({
           {quote?.price != null ? (
             <div className="text-left sm:text-right">
               <p className="tnum font-display text-[2.375rem] leading-none">
-                {fmtPrice(quote.price, currency)}
+                {fmtPrice(quote.price, data.priceCurrency)}
               </p>
               <p
                 className={`tnum mt-0.5 text-[0.84375rem] ${
@@ -803,13 +834,17 @@ async function StockBody({
                   to the same clock as the figure above it. */}
               {marketCap != null && (
                 <p className="tnum mt-0.5 text-xs text-faint">
-                  {money(marketCap)} market value
+                  {money(marketCap, currency)} market value
                 </p>
               )}
             </div>
           ) : (
             <PriceUnavailable hasFilings={Boolean(report)} />
           )}
+          {/* Beside the money it acts on, rather than in a settings page: the
+              figures are what a reader is looking at when they notice the
+              currency is not theirs. */}
+          <CurrencyPicker current={chosen ?? ""} />
           <WatchButton
             symbol={upper}
             name={profile?.name ?? unsupported?.name ?? fundamentals?.entityName}
@@ -916,7 +951,7 @@ async function StockBody({
               range={usableIncome}
               since={sinceLaunch}
               analytics={analytics}
-              currency={data.displayCurrency}
+              currency={data.priceCurrency}
               filesWithSec={Boolean(fund)}
             />
           )}
@@ -995,6 +1030,7 @@ async function StockBody({
         ownership={data.ownership}
         currentPrice={data.quote?.price ?? null}
         currency={currency}
+        priceCurrency={data.priceCurrency}
       />
       </Section>
 
@@ -1166,9 +1202,19 @@ async function StockBody({
             <>
               {" "}
               Reported in {data.converted.from} and shown here in{" "}
-              {data.displayCurrency}, the currency {upper} trades in, converted at
-              today&apos;s rate of {formatRate(data.converted.rate)}. The filing itself
-              is in {data.converted.from}.
+              {data.displayCurrency}
+              {chosen
+                ? ", the currency you chose"
+                : `, the currency ${upper} trades in`}
+              , converted at today&apos;s rate of {formatRate(data.converted.rate)}. The
+              filing itself is in {data.converted.from}.
+              {data.displayCurrency !== data.priceCurrency && (
+                <>
+                  {" "}
+                  Prices stay in {data.priceCurrency}, which is what {upper} actually
+                  trades in.
+                </>
+              )}
             </>
           )}
           {report?.sourceFilingUrl && (

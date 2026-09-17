@@ -61,13 +61,17 @@ export function MarketExpects({
   ownership,
   currentPrice,
   currency,
+  priceCurrency,
 }: {
   expectations: ImpliedExpectations | null;
   analysts: AnalystView | null;
   shortInterest: ShortInterest | null;
   ownership: InstitutionalOwnership | null;
   currentPrice: number | null;
+  /** For figures solved from the filings, which a reader may have restated. */
   currency: string;
+  /** For anything measured against the share price, which is never restated. */
+  priceCurrency?: string;
 }) {
   const panels: ReactNode[] = [];
 
@@ -83,7 +87,7 @@ export function MarketExpects({
         key="analysts"
         view={analysts}
         currentPrice={currentPrice}
-        currency={currency}
+        currency={priceCurrency ?? currency}
       />,
     );
   }

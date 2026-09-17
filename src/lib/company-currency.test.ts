@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { restateCompany } from "./company-currency";
+import { chooseMarketCap, restateCompany } from "./company-currency";
 import type { Fact, NormalizedFundamentals } from "./fundamentals/types";
 import type { CompanyProfile, Quote } from "./providers/types";
 
@@ -19,6 +19,7 @@ vi.mock("./fx", async (importOriginal) => {
   const rates: Record<string, number> = {
     "KRW:USD": 0.00073,
     "CAD:USD": 0.7174,
+    "USD:CAD": 1 / 0.7174,
   };
   return {
     ...actual,
@@ -95,6 +96,41 @@ const nasdaq: Quote = {
   currency: "USD",
 };
 
+/**
+ * Which of two valuations to publish.
+ *
+ * Every number here was read off the live site on 2026-09-16: a screener
+ * showing no market value at all for Visa, Berkshire and ten others, Booking
+ * on 1.04 times earnings, Brookfield Renewable at $174m, and — the other way
+ * about — Cameco's vendor figure 28% below its own share price.
+ */
+describe("choosing a market value", () => {
+  const bn = (n: number) => n * 1e9;
+
+  it("trusts the arithmetic when the two roughly agree", () => {
+    // Cameco: $90.90 x 436m shares against a vendor snapshot a quarter old.
+    expect(chooseMarketCap(bn(39.6), bn(28.4))).toBe(bn(39.6));
+    // Boeing, where they agree to the decimal.
+    expect(chooseMarketCap(bn(159.7), bn(159.6))).toBe(bn(159.7));
+  });
+
+  it("trusts the vendor when the share count cannot be counting the same thing", () => {
+    // SK hynix: Nasdaq prices a depositary share, the filing counts ordinary ones.
+    expect(chooseMarketCap(bn(122.7), bn(901))).toBe(bn(901));
+    // Booking: a share split the filing predates.
+    expect(chooseMarketCap(bn(5.6), bn(128.8))).toBe(bn(128.8));
+    // Brookfield Renewable: only some units tagged.
+    expect(chooseMarketCap(bn(0.17), bn(12.01))).toBe(bn(12.01));
+  });
+
+  it("takes whichever one exists", () => {
+    expect(chooseMarketCap(null, bn(692.5))).toBe(bn(692.5));
+    expect(chooseMarketCap(bn(692.5), null)).toBe(bn(692.5));
+    expect(chooseMarketCap(null, null)).toBeNull();
+    expect(chooseMarketCap(0, bn(5))).toBe(bn(5));
+  });
+});
+
 describe("a filer priced on another continent", () => {
   it("shows the market value in the currency the page is written in", async () => {
     const out = await restateCompany({ fundamentals: filings("KRW"), quote: nasdaq, profile: profile() });
@@ -147,13 +183,14 @@ describe("a Canadian filer listed in New York", () => {
 
   it("restates the filings rather than the valuation", async () => {
     const out = await restateCompany({
-      fundamentals: filings("CAD", { netIncome: 20_400_000_000 }),
+      fundamentals: filings("CAD", { netIncome: 20_400_000_000, shares: 1_948_000_000 }),
       quote: nyse,
       profile: royalBank,
     });
 
     expect(out.displayCurrency).toBe("USD");
-    expect(out.marketCap).toBe(394_090_000_000);
+    // $202.29 x 1.948bn shares, within a rounding of the vendor's $394.09bn.
+    expect(out.marketCap! / 1e9).toBeCloseTo(394.1, 0);
     // 26.9 times earnings, which is what the company page has always said —
     // the compare page's 19.35 was this same sum in two currencies.
     const netIncome = out.fundamentals!.annual[0].facts.netIncome!.value;
@@ -179,7 +216,7 @@ describe("when a rate cannot be had", () => {
     expect(out.marketCap).toBe(5_000_000_000_000);
   });
 
-  it("publishes no market value it cannot place in the displayed currency", async () => {
+  it("falls back to the arithmetic when the vendor's figure cannot be placed", async () => {
     const out = await restateCompany({
       fundamentals: filings("USD"),
       quote: { ...nasdaq, currency: "USD" },
@@ -187,7 +224,69 @@ describe("when a rate cannot be had", () => {
     });
 
     expect(out.displayCurrency).toBe("USD");
-    expect(out.marketCap).toBeNull();
+    // $174.87 x 701,691,780 shares, both of which are already in dollars.
+    expect(out.marketCap! / 1e9).toBeCloseTo(122.7, 0);
+  });
+});
+
+describe("a currency the reader asked for", () => {
+  const apple = profile({
+    symbol: "AAPL",
+    exchange: "NASDAQ NMS - GLOBAL MARKET",
+    currency: "USD",
+    marketCap: 3_400_000_000_000,
+    marketCapCurrency: "USD",
+    sharesOutstanding: 15_000_000_000,
+  });
+  const nasdaqUsd: Quote = { ...nasdaq, symbol: "AAPL", price: 226.0, currency: "USD" };
+
+  it("restates a US filer's figures into it", async () => {
+    const out = await restateCompany({
+      fundamentals: filings("USD", { revenue: 400_000_000_000 }),
+      quote: nasdaqUsd,
+      profile: apple,
+      target: "CAD",
+    });
+
+    expect(out.displayCurrency).toBe("CAD");
+    expect(out.converted).toEqual({ from: "USD", rate: 1 / 0.7174 });
+    expect(out.fundamentals!.annual[0].facts.revenue!.value / 1e9).toBeCloseTo(557.6, 0);
+    expect(out.marketCap! / 1e12).toBeCloseTo(4.74, 1);
+  });
+
+  it("keeps the price in the currency the shares trade in", async () => {
+    const out = await restateCompany({
+      fundamentals: filings("USD"),
+      quote: nasdaqUsd,
+      profile: apple,
+      target: "CAD",
+    });
+
+    expect(out.listingCurrency).toBe("USD");
+  });
+
+  it("ignores a currency that is not on the menu", async () => {
+    const out = await restateCompany({
+      fundamentals: filings("USD"),
+      quote: nasdaqUsd,
+      profile: apple,
+      target: "XYZ; DROP TABLE",
+    });
+
+    expect(out.displayCurrency).toBe("USD");
+    expect(out.converted).toBeNull();
+  });
+
+  it("converts nothing for a filer already reporting in it", async () => {
+    const out = await restateCompany({
+      fundamentals: filings("CAD"),
+      quote: { ...nasdaqUsd, currency: "USD" },
+      profile: apple,
+      target: "CAD",
+    });
+
+    expect(out.displayCurrency).toBe("CAD");
+    expect(out.converted).toBeNull();
   });
 });
 
