@@ -31,6 +31,7 @@ const EXPECTED_TABLES = [
   "password_reset_tokens", "subscriptions", "journal_entries",
   "watchlist_items", "playbooks", "trades",
   "watchlist_groups", "saved_screen_runs", "investment_theses", "portfolio_holdings",
+  "fund_profile_cache",
 ] as const;
 
 /** Postgres error codes we treat as "already done" rather than failures. */

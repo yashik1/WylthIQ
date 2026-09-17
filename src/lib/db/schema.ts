@@ -196,6 +196,28 @@ export const priceCache = pgTable(
   (t) => [uniqueIndex("price_cache_key_idx").on(t.symbol, t.timeframe)],
 );
 
+/**
+ * A fund's commercial facts, kept between deployments.
+ *
+ * An expense ratio does not change between two page views, and the source
+ * that carries one for a US fund allows 25 calls a day for the whole app. So
+ * the answer is kept: one row per fund, replaced when it is old enough to be
+ * worth asking again. Without it most funds showed no fee at all, because the
+ * allowance was spent before their page was ever opened.
+ */
+export const fundProfileCache = pgTable(
+  "fund_profile_cache",
+  {
+    id: serial("id").primaryKey(),
+    symbol: text("symbol").notNull(),
+    /** Which provider answered, so a better source can replace a weaker one. */
+    source: text("source").notNull(),
+    profile: jsonb("profile").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("fund_profile_cache_symbol_idx").on(t.symbol)],
+);
+
 /** Audit trail for ingest runs, so a partial or failed refresh is visible. */
 export const ingestRuns = pgTable("ingest_runs", {
   id: serial("id").primaryKey(),

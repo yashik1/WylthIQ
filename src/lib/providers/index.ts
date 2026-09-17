@@ -10,6 +10,7 @@ import { yahoo, yahooSymbol } from "./yahoo";
 import { searchGlobalSymbols, twelveData } from "./twelvedata";
 import { isUsListing, listingForBareTicker } from "../exchange-suffix";
 import { getCanadianIssuerProfile } from "../etf/issuers";
+import { readFundProfile, writeFundProfile } from "../etf/profile-cache";
 import {
   fetchBarsWithFailover,
   fetchQuoteWithFailover,
@@ -702,7 +703,22 @@ export async function getEtfProfile(symbol: string) {
     const fromEodhd = await eodhd.getEtfProfile(symbol).catch(() => null);
     if (fromEodhd) return fromEodhd;
   }
-  return alphaVantage.getEtfProfile(symbol).catch(() => null);
+
+  /*
+    A kept answer before a spent request.
+
+    What is left is Alpha Vantage, at 25 calls a day for the whole app, shared
+    with every company EDGAR cannot answer. Most funds never got a fee at all
+    because the allowance was gone before their page was opened — and a fee
+    does not change between two page views, so asking again daily was buying
+    the same fact over and over. See etf/profile-cache.ts.
+  */
+  const stored = await readFundProfile(symbol);
+  if (stored) return stored;
+
+  const fresh = await alphaVantage.getEtfProfile(symbol).catch(() => null);
+  if (fresh) void writeFundProfile(symbol, alphaVantage.name, fresh);
+  return fresh;
 }
 
 /**

@@ -3,7 +3,14 @@ import { getDb } from "./db";
 import { companies, financials, ingestRuns, scores } from "./db/schema";
 import { fieldValue } from "./fundamentals/normalize";
 import type { CanonicalField, NormalizedFundamentals } from "./fundamentals/types";
-import { finnhub, getProvider, quoteSourcesFor, reportedIn, secEdgar } from "./providers";
+import {
+  finnhub,
+  getFundamentalsWithSource,
+  getProvider,
+  quoteSourcesFor,
+  reportedIn,
+  secEdgar,
+} from "./providers";
 import { getRate, restate } from "./fx";
 import { chooseMarketCap } from "./company-currency";
 import { fetchQuoteWithFailover } from "./providers/failover";
@@ -139,16 +146,27 @@ async function marketCapInFilingCurrency(
 export async function ingestSymbol(symbol: string): Promise<void> {
   const db = getDb();
 
-  const cik = await cikForSymbol(symbol);
-  if (!cik) throw new Error(`no CIK found in EDGAR for ${symbol}`);
+  /*
+    The same sources the company pages read, in the same order.
 
-  const [fundamentals, profile] = await Promise.all([
-    secEdgar.getFundamentalsByCik(cik),
+    This used to demand a CIK and then read EDGAR alone, so a company EDGAR no
+    longer holds simply threw and kept whatever the screener last stored. Four
+    of the 544 are in that position today and none of them is obscure: Exxon
+    now files under a new holding company with no annual report yet, and
+    Electronic Arts, AvalonBay and Equity Residential have left the SEC's
+    ticker file entirely. Their own pages look fine, because those fall back to
+    another provider — the screener was the only place that did not.
+  */
+  const cik = await cikForSymbol(symbol).catch(() => null);
+
+  const [statements, profile] = await Promise.all([
+    getFundamentalsWithSource(symbol),
     secEdgar.getProfile(symbol),
   ]);
+  const fundamentals = statements.fundamentals;
 
   if (!fundamentals || fundamentals.annual.length === 0) {
-    throw new Error(`no XBRL financial data for ${symbol}`);
+    throw new Error(`no financial statements for ${symbol} from any source`);
   }
 
   const sector = sectorFromSic(profile?.sicCode);
@@ -186,15 +204,30 @@ export async function ingestSymbol(symbol: string): Promise<void> {
     .onConflictDoUpdate({
       target: companies.symbol,
       set: {
-        cik,
+        ...(cik ? { cik } : {}),
         name: profile?.name ?? fundamentals.entityName,
-        sicCode: profile?.sicCode ?? null,
-        sicDescription: profile?.sicDescription ?? null,
-        sectorKind: sector,
-        displaySector: displaySectorFromSic(profile?.sicCode),
-        industry: finnhubProfile?.industry ?? profile?.sicDescription ?? null,
-        logoUrl: finnhubProfile?.logo ?? null,
-        website: finnhubProfile?.website ?? null,
+        /*
+          EDGAR's classification is only written when EDGAR still has one.
+
+          A company that has left the SEC's ticker file — or moved to a new
+          registrant, as Exxon has — returns no SIC code, and writing that
+          absence would wipe a sector this row has held for months and drop
+          the company into "Other" on every screen. What is not known is left
+          as it was.
+        */
+        ...(profile?.sicCode
+          ? {
+              sicCode: profile.sicCode,
+              sicDescription: profile.sicDescription ?? null,
+              sectorKind: sector,
+              displaySector: displaySectorFromSic(profile.sicCode),
+            }
+          : {}),
+        ...(finnhubProfile?.industry || profile?.sicDescription
+          ? { industry: finnhubProfile?.industry ?? profile?.sicDescription }
+          : {}),
+        ...(finnhubProfile?.logo ? { logoUrl: finnhubProfile.logo } : {}),
+        ...(finnhubProfile?.website ? { website: finnhubProfile.website } : {}),
         updatedAt: new Date(),
       },
     })

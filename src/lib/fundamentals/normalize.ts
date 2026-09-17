@@ -325,6 +325,21 @@ function periodFacts(
     if (fact) facts[field] = fact;
   }
 
+  /*
+    A plant smaller than one year's spending on it is not the whole plant.
+
+    Filers who never tag `PropertyPlantAndEquipmentNet` are read from a
+    fallback concept instead, and for a few that concept holds a component
+    rather than the total: Apache tags only the finance-lease part, $0.15B,
+    against $2.74B spent drilling that year and $46B of oil and gas property
+    on the books. Left in, it feeds the Beneish asset-quality index and can
+    flag a company's accounting on the strength of a mis-read line. No figure
+    is better than a hundredth of one.
+  */
+  if (facts.ppe && facts.capex && Math.abs(facts.capex.value) > facts.ppe.value) {
+    delete facts.ppe;
+  }
+
   // Derived: total liabilities. Many us-gaap filers (Shopify among them)
   // report assets and equity but never tag `Liabilities`.
   if (!facts.liabilities && facts.assets && facts.equity) {
