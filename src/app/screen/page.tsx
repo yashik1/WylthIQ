@@ -24,6 +24,7 @@ import {
 import { calendarDate, money, multiple, percent, price as fmtPrice, signedPercent } from "@/lib/format";
 import { healthRating } from "@/lib/scoring/ratings";
 import {
+  numericParam,
   PRESETS,
   runScreen,
   SORTS,
@@ -98,10 +99,8 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
     const v = params[key];
     return Array.isArray(v) ? v[0] : v;
   };
-  const numeric = (key: string): number | undefined => {
-    const v = Number(get(key));
-    return Number.isFinite(v) ? v : undefined;
-  };
+  // An empty box is not a zero — see numericParam, and the screen it emptied.
+  const numeric = (key: string): number | undefined => numericParam(get(key));
 
   const preset = get("preset") as PresetKey | undefined;
   const sort = (get("sort") as SortKey | undefined) ?? "health";
