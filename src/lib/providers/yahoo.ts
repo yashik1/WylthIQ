@@ -4,6 +4,7 @@ import type {
   FinancialPeriod,
   NormalizedFundamentals,
 } from "../fundamentals/types";
+import { COUNT_FIELDS } from "../fundamentals/concept-map";
 import type { Bar, NewsItem, Quote, Timeframe } from "./types";
 
 /**
@@ -706,7 +707,18 @@ export class YahooProvider {
           const facts = byDate.get(point.asOfDate) ?? {};
           facts[field] = {
             value: point.reportedValue.raw,
-            unit: point.currencyCode ?? "USD",
+            /*
+              A share count is a count, whatever Yahoo says it is.
+
+              Every point in this response carries the filer's currency,
+              including `annualOrdinarySharesNumber`. Passing that straight
+              through told the currency conversion downstream that SK hynix's
+              701,691,780 shares were 701,691,780 won, so they became 512,235
+              dollars' worth of shares and every per-share figure on the page
+              was 1,370 times too large. SEC filings tag this `shares`, and so
+              does this now.
+            */
+            unit: COUNT_FIELDS.has(field) ? "shares" : (point.currencyCode ?? "USD"),
             end: point.asOfDate,
             fiscalYear: Number(point.asOfDate.slice(0, 4)),
             fiscalPeriod: "FY",

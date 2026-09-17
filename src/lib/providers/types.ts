@@ -67,6 +67,14 @@ export interface CompanyProfile {
   website: string | null;
   logo: string | null;
   marketCap: number | null;
+  /**
+   * The currency `marketCap` is quoted in, which is the venue the provider
+   * priced rather than the one a reader is looking at. SK hynix is priced in
+   * Seoul, in won, while the ticker on this page trades on Nasdaq in dollars —
+   * so the figure is unusable until it is restated, and unusable without
+   * knowing what it already is.
+   */
+  marketCapCurrency: string | null;
   sharesOutstanding: number | null;
   cik: string | null;
   description: string | null;

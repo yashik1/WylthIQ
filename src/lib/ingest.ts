@@ -3,7 +3,8 @@ import { getDb } from "./db";
 import { companies, financials, ingestRuns, scores } from "./db/schema";
 import { fieldValue } from "./fundamentals/normalize";
 import type { CanonicalField, NormalizedFundamentals } from "./fundamentals/types";
-import { finnhub, getProvider, quoteSourcesFor, secEdgar } from "./providers";
+import { finnhub, getProvider, quoteSourcesFor, reportedIn, secEdgar } from "./providers";
+import { getRate, restate } from "./fx";
 import { fetchQuoteWithFailover } from "./providers/failover";
 import type { Quote } from "./providers/types";
 import { priceTime } from "./quote-session";
@@ -79,17 +80,46 @@ const FINANCIAL_COLUMNS: CanonicalField[] = [
 async function resolveMarketCap(
   symbol: string,
   fundamentals: NormalizedFundamentals,
-): Promise<number | null> {
+): Promise<{ value: number | null; currency: string | null }> {
   if (finnhub.isConfigured()) {
     const profile = await finnhub.getProfile(symbol).catch(() => null);
-    if (profile?.marketCap) return profile.marketCap;
+    if (profile?.marketCap) {
+      return { value: profile.marketCap, currency: profile.marketCapCurrency };
+    }
   }
 
   const shares = fieldValue(fundamentals.annual[0], "sharesOutstanding");
-  if (!shares) return null;
+  if (!shares) return { value: null, currency: null };
 
   const quote = await getProvider().getQuote(symbol).catch(() => null);
-  return quote?.price ? quote.price * shares : null;
+  if (!quote?.price) return { value: null, currency: null };
+
+  // Every symbol in this universe is the US listing — RY is the one on the
+  // NYSE, not the one in Toronto — so a quote that does not name its currency
+  // is in dollars. See CANADIAN_SYMBOLS in universe.ts.
+  return { value: quote.price * shares, currency: quote.currency ?? "USD" };
+}
+
+/**
+ * The market value expressed in the currency the filings are in.
+ *
+ * A P/E is a market value over a profit, and that is only a P/E when both are
+ * the same money. Royal Bank files in Canadian dollars and is priced in New
+ * York in US ones, so dividing straight through reported it at 19 times
+ * earnings where the stock page, which converts, said 27 — the whole gap being
+ * the exchange rate. The stored market value stays as the market quoted it;
+ * only the divisions move.
+ */
+async function marketCapInFilingCurrency(
+  cap: { value: number | null; currency: string | null },
+  filingCurrency: string | null,
+): Promise<number | null> {
+  if (cap.value == null) return null;
+  if (!cap.currency || !filingCurrency) return cap.value;
+  if (cap.currency.toUpperCase() === filingCurrency.toUpperCase()) return cap.value;
+
+  const rate = await getRate(cap.currency, filingCurrency).catch(() => null);
+  return restate(cap.value, cap.currency, filingCurrency, rate);
 }
 
 /** Fetches, scores and stores one company. */
@@ -109,8 +139,12 @@ export async function ingestSymbol(symbol: string): Promise<void> {
   }
 
   const sector = sectorFromSic(profile?.sicCode);
-  const marketCap = await resolveMarketCap(symbol, fundamentals);
-  const report = buildHealthReport(fundamentals, sector, marketCap);
+  const quotedCap = await resolveMarketCap(symbol, fundamentals);
+  const marketCap = quotedCap.value;
+  // Every ratio below divides this into figures from the filings, so it has to
+  // be in the filings' own currency first.
+  const comparableCap = await marketCapInFilingCurrency(quotedCap, reportedIn(fundamentals));
+  const report = buildHealthReport(fundamentals, sector, comparableCap);
 
   const finnhubProfile = finnhub.isConfigured()
     ? await finnhub.getProfile(symbol).catch(() => null)
@@ -206,12 +240,12 @@ export async function ingestSymbol(symbol: string): Promise<void> {
       mFlagged: report.beneish.value?.flagged ?? null,
       mApplicable: report.beneish.applicable,
       marketCap,
-      peRatio: netIncome && netIncome > 0 ? div(marketCap, netIncome) : null,
-      pbRatio: div(marketCap, fieldValue(latest, "equity")),
-      psRatio: div(marketCap, revenue),
+      peRatio: netIncome && netIncome > 0 ? div(comparableCap, netIncome) : null,
+      pbRatio: div(comparableCap, fieldValue(latest, "equity")),
+      psRatio: div(comparableCap, revenue),
       dividendYield: div(
         Math.abs(fieldValue(latest, "dividendsPaid") ?? 0) || null,
-        marketCap,
+        comparableCap,
       ),
       revenueGrowth:
         revenue != null && priorRevenue != null && priorRevenue !== 0
@@ -242,9 +276,9 @@ export async function ingestSymbol(symbol: string): Promise<void> {
         mFlagged: report.beneish.value?.flagged ?? null,
         mApplicable: report.beneish.applicable,
         marketCap,
-        peRatio: netIncome && netIncome > 0 ? div(marketCap, netIncome) : null,
-        pbRatio: div(marketCap, fieldValue(latest, "equity")),
-        psRatio: div(marketCap, revenue),
+        peRatio: netIncome && netIncome > 0 ? div(comparableCap, netIncome) : null,
+        pbRatio: div(comparableCap, fieldValue(latest, "equity")),
+        psRatio: div(comparableCap, revenue),
         revenueGrowth:
           revenue != null && priorRevenue != null && priorRevenue !== 0
             ? (revenue - priorRevenue) / Math.abs(priorRevenue)
@@ -458,6 +492,7 @@ export async function refreshQuotes(
   */
   const latest = await db.execute<{
     company_id: number;
+    currency: string | null;
     shares_outstanding: number | null;
     net_income: number | null;
     equity: number | null;
@@ -465,15 +500,13 @@ export async function refreshQuotes(
     dividends_paid: number | null;
   }>(sql`
     SELECT DISTINCT ON (company_id)
-      company_id, shares_outstanding, net_income, equity, revenue, dividends_paid
+      company_id, currency, shares_outstanding, net_income, equity, revenue,
+      dividends_paid
     FROM financials
     ORDER BY company_id, fiscal_year DESC
   `);
   const fundamentalsById = new Map(
-    (latest as unknown as Record<string, number | null>[]).map((r) => [
-      r.company_id as number,
-      r,
-    ]),
+    (latest as unknown as FilingFigures[]).map((r) => [r.company_id as number, r]),
   );
 
   // Start times are handed out one slot apart, shared by every worker.
@@ -526,13 +559,34 @@ export async function refreshQuotes(
         if (outcome === "stale-skipped") return;
       }
 
+      /*
+        The price and the filings can be in different money.
+
+        A Canadian bank files in Canadian dollars and is quoted here in US
+        ones, so its market value has to be restated before it is divided into
+        anything from the filing. Fetched per symbol, but `getRate` caches by
+        pair for six hours, so the whole universe costs one request.
+      */
+      const figures = fundamentalsById.get(companyId);
+      const filingCurrency = figures?.currency ?? null;
+      // Bare tickers here are all US listings, so an unlabelled quote is USD.
+      const priceCurrency = quote.currency ?? "USD";
+      const rate =
+        filingCurrency && filingCurrency.toUpperCase() !== priceCurrency.toUpperCase()
+          ? await getRate(filingCurrency, priceCurrency).catch(() => null)
+          : 1;
+
       await db
         .update(scores)
         .set({
           price: quote.price,
           changePercent: quote.changePercent,
           priceUpdatedAt: at,
-          ...priceDerived(quote.price, fundamentalsById.get(companyId)),
+          ...priceDerived(quote.price, figures, {
+            from: filingCurrency,
+            to: priceCurrency,
+            rate,
+          }),
         })
         .where(eq(scores.companyId, companyId));
 
@@ -597,6 +651,24 @@ function quoteWrite(
   return { outcome: newer || samePrice ? "stale-recorded" : "stale-skipped", at };
 }
 
+/** One company's newest reported figures, as the refresh query returns them. */
+interface FilingFigures {
+  company_id?: number;
+  currency?: string | null;
+  shares_outstanding: number | null;
+  net_income: number | null;
+  equity: number | null;
+  revenue: number | null;
+  dividends_paid: number | null;
+}
+
+/** What it takes to read those figures in the currency the price is quoted in. */
+interface FilingFx {
+  from: string | null;
+  to: string | null;
+  rate: number | null;
+}
+
 /**
  * The figures a share price implies, recomputed from the newest price.
  *
@@ -613,22 +685,37 @@ function quoteWrite(
  */
 function priceDerived(
   price: number,
-  latest: Record<string, number | null> | undefined,
+  latest: FilingFigures | undefined,
+  fx: FilingFx = { from: null, to: null, rate: 1 },
 ): Partial<typeof scores.$inferInsert> {
   const shares = latest?.shares_outstanding ?? null;
   if (!shares || shares <= 0) return {};
 
   const marketCap = price * shares;
-  const netIncome = latest?.net_income ?? null;
-  const dividendsPaid = latest?.dividends_paid ?? null;
+
+  /*
+    The filing's figures, restated in the currency the price is quoted in.
+
+    Share counts are counts, so the market value above needs no conversion —
+    but the profit, equity, revenue and dividends it is divided into are money
+    from the filing. Royal Bank's US-dollar market value over its
+    Canadian-dollar profit read as a P/E of 19 against the 27 the stock page
+    showed, and the gap was the exchange rate rather than anything about the
+    bank. A null rate for two different currencies leaves the ratios null: a
+    blank cell is honest, a mixed one is not.
+  */
+  const money = (value: number | null | undefined) => restate(value, fx.from, fx.to, fx.rate);
+
+  const netIncome = money(latest?.net_income);
+  const dividendsPaid = money(latest?.dividends_paid);
 
   return {
     marketCap,
     // A loss makes a P/E meaningless rather than negative, which is the same
     // rule the ingest and the stock page already apply.
     peRatio: netIncome != null && netIncome > 0 ? div(marketCap, netIncome) : null,
-    pbRatio: div(marketCap, latest?.equity ?? null),
-    psRatio: div(marketCap, latest?.revenue ?? null),
+    pbRatio: div(marketCap, money(latest?.equity)),
+    psRatio: div(marketCap, money(latest?.revenue)),
     // Dividends are tagged as an outflow and the sign varies by filer, so the
     // magnitude is what matters — the same reasoning as scoring/dividends.ts.
     dividendYield:

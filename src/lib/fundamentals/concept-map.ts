@@ -239,3 +239,16 @@ export const ANNUAL_FORMS: ReadonlySet<string> = new Set([
   "40-F",
   "40-F/A",
 ]);
+
+/**
+ * Fields that are counts, not money.
+ *
+ * Kept beside the other field metadata because two different places need the
+ * same answer: a snapshot rebuilding a fact's unit, and the currency
+ * conversion deciding what it may multiply. SK hynix is why the second one
+ * matters — Yahoo tags every figure it returns with the filer's currency,
+ * including the share count, so a KRW→USD conversion that trusts the unit
+ * alone turns 701 million shares into 512 thousand and every per-share figure
+ * with it.
+ */
+export const COUNT_FIELDS: ReadonlySet<CanonicalField> = new Set(["sharesOutstanding"]);

@@ -87,6 +87,34 @@ async function fromYahoo(from: string, to: string): Promise<number | null> {
   }
 }
 
+/**
+ * One money amount, restated in another currency.
+ *
+ * Separate from `getRate` so the decision can be tested without a network, and
+ * so every caller makes the same one. A market value divided by a profit is
+ * only a P/E when both are in the same currency: SK hynix's market value
+ * arrived in won, its profit had been converted to dollars, and the page
+ * reported a P/E of 39,478 for a company trading on 29 times earnings. Royal
+ * Bank is the quieter version of the same fault — a dollar market value over a
+ * Canadian-dollar profit, which reads as 19 rather than 27.
+ *
+ * Returns null when the currencies differ and no rate is available, because a
+ * missing figure is honest where a mixed one silently is not. An unknown
+ * currency on either side is left alone rather than guessed at.
+ */
+export function restate(
+  amount: number | null | undefined,
+  from: string | null | undefined,
+  to: string | null | undefined,
+  rate: number | null,
+): number | null {
+  if (amount == null || !Number.isFinite(amount)) return null;
+  if (!from || !to) return amount;
+  if (from.toUpperCase() === to.toUpperCase()) return amount;
+  if (rate == null || !Number.isFinite(rate) || rate <= 0) return null;
+  return amount * rate;
+}
+
 /** Exposed so tests start from a known state. */
 export function clearRateCache(): void {
   cache.clear();

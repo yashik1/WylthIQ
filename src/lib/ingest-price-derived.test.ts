@@ -56,6 +56,49 @@ describe("recomputing from a fresh price", () => {
     to the top of "lowest P/E" and reads as the cheapest company on the
     screen, which is the exact opposite of what it means.
   */
+  /*
+    The filing and the price need not be in the same money.
+
+    Royal Bank files in Canadian dollars and is quoted in New York in US ones.
+    Dividing straight through published it at 19 times earnings while the stock
+    page, which converts, said 27 — and the whole difference was the exchange
+    rate rather than anything about the bank.
+  */
+  describe("when the filing is in another currency", () => {
+    const cad = { from: "CAD", to: "USD", rate: 0.72 };
+
+    it("restates the filing before dividing into it", () => {
+      const out = priceDerived(10, latest(), cad);
+
+      expect(out.marketCap).toBe(10_000);
+      // 10,000 USD over 500 CAD of profit, which is 360 USD.
+      expect(out.peRatio).toBeCloseTo(10_000 / 360, 5);
+      expect(out.pbRatio).toBeCloseTo(10_000 / 1_440, 5);
+      expect(out.psRatio).toBeCloseTo(10_000 / 2_880, 5);
+      expect(out.dividendYield).toBeCloseTo(72 / 10_000, 5);
+    });
+
+    it("leaves the market value in the currency it was quoted in", () => {
+      // The share count is a count, so no rate touches it.
+      expect(priceDerived(10, latest(), cad).marketCap).toBe(10_000);
+    });
+
+    it("publishes no ratio at all when the rate is unknown", () => {
+      const out = priceDerived(10, latest(), { from: "CAD", to: "USD", rate: null });
+
+      expect(out.marketCap).toBe(10_000);
+      expect(out.peRatio).toBeNull();
+      expect(out.pbRatio).toBeNull();
+      expect(out.psRatio).toBeNull();
+      expect(out.dividendYield).toBeNull();
+    });
+
+    it("divides as before when both are the same currency", () => {
+      const out = priceDerived(10, latest(), { from: "USD", to: "USD", rate: 1 });
+      expect(out.peRatio).toBeCloseTo(20, 5);
+    });
+  });
+
   it("refuses a P/E against a loss", () => {
     expect(priceDerived(10, latest({ net_income: -500 })).peRatio).toBeNull();
     expect(priceDerived(10, latest({ net_income: 0 })).peRatio).toBeNull();
