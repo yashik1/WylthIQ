@@ -3,7 +3,6 @@ import type { NormalizedFundamentals } from "../fundamentals/types";
 import { freeCashFlowOf } from "./returns";
 import type { SectorKind } from "./applicability";
 
-/** A metric is never silently turned into a dash without explaining why. */
 export type MetricStatus =
   | "available"
   | "calculated"
@@ -31,16 +30,6 @@ export interface ValuationMetrics {
 
 const STALE_DAYS = 548;
 
-function unavailable(basis: string): ValuationMetric {
-  return {
-    value: null,
-    status: "unavailable",
-    source: "local calculation",
-    basis,
-    asOf: null,
-  };
-}
-
 function metric(
   value: number | null,
   basis: string,
@@ -56,15 +45,45 @@ function metric(
   };
 }
 
+function notMeaningful(reason: string, asOf: string | null): ValuationMetric {
+  return {
+    value: null,
+    status: "not_meaningful",
+    source: "local calculation",
+    basis: reason,
+    asOf,
+  };
+}
+
+/** Use the latest four discrete quarters when available; otherwise fall back to the latest annual figure. */
+function ttm(
+  fundamentals: NormalizedFundamentals,
+  field: Parameters<typeof fieldValue>[1],
+): { value: number | null; asOf: string | null; basis: string } {
+  const quarters = fundamentals.quarterly?.slice(0, 4) ?? [];
+  if (quarters.length === 4) {
+    const values = quarters.map((q) => fieldValue(q, field));
+    if (values.every((v) => v != null)) {
+      return {
+        value: values.reduce((sum, value) => sum + value!, 0),
+        asOf: quarters[0]?.end ?? null,
+        basis: "market value / trailing twelve-month figure from four latest quarters",
+      };
+    }
+  }
+
+  const annual = fundamentals.annual[0];
+  return {
+    value: fieldValue(annual, field),
+    asOf: annual?.end ?? null,
+    basis: "market value / latest annual figure",
+  };
+}
+
 /**
- * Builds the common valuation set from the same normalized statements used by
- * the health score. This is the final fallback: if a provider has no ratio,
- * WylthIQ calculates it when the underlying facts exist.
- *
- * Important distinction: a negative denominator is not reported as a fake
- * negative multiple. It is explicitly `not_meaningful`, while a missing input
- * is `unavailable`. A tiny positive profit is valid and therefore produces the
- * very large P/E a reader should see for a company such as CRWD.
+ * Calculates valuation from the normalized financials instead of requiring a
+ * provider to supply a ratio. Profit/revenue/cash-flow multiples use TTM data;
+ * P/B uses the latest balance sheet because book value is point-in-time.
  */
 export function buildValuationMetrics(
   fundamentals: NormalizedFundamentals,
@@ -73,20 +92,24 @@ export function buildValuationMetrics(
   now = new Date(),
 ): ValuationMetrics {
   const latest = fundamentals.annual[0];
-  const revenue = fieldValue(latest, "revenue");
-  const netIncome = fieldValue(latest, "netIncome");
+  const revenueTtm = ttm(fundamentals, "revenue");
+  const netIncomeTtm = ttm(fundamentals, "netIncome");
+  const operatingIncomeTtm = ttm(fundamentals, "operatingIncome");
+  const depreciationTtm = ttm(fundamentals, "depreciation");
+  const ocfTtm = ttm(fundamentals, "operatingCashFlow");
+  const capexTtm = ttm(fundamentals, "capex");
+
+  const revenue = revenueTtm.value;
+  const netIncome = netIncomeTtm.value;
   const equity = fieldValue(latest, "equity");
-  const operatingIncome = fieldValue(latest, "operatingIncome");
-  const depreciation = fieldValue(latest, "depreciation");
+  const operatingIncome = operatingIncomeTtm.value;
+  const depreciation = depreciationTtm.value;
   const cash = fieldValue(latest, "cash");
   const longTermDebt = fieldValue(latest, "longTermDebt") ?? 0;
   const shortTermDebt = fieldValue(latest, "shortTermDebt") ?? 0;
-  const fcf = freeCashFlowOf(
-    fieldValue(latest, "operatingCashFlow"),
-    fieldValue(latest, "capex"),
-  );
+  const fcf = freeCashFlowOf(ocfTtm.value, capexTtm.value);
 
-  const asOf = latest?.end ?? null;
+  const asOf = revenueTtm.asOf ?? latest?.end ?? null;
   const stale = asOf
     ? now.getTime() - Date.parse(`${asOf}T00:00:00Z`) > STALE_DAYS * 86_400_000
     : false;
@@ -132,39 +155,54 @@ export function buildValuationMetrics(
       ? enterpriseValue / ebitda
       : null;
 
-  const negative = (value: number | null, reason: string, basis: string): ValuationMetric => ({
-    value: null,
-    status: value != null && value <= 0 ? "not_meaningful" : "unavailable",
-    source: "local calculation",
-    basis: value != null && value <= 0 ? reason : basis,
-    asOf,
-  });
-
   return {
     trailingPE:
       netIncome != null && netIncome <= 0
-        ? negative(netIncome, "Trailing GAAP earnings are zero or negative; P/E is not meaningful.", "market value / trailing net income")
-        : metric(pe, "market value / trailing net income", asOf, statusFor(pe)),
-    priceToSales: metric(ps, "market value / trailing revenue", asOf, statusFor(ps)),
+        ? notMeaningful(
+            "Trailing twelve-month GAAP earnings are zero or negative; P/E is not meaningful.",
+            netIncomeTtm.asOf,
+          )
+        : metric(pe, netIncomeTtm.basis, netIncomeTtm.asOf, statusFor(pe)),
+    priceToSales: metric(ps, revenueTtm.basis, revenueTtm.asOf, statusFor(ps)),
     priceToBook:
       equity != null && equity <= 0
-        ? negative(equity, "Book equity is zero or negative; P/B is not meaningful.", "market value / book equity")
-        : metric(pb, "market value / book equity", asOf, statusFor(pb)),
+        ? notMeaningful(
+            "Book equity is zero or negative; P/B is not meaningful.",
+            latest?.end ?? null,
+          )
+        : metric(pb, "market value / latest reported book equity", latest?.end ?? null, statusFor(pb)),
     priceToFreeCashFlow:
       fcf != null && fcf <= 0
-        ? negative(fcf, "Trailing free cash flow is zero or negative; P/FCF is not meaningful.", "market value / trailing free cash flow")
-        : metric(pfcf, "market value / trailing free cash flow", asOf, statusFor(pfcf)),
-    fcfYield: metric(fcfYield, "trailing free cash flow / market value", asOf, statusFor(fcfYield)),
+        ? notMeaningful(
+            "Trailing twelve-month free cash flow is zero or negative; P/FCF is not meaningful.",
+            capexTtm.asOf ?? ocfTtm.asOf,
+          )
+        : metric(
+            pfcf,
+            "market value / trailing twelve-month free cash flow",
+            capexTtm.asOf ?? ocfTtm.asOf,
+            statusFor(pfcf),
+          ),
+    fcfYield: metric(
+      fcfYield,
+      "trailing twelve-month free cash flow / market value",
+      capexTtm.asOf ?? ocfTtm.asOf,
+      statusFor(fcfYield),
+    ),
     enterpriseValueToRevenue: metric(
       sector === "financial" ? null : evRevenue,
-      sector === "financial" ? "EV/revenue is not a useful primary measure for financial companies." : "enterprise value / trailing revenue",
-      asOf,
+      sector === "financial"
+        ? "EV/revenue is not a useful primary measure for financial companies."
+        : "enterprise value / trailing twelve-month revenue",
+      revenueTtm.asOf,
       sector === "financial" ? "not_meaningful" : statusFor(evRevenue),
     ),
     enterpriseValueToEbitda: metric(
       sector === "financial" ? null : evEbitda,
-      sector === "financial" ? "EV/EBITDA is not a useful primary measure for financial companies." : "enterprise value / trailing EBITDA",
-      asOf,
+      sector === "financial"
+        ? "EV/EBITDA is not a useful primary measure for financial companies."
+        : "enterprise value / trailing twelve-month EBITDA",
+      operatingIncomeTtm.asOf ?? depreciationTtm.asOf,
       sector === "financial" ? "not_meaningful" : statusFor(evEbitda),
     ),
   };
