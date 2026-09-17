@@ -5,6 +5,7 @@ import { fieldValue } from "./fundamentals/normalize";
 import type { CanonicalField, NormalizedFundamentals } from "./fundamentals/types";
 import { finnhub, getProvider, quoteSourcesFor, reportedIn, secEdgar } from "./providers";
 import { getRate, restate } from "./fx";
+import { chooseMarketCap } from "./company-currency";
 import { fetchQuoteWithFailover } from "./providers/failover";
 import type { Quote } from "./providers/types";
 import { priceTime } from "./quote-session";
@@ -81,23 +82,35 @@ async function resolveMarketCap(
   symbol: string,
   fundamentals: NormalizedFundamentals,
 ): Promise<{ value: number | null; currency: string | null }> {
-  if (finnhub.isConfigured()) {
-    const profile = await finnhub.getProfile(symbol).catch(() => null);
-    if (profile?.marketCap) {
-      return { value: profile.marketCap, currency: profile.marketCapCurrency };
-    }
-  }
-
-  const shares = fieldValue(fundamentals.annual[0], "sharesOutstanding");
-  if (!shares) return { value: null, currency: null };
-
+  const profile = finnhub.isConfigured()
+    ? await finnhub.getProfile(symbol).catch(() => null)
+    : null;
   const quote = await getProvider().getQuote(symbol).catch(() => null);
-  if (!quote?.price) return { value: null, currency: null };
 
   // Every symbol in this universe is the US listing — RY is the one on the
   // NYSE, not the one in Toronto — so a quote that does not name its currency
   // is in dollars. See CANADIAN_SYMBOLS in universe.ts.
-  return { value: quote.price * shares, currency: quote.currency ?? "USD" };
+  const currency = quote?.currency ?? profile?.marketCapCurrency ?? "USD";
+
+  const shares =
+    fieldValue(fundamentals.annual[0], "sharesOutstanding") ?? profile?.sharesOutstanding ?? null;
+  const derived = quote?.price && shares ? quote.price * shares : null;
+
+  const capRate =
+    profile?.marketCapCurrency &&
+    profile.marketCapCurrency.toUpperCase() !== currency.toUpperCase()
+      ? await getRate(profile.marketCapCurrency, currency).catch(() => null)
+      : 1;
+  const quoted = restate(
+    profile?.marketCap ?? null,
+    profile?.marketCapCurrency,
+    currency,
+    capRate,
+  );
+
+  // The same choice the company pages and the daily refresh make; see
+  // chooseMarketCap for which one wins and why.
+  return { value: chooseMarketCap(derived, quoted), currency };
 }
 
 /**
@@ -576,17 +589,50 @@ export async function refreshQuotes(
           ? await getRate(filingCurrency, priceCurrency).catch(() => null)
           : 1;
 
+      /*
+        A second opinion on the market value, and a current share count.
+
+        The filing's share count is the one a reader can check, but it goes out
+        of date between annual reports — a split, a large issue, a class the
+        filer tags loosely — and the screener carried the consequences: no
+        market value at all for Visa and eleven others, and Booking priced at a
+        twenty-third of itself. Costs one profile request per symbol, so it
+        takes a pacing slot of its own.
+      */
+      let quoted: QuotedValuation = { marketCap: null, shares: null };
+      if (finnhub.isConfigured()) {
+        await waitForSlot();
+        const profile = await finnhub.getProfile(upper).catch(() => null);
+        if (profile) {
+          const capRate =
+            profile.marketCapCurrency &&
+            profile.marketCapCurrency.toUpperCase() !== priceCurrency.toUpperCase()
+              ? await getRate(profile.marketCapCurrency, priceCurrency).catch(() => null)
+              : 1;
+          quoted = {
+            marketCap: restate(
+              profile.marketCap,
+              profile.marketCapCurrency,
+              priceCurrency,
+              capRate,
+            ),
+            shares: profile.sharesOutstanding,
+          };
+        }
+      }
+
       await db
         .update(scores)
         .set({
           price: quote.price,
           changePercent: quote.changePercent,
           priceUpdatedAt: at,
-          ...priceDerived(quote.price, figures, {
-            from: filingCurrency,
-            to: priceCurrency,
-            rate,
-          }),
+          ...priceDerived(
+            quote.price,
+            figures,
+            { from: filingCurrency, to: priceCurrency, rate },
+            quoted,
+          ),
         })
         .where(eq(scores.companyId, companyId));
 
@@ -662,6 +708,12 @@ interface FilingFigures {
   dividends_paid: number | null;
 }
 
+/** A data vendor's own valuation, already in the currency the price is in. */
+interface QuotedValuation {
+  marketCap: number | null;
+  shares: number | null;
+}
+
 /** What it takes to read those figures in the currency the price is quoted in. */
 interface FilingFx {
   from: string | null;
@@ -687,11 +739,21 @@ function priceDerived(
   price: number,
   latest: FilingFigures | undefined,
   fx: FilingFx = { from: null, to: null, rate: 1 },
+  quoted: QuotedValuation = { marketCap: null, shares: null },
 ): Partial<typeof scores.$inferInsert> {
-  const shares = latest?.shares_outstanding ?? null;
-  if (!shares || shares <= 0) return {};
-
-  const marketCap = price * shares;
+  /*
+    Two candidates for the market value, and a rule for choosing — see
+    chooseMarketCap. Deriving it from the filing's share count alone is what
+    left the screener with no market value at all for Visa, Berkshire and ten
+    others, Booking at 1.04 times earnings across a share split, and Brookfield
+    Renewable valued at $174m rather than $12bn.
+  */
+  const shares = latest?.shares_outstanding ?? quoted.shares ?? null;
+  const derived = shares && shares > 0 ? price * shares : null;
+  const marketCap = chooseMarketCap(derived, quoted.marketCap);
+  // Nothing to say: the spread is applied over the stored row, so an empty
+  // object leaves whatever is there alone rather than erasing it.
+  if (marketCap == null) return {};
 
   /*
     The filing's figures, restated in the currency the price is quoted in.

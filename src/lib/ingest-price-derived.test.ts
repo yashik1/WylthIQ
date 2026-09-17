@@ -99,6 +99,43 @@ describe("recomputing from a fresh price", () => {
     });
   });
 
+  /*
+    The vendor's valuation, when the filing's share count is not counting the
+    thing being priced. On the live site this was Visa and eleven others with
+    no market value at all, Booking at a twenty-third of its size across a
+    share split, and Brookfield Renewable at $174m against $12bn.
+  */
+  describe("with a second opinion on the market value", () => {
+    it("uses the vendor's figure when the two are far apart", () => {
+      const out = priceDerived(10, latest(), undefined, { marketCap: 1_000_000, shares: null });
+
+      // 10 x 1,000 shares would be 10,000 — a hundredth of what it is worth.
+      expect(out.marketCap).toBe(1_000_000);
+      expect(out.peRatio).toBeCloseTo(2_000, 5);
+    });
+
+    it("keeps the arithmetic when they roughly agree", () => {
+      const out = priceDerived(10, latest(), undefined, { marketCap: 9_000, shares: null });
+      expect(out.marketCap).toBe(10_000);
+    });
+
+    it("counts shares the filing never tagged", () => {
+      const out = priceDerived(
+        10,
+        latest({ shares_outstanding: null }),
+        undefined,
+        { marketCap: 20_500, shares: 2_000 },
+      );
+
+      expect(out.marketCap).toBe(20_000);
+      expect(out.peRatio).toBeCloseTo(40, 5);
+    });
+
+    it("still changes nothing when neither can be had", () => {
+      expect(priceDerived(10, latest({ shares_outstanding: null }))).toEqual({});
+    });
+  });
+
   it("refuses a P/E against a loss", () => {
     expect(priceDerived(10, latest({ net_income: -500 })).peRatio).toBeNull();
     expect(priceDerived(10, latest({ net_income: 0 })).peRatio).toBeNull();
