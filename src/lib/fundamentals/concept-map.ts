@@ -54,6 +54,11 @@ export const CONCEPT_MAP: Record<CanonicalField, string[]> = {
     "PropertyPlantAndEquipmentNet",
     "PropertyPlantAndEquipment",
     "PropertyPlantAndEquipmentIncludingRightofuseAssetAfterAccumulatedDepreciationAndAmortization",
+    // The spelling 87 filers here actually use, leases included.
+    "PropertyPlantAndEquipmentAndFinanceLeaseRightOfUseAssetAfterAccumulatedDepreciationAndAmortization",
+    // A landlord's plant is its buildings: Prologis, Realty Income, Simon and
+    // eleven more tag this and never PropertyPlantAndEquipmentNet.
+    "RealEstateInvestmentPropertyNet",
   ],
 
   longTermDebt: [
@@ -62,6 +67,9 @@ export const CONCEPT_MAP: Record<CanonicalField, string[]> = {
     "NoncurrentPortionOfNoncurrentBorrowings",
     "LongtermBorrowings",
     "NoncurrentBorrowings",
+    // Leases folded in with the borrowings, which is how 78 filers here tag
+    // it. Last, so anybody tagging debt on its own is read that way instead.
+    "LongTermDebtAndCapitalLeaseObligations",
   ],
 
   shortTermDebt: [
@@ -71,6 +79,7 @@ export const CONCEPT_MAP: Record<CanonicalField, string[]> = {
     "ShorttermBorrowings",
     "CurrentPortionOfLongtermBorrowings",
     "CommercialPaper",
+    "LongTermDebtAndCapitalLeaseObligationsCurrent",
   ],
 
   retainedEarnings: ["RetainedEarningsAccumulatedDeficit", "RetainedEarnings"],
@@ -84,6 +93,18 @@ export const CONCEPT_MAP: Record<CanonicalField, string[]> = {
     "RevenueFromContractWithCustomerIncludingAssessedTax",
     "SalesRevenueNet",
     "TotalRevenues",
+    /*
+      Last, and only for filers who tag nothing above.
+
+      A bank's top line is revenue after the interest it pays out, which is
+      what `RevenuesNetOfInterestExpense` holds — Goldman, Morgan Stanley and
+      Wells Fargo tag that and nothing else. Their gross interest income is
+      deliberately not used instead: it is a bigger number that is not the
+      revenue anybody compares a bank on. A regulated utility's equivalent is
+      the last entry.
+    */
+    "RevenuesNetOfInterestExpense",
+    "RegulatedAndUnregulatedOperatingRevenue",
   ],
 
   costOfRevenue: [
@@ -91,6 +112,15 @@ export const CONCEPT_MAP: Record<CanonicalField, string[]> = {
     "CostOfRevenue",
     "CostOfSales",
     "CostOfGoodsSold",
+    /*
+      Cost of sales with depreciation left out, which 22 filers here tag and
+      no plainer alternative. Gross profit derived from it runs a little high,
+      because the depreciation on the plant that made the goods sits below the
+      line instead of in it — but a gross margin that is slightly generous is
+      worth more to a reader than no gross margin at all, and it is the same
+      convention most data vendors publish.
+    */
+    "CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization",
   ],
 
   grossProfit: ["GrossProfit"],
@@ -113,11 +143,24 @@ export const CONCEPT_MAP: Record<CanonicalField, string[]> = {
     "ProfitLossBeforeTax",
   ],
 
+  /*
+    Only the cost of borrowing, and only from the income statement.
+
+    Two tempting concepts are left out. `InterestIncomeExpenseNet` is a bank's
+    net interest income — a revenue line wearing a similar name, and reading it
+    as an expense would invert what it says. `InterestPaidNet` is real and
+    would fill this field for 263 more companies, but it is cash paid out of
+    the cash flow statement rather than the charge in the accounts, and this
+    field feeds the EBIT inside the Altman score as well as interest cover.
+  */
   interestExpense: [
     "InterestExpense",
     "FinanceCosts",
     "InterestExpenseDebt",
     "InterestAndDebtExpense",
+    "InterestExpenseNonoperating",
+    "InterestExpenseBorrowings",
+    "InterestExpenseDebtExcludingAmortization",
   ],
 
   sga: [
@@ -140,10 +183,26 @@ export const CONCEPT_MAP: Record<CanonicalField, string[]> = {
     "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
   ],
 
+  /*
+    Money spent on the assets the business runs on.
+
+    The three below cover an industrial or a software company. A landlord and
+    an oil producer spend on different things and tag them differently, which
+    is why free cash flow was blank for most of the real estate and energy
+    sectors. Buying a finished building (`PaymentsToAcquireRealEstate`) is left
+    out deliberately: that is an acquisition, the same kind of growth spending
+    as buying a company, and the convention everywhere is to keep it out of
+    capital expenditure.
+  */
   capex: [
     "PaymentsToAcquirePropertyPlantAndEquipment",
     "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities",
     "PaymentsToAcquireProductiveAssets",
+    "PaymentsForCapitalImprovements",
+    "PaymentsToDevelopRealEstateAssets",
+    "PaymentsToAcquireOilAndGasPropertyAndEquipment",
+    "PaymentsToExploreAndDevelopOilAndGasProperties",
+    "PaymentsToAcquireOilAndGasProperty",
   ],
 
   dividendsPaid: [
