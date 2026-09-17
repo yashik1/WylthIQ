@@ -6,8 +6,7 @@
  *   DATA_AUDIT_SYMBOLS="SPY,QQQ,XEQT.TO" npm run audit:data
  *
  * The report is written to data-audit.json (ignored by git). It distinguishes
- * missing data from metrics that are genuinely not meaningful, so the audit
- * does not turn legitimate cases such as negative-earnings P/E into failures.
+ * missing data from metrics that are genuinely not meaningful.
  */
 import "dotenv/config";
 import { writeFile } from "node:fs/promises";
@@ -47,9 +46,6 @@ const requested = (process.env.DATA_AUDIT_SYMBOLS ?? "")
   .map((s) => s.trim().toUpperCase())
   .filter(Boolean);
 
-// The nightly universe is the mandatory stock set. DATA_AUDIT_SYMBOLS lets
-// the same command audit ETFs and foreign listings without hard-coding a
-// partial ETF list that will inevitably go stale.
 const symbols = [...new Set([...getUniverse(), ...requested])];
 const provider = getProvider();
 const concurrency = 5;
@@ -102,8 +98,6 @@ async function audit(symbol: string): Promise<Row> {
     };
   }
 
-  // No company accounts: treat this as an ETF audit target rather than calling
-  // absence from EDGAR a failure. The ETF path has its own required fields.
   const etf = await getEtfProfile(symbol).catch((err) => {
     errors.push(`etf profile: ${err instanceof Error ? err.message : String(err)}`);
     return null;
@@ -124,7 +118,7 @@ async function audit(symbol: string): Promise<Row> {
           holdingCount: etf.holdingCount ?? null,
           netAssets: etf.netAssets ?? null,
           inceptionDate: etf.inceptionDate ?? null,
-          source: etf.source?.provider ?? null,
+          source: etf.source?.name ?? null,
         }
       : null,
     errors,
@@ -175,22 +169,24 @@ async function main() {
   console.log(JSON.stringify(report.summary, null, 2));
   console.log("\nWrote data-audit.json");
 
-  // A real missing core value is actionable; not-meaningful metrics are not.
   const failures = rows.filter(
-    (r) => (r.kind === "stock" && (!r.priceAvailable || !r.marketCapAvailable)) ||
+    (r) =>
+      (r.kind === "stock" && (!r.priceAvailable || !r.marketCapAvailable)) ||
       (r.kind === "unknown" && requested.includes(r.symbol)),
   );
 
   if (failures.length > 0) {
     console.error(`\nData audit found ${failures.length} core coverage issue(s).`);
     for (const row of failures.slice(0, 30)) {
-      console.error(` - ${row.symbol}: price=${row.priceAvailable}, marketCap=${row.marketCapAvailable}, kind=${row.kind}`);
+      console.error(
+        ` - ${row.symbol}: price=${row.priceAvailable}, marketCap=${row.marketCapAvailable}, kind=${row.kind}`,
+      );
     }
     process.exitCode = 1;
   }
 }
 
 main().catch((err) => {
-  console.error("Data audit failed:", err instanceof Error ? err.message : err);
+  console.error("Data audit failed:", err instanceof Error ? err.message : String(err));
   process.exit(1);
 });
