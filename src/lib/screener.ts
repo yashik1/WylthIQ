@@ -386,6 +386,21 @@ function presetConditions(preset: PresetKey): SQL[] {
  * Reads only from the database — no external API calls — which is what lets a
  * universe-wide filter return instantly and for free.
  */
+/**
+ * A number typed into a filter box, or nothing at all.
+ *
+ * An empty box is not a zero. The form submits every field it has, so leaving
+ * "Max P/E" blank arrives as `maxPe=`, and `Number("")` is 0 — a filter for
+ * companies priced at no more than zero times earnings, which nothing has
+ * ever matched. Pressing "Apply filters" without typing anything therefore
+ * emptied the screen.
+ */
+export function numericParam(raw: string | undefined | null): number | undefined {
+  if (raw == null || raw.trim() === "") return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : undefined;
+}
+
 export async function runScreen(filters: ScreenFilters, limit = 100): Promise<ScreenResult> {
   if (!isDatabaseConfigured()) {
     return { status: "no-database", rows: [], total: 0 };
@@ -518,6 +533,18 @@ export async function runScreen(filters: ScreenFilters, limit = 100): Promise<Sc
         return { status: "ok", rows: [], total: 0, missingData: { needs: requirement.needs } };
       }
     }
+
+    /*
+      "Nothing matched" and "nothing is loaded" are different answers.
+
+      This returned "empty" for both, and the page reads that as a database
+      with no rows in it — so a filter that excluded everything was answered
+      with setup instructions telling the reader to go and run the ingest.
+      One count settles which it is, and it only runs on the rare screen that
+      found nothing.
+    */
+    const [loaded] = await db.select({ count: sql<number>`count(*)::int` }).from(scores).limit(1);
+    if ((loaded?.count ?? 0) > 0) return { status: "ok", rows: [], total: 0 };
 
     return { status: "empty", rows: [], total: 0 };
   } catch (err) {
