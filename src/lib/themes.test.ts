@@ -1,7 +1,15 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { THEMES, THEME_IDS, isThemeChoice } from "./themes";
+import {
+  DAY_STARTS_AT,
+  NIGHT_STARTS_AT,
+  THEMES,
+  THEME_IDS,
+  isThemeChoice,
+  msUntilThemeSwitch,
+  themeForHour,
+} from "./themes";
 
 /**
  * The three places a theme has to exist, kept in agreement.
@@ -73,6 +81,70 @@ describe("every theme is defined everywhere it has to be", () => {
       const block = themeBlock(theme.id);
       expect(block, theme.id).toContain(`color-scheme: ${theme.dark ? "dark" : "light"}`);
     }
+  });
+});
+
+/**
+ * The "Day / night" choice, which follows the reader's clock.
+ *
+ * It exists because "System" follows a device setting most people set once
+ * and forget, so a machine on dark shows a dark page on a bright morning and
+ * the setting looks broken. No browser reports the time of day, so this is
+ * the only thing that can answer it.
+ */
+describe("day and night, by the clock", () => {
+  it("is light through the working day and dark either side", () => {
+    expect(themeForHour(6)).toBe("light");
+    expect(themeForHour(12)).toBe("light");
+    expect(themeForHour(17)).toBe("light");
+
+    expect(themeForHour(18)).toBe("dark");
+    expect(themeForHour(23)).toBe("dark");
+    expect(themeForHour(0)).toBe("dark");
+    expect(themeForHour(5)).toBe("dark");
+  });
+
+  /*
+    The hours are written out again inside the pre-paint script, which runs
+    before any bundle and so cannot import them. Two copies of a number is one
+    too many to hold by hand, and the failure is quiet: the page would load in
+    one theme and switch to the other a moment later.
+  */
+  it("uses the same two hours as the pre-paint script", () => {
+    const script = layout.match(/h >= (\d+) && h < (\d+) \? 'light' : 'dark'/);
+    expect(script, "day/night hours not found in the pre-paint script").not.toBeNull();
+    expect(Number(script![1])).toBe(DAY_STARTS_AT);
+    expect(Number(script![2])).toBe(NIGHT_STARTS_AT);
+  });
+
+  it("is a choice the app will accept back out of storage", () => {
+    expect(isThemeChoice("daynight")).toBe(true);
+  });
+
+  describe("when it next changes itself", () => {
+    const at = (h: number, m = 0) => new Date(2026, 8, 20, h, m, 0, 0);
+    const hours = (ms: number) => ms / 3_600_000;
+
+    it("waits for the evening while it is still day", () => {
+      expect(hours(msUntilThemeSwitch(at(17, 30)))).toBeCloseTo(0.5, 5);
+    });
+
+    it("waits for the morning once it is night", () => {
+      expect(hours(msUntilThemeSwitch(at(18, 0)))).toBeCloseTo(12, 5);
+      expect(hours(msUntilThemeSwitch(at(23, 0)))).toBeCloseTo(7, 5);
+    });
+
+    it("waits for six from the small hours", () => {
+      expect(hours(msUntilThemeSwitch(at(2, 0)))).toBeCloseTo(4, 5);
+    });
+
+    // A wait of zero would spin: the timer would fire, find the same hour and
+    // set itself again immediately.
+    it("always waits for something", () => {
+      for (let h = 0; h < 24; h++) {
+        expect(msUntilThemeSwitch(at(h, 0)), `${h}:00`).toBeGreaterThan(0);
+      }
+    });
   });
 });
 
