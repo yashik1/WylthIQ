@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { chooseMarketCap, restateCompany } from "./company-currency";
+import { chooseMarketCap, restateCompany, restateQuote } from "./company-currency";
 import type { Fact, NormalizedFundamentals } from "./fundamentals/types";
 import type { CompanyProfile, Quote } from "./providers/types";
 
@@ -287,6 +287,68 @@ describe("a currency the reader asked for", () => {
 
     expect(out.displayCurrency).toBe("CAD");
     expect(out.converted).toBeNull();
+  });
+});
+
+/**
+ * The share price, in the currency the reader asked for.
+ *
+ * It used to stay in the currency it traded in, on the reasoning that a
+ * converted price is not a price anybody can pay. The reader's answer to that
+ * was that a page in Canadian dollars showing a US-dollar price is half an
+ * answer: "what is this worth to me" includes the number at the top. The page
+ * says underneath which currency it was converted from.
+ */
+describe("restating the quote", () => {
+  const usd: Quote = { ...nasdaq, symbol: "CRWD", price: 237.65, previousClose: 245.71,
+    change: -8.06, dayHigh: 246.1, dayLow: 236.02, changePercent: -0.0328, currency: "USD" };
+
+  it("moves every money field and leaves the percentage alone", () => {
+    const out = restateQuote(usd, "USD", "CAD", 1.4);
+
+    expect(out!.price).toBeCloseTo(332.71, 2);
+    expect(out!.previousClose).toBeCloseTo(343.99, 2);
+    expect(out!.change).toBeCloseTo(-11.28, 2);
+    expect(out!.dayHigh).toBeCloseTo(344.54, 2);
+    expect(out!.dayLow).toBeCloseTo(330.43, 2);
+    // A 3.28% fall is a 3.28% fall in any currency.
+    expect(out!.changePercent).toBe(-0.0328);
+  });
+
+  /*
+    The quote carries its own currency, and a fund card and an analyst panel
+    read it off the quote rather than being told separately. A converted
+    number under its old label is the whole mistake this file exists to stop.
+  */
+  it("relabels the quote it converted", () => {
+    expect(restateQuote(usd, "USD", "CAD", 1.4)!.currency).toBe("CAD");
+  });
+
+  it("hands back the same quote when there is nothing to do", () => {
+    expect(restateQuote(usd, "USD", "USD", 1)).toBe(usd);
+    expect(restateQuote(usd, "USD", "CAD", 1)).toBe(usd);
+    expect(restateQuote(null, "USD", "CAD", 1.4)).toBeNull();
+  });
+
+  it("refuses a rate that is not one", () => {
+    for (const bad of [0, -1, NaN, Infinity]) {
+      expect(restateQuote(usd, "USD", "CAD", bad)).toBe(usd);
+    }
+  });
+
+  it("comes back on the restated company, in its displayed currency", async () => {
+    const out = await restateCompany({
+      fundamentals: filings("USD"),
+      quote: { ...usd, currency: "USD" },
+      profile: profile({ marketCap: null, marketCapCurrency: "USD", exchange: "NASDAQ" }),
+      target: "CAD",
+    });
+
+    expect(out.displayCurrency).toBe("CAD");
+    expect(out.listingCurrency).toBe("USD");
+    expect(out.quote!.currency).toBe("CAD");
+    expect(out.quote!.price! / usd.price!).toBeCloseTo(out.priceRate, 6);
+    expect(out.priceRate).toBeCloseTo(1 / 0.7174, 4);
   });
 });
 

@@ -28,7 +28,20 @@ type Mode = "single" | "benchmark" | "peers";
  * and drops volume, because plotting several companies' absolute prices on one
  * axis implies a relationship the numbers do not have.
  */
-export function PricePanel({ symbol, peers }: { symbol: string; peers: string[] }) {
+export function PricePanel({
+  symbol,
+  peers,
+  rate = 1,
+}: {
+  symbol: string;
+  peers: string[];
+  /**
+   * The rate the page's prices were restated at, so this chart draws the same
+   * currency as the price above it. The comparison modes plot percentage
+   * performance, which no rate changes.
+   */
+  rate?: number;
+}) {
   const [mode, setMode] = useState<Mode>("single");
 
   // Four lines is where a comparison stays readable, and it matches the
@@ -87,7 +100,7 @@ export function PricePanel({ symbol, peers }: { symbol: string; peers: string[] 
         </div>
       )}
 
-      {mode === "single" && <PriceChart symbol={symbol} />}
+      {mode === "single" && <PriceChart symbol={symbol} rate={rate} />}
       {mode === "benchmark" && <CompareChart symbols={[symbol, BENCHMARK]} />}
       {mode === "peers" && <CompareChart symbols={[symbol, ...peerSymbols]} />}
     </div>

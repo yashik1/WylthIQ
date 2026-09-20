@@ -1014,7 +1014,7 @@ async function StockBody({
           }
         />
         <div className="p-5">
-          <PricePanel symbol={upper} peers={data.peers} />
+          <PricePanel symbol={upper} peers={data.peers} rate={data.priceRate} />
         </div>
       </Card>
       </Section>
@@ -1208,11 +1208,12 @@ async function StockBody({
                 : `, the currency ${upper} trades in`}
               , converted at today&apos;s rate of {formatRate(data.converted.rate)}. The
               filing itself is in {data.converted.from}.
-              {data.displayCurrency !== data.priceCurrency && (
+              {data.displayCurrency !== data.tradedCurrency && (
                 <>
                   {" "}
-                  Prices stay in {data.priceCurrency}, which is what {upper} actually
-                  trades in.
+                  The share price and the chart are converted from{" "}
+                  {data.tradedCurrency}, which is what {upper} trades in, at the same
+                  rate — so they are worth this, not priced at it.
                 </>
               )}
             </>

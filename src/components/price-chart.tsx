@@ -180,7 +180,33 @@ function cssVar(name: string, fallback: string) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 }
 
-export function PriceChart({ symbol }: { symbol: string }) {
+/**
+ * A price series in a currency other than the one it traded in.
+ *
+ * The page's header price is restated when a reader picks a currency, and a
+ * chart underneath it still drawn in dollars would put two different prices
+ * for the same share on one screen. Volume is a count of shares and does not
+ * move.
+ */
+export function scaleBars(bars: Bar[], rate: number): Bar[] {
+  if (!Number.isFinite(rate) || rate === 1 || rate <= 0) return bars;
+  return bars.map((bar) => ({
+    ...bar,
+    open: bar.open * rate,
+    high: bar.high * rate,
+    low: bar.low * rate,
+    close: bar.close * rate,
+  }));
+}
+
+export function PriceChart({
+  symbol,
+  rate = 1,
+}: {
+  symbol: string;
+  /** What one unit of the trading currency is worth in the displayed one. */
+  rate?: number;
+}) {
   const zone = useTimeZone();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -254,7 +280,7 @@ export function PriceChart({ symbol }: { symbol: string }) {
           setMessage(json.message ?? json.error);
           return;
         }
-        const next: Bar[] = json.bars ?? [];
+        const next: Bar[] = scaleBars(json.bars ?? [], rate);
         setBars(next);
         setStatus(next.length === 0 ? "empty" : "ready");
       } catch (err) {
@@ -268,7 +294,7 @@ export function PriceChart({ symbol }: { symbol: string }) {
       cancelled = true;
       controller.abort();
     };
-  }, [symbol, timeframe, range.days]);
+  }, [symbol, timeframe, range.days, rate]);
 
   // Fetched separately from the bars so that losing the annotation never costs
   // the chart itself.

@@ -61,12 +61,20 @@ export interface RestatedCompany {
   fundamentals: NormalizedFundamentals | null;
   /** The currency every figure here is in. */
   displayCurrency: string;
-  /**
-   * The currency the shares actually change hands in. A price is a thing
-   * somebody transacts at, so it is never restated into a reader's chosen
-   * currency the way the filings are — it is labelled with this instead.
-   */
+  /** The currency the shares actually change hands in. */
   listingCurrency: string;
+  /**
+   * The quote, restated into the displayed currency.
+   *
+   * A reader who asks to see a company in their own money means the price
+   * too — "what is this worth to me" is the question, and answering it in
+   * dollars for everything except the one number they look at first is half
+   * an answer. The converted quote carries the displayed currency on itself,
+   * so anything rendering it labels it correctly without being told.
+   */
+  quote: Quote | null;
+  /** What one unit of the trading currency is worth in the displayed one. */
+  priceRate: number;
   /** Set when the filings were restated, for the note a page shows about it. */
   converted: { from: string; rate: number } | null;
   /** In `displayCurrency`, so it can be divided by the figures above. */
@@ -154,24 +162,25 @@ export async function restateCompany(input: {
   }
 
   /*
-    The price on this page, times the shares behind it.
-
-    Restated into the displayed currency like everything else, since the price
-    is money too. The filing's share count is preferred over the provider's for
-    the reason everything else here is: a reader can go and check it.
+    One rate for everything priced on the exchange: the share price itself,
+    and the market value derived from it below. Fetched once — `getRate`
+    caches by pair, but two callers asking separately is the kind of thing
+    that drifts. The filing's share count is preferred over the provider's
+    for the reason everything else here is: a reader can go and check it.
   */
+  const rate =
+    listingCurrency.toUpperCase() === displayCurrency.toUpperCase()
+      ? 1
+      : await getRate(listingCurrency, displayCurrency).catch(() => null);
+  const priceRate = rate ?? 1;
+
   let derived: number | null = null;
   const shares =
     (fundamentals ? fieldValue(fundamentals.annual[0], "sharesOutstanding") : null) ??
     profile?.sharesOutstanding ??
     null;
   if (quote?.price && shares) {
-    const priced = quote.price * shares;
-    const rate =
-      listingCurrency.toUpperCase() !== displayCurrency.toUpperCase()
-        ? await getRate(listingCurrency, displayCurrency).catch(() => null)
-        : 1;
-    derived = restate(priced, listingCurrency, displayCurrency, rate);
+    derived = restate(quote.price * shares, listingCurrency, displayCurrency, rate);
   }
 
   return {
@@ -179,6 +188,43 @@ export async function restateCompany(input: {
     displayCurrency,
     listingCurrency,
     converted,
+    quote: restateQuote(quote, listingCurrency, displayCurrency, priceRate),
+    priceRate,
     marketCap: chooseMarketCap(derived, quoted),
+  };
+}
+
+/**
+ * A quote in another currency.
+ *
+ * Every money field moves and the percentage does not — a 3% fall is 3% in
+ * any currency. The quote's own `currency` is rewritten as well, because a
+ * fund card and an analyst panel read it off the quote rather than being told
+ * separately, and a converted number under its old label is the mistake this
+ * whole file exists to prevent.
+ *
+ * A rate of exactly 1, which is what a same-currency page gets, returns the
+ * quote untouched rather than rebuilding it.
+ */
+export function restateQuote(
+  quote: Quote | null,
+  from: string,
+  to: string,
+  rate: number,
+): Quote | null {
+  if (!quote || rate === 1 || !Number.isFinite(rate) || rate <= 0) return quote;
+  if (from.toUpperCase() === to.toUpperCase()) return quote;
+
+  const money = (value: number | null | undefined) =>
+    value == null || !Number.isFinite(value) ? null : value * rate;
+
+  return {
+    ...quote,
+    price: money(quote.price),
+    change: money(quote.change),
+    previousClose: money(quote.previousClose),
+    dayHigh: money(quote.dayHigh),
+    dayLow: money(quote.dayLow),
+    currency: to,
   };
 }
