@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Check, Monitor, Palette } from "lucide-react";
 import {
   THEMES,
@@ -25,9 +25,32 @@ import { cn } from "@/lib/utils";
  * represented in the DOM by removing `data-theme` entirely, which is what lets
  * the media query in globals.css take over.
  */
+/** True when the device asks for dark. Read on the client only. */
+function deviceWantsDark(): boolean {
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+/** Subscribes to the device changing its mind, for useSyncExternalStore. */
+function watchColorScheme(onChange: () => void): () => void {
+  const query = window.matchMedia("(prefers-color-scheme: dark)");
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
 export function ThemePicker() {
   const [choice, setChoice] = useState<ThemeChoice | null>(null);
   const [open, setOpen] = useState(false);
+  /*
+    What the device is currently asking for, so "System" can say which.
+
+    A reader whose machine is set to dark reads "System", expects the app to
+    follow the time of day, and concludes the setting is broken — with nothing
+    in this menu to tell them their device asked for dark. Naming it answers
+    that on the spot. Subscribed rather than read once, so it stays right when
+    the device changes while the menu is open, and null until hydration
+    because a server has no device to ask.
+  */
+  const systemDark = useSyncExternalStore(watchColorScheme, deviceWantsDark, () => null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -130,8 +153,8 @@ export function ThemePicker() {
             <Option
               selected={choice === "system"}
               onSelect={() => apply("system")}
-              label="System"
-              description="Follow your device setting."
+              label={systemDark == null ? "System" : `System — ${systemDark ? "dark" : "light"}`}
+              description="Follows your device, not the time of day."
               swatch={
                 <span className="flex size-5 items-center justify-center rounded-full border border-border text-muted">
                   <Monitor className="size-3" />
