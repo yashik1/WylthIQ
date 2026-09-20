@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Check, Monitor, Palette } from "lucide-react";
+import { Check, Clock, Monitor, Palette } from "lucide-react";
 import {
+  DAY_STARTS_AT,
+  NIGHT_STARTS_AT,
   THEMES,
   THEME_STORAGE_KEY,
   isThemeChoice,
+  msUntilThemeSwitch,
+  themeForHour,
   type ThemeChoice,
 } from "@/lib/themes";
 import { cn } from "@/lib/utils";
@@ -25,6 +29,13 @@ import { cn } from "@/lib/utils";
  * represented in the DOM by removing `data-theme` entirely, which is what lets
  * the media query in globals.css take over.
  */
+/** A 24-hour hour as a reader would say it: 6 becomes "6am", 18 "6pm". */
+function hour(h: number): string {
+  const suffix = h < 12 ? "am" : "pm";
+  const twelve = h % 12 === 0 ? 12 : h % 12;
+  return `${twelve}${suffix}`;
+}
+
 /** True when the device asks for dark. Read on the client only. */
 function deviceWantsDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -72,6 +83,28 @@ export function ThemePicker() {
     };
   }, []);
 
+  /*
+    A tab left open across six o'clock changes itself.
+
+    Without this the choice only takes effect on a page load, so somebody
+    reading at half past five in the afternoon would still be on the light
+    theme at midnight. The timer is set to the boundary itself rather than
+    polling, and re-set each time one passes.
+  */
+  useEffect(() => {
+    if (choice !== "daynight") return;
+
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      timer = setTimeout(() => {
+        document.documentElement.dataset.theme = themeForHour(new Date().getHours());
+        schedule();
+      }, msUntilThemeSwitch());
+    };
+    schedule();
+    return () => clearTimeout(timer);
+  }, [choice]);
+
   // Close on an outside click or Escape, the two ways anyone expects a menu to
   // go away. Bound only while open so the app is not listening for nothing.
   useEffect(() => {
@@ -96,6 +129,10 @@ export function ThemePicker() {
 
     if (next === "system") {
       delete document.documentElement.dataset.theme;
+    } else if (next === "daynight") {
+      // A rule rather than a theme: what gets stamped is whichever of the two
+      // the clock asks for, which is also what the pre-paint script writes.
+      document.documentElement.dataset.theme = themeForHour(new Date().getHours());
     } else {
       document.documentElement.dataset.theme = next;
     }
@@ -121,10 +158,17 @@ export function ThemePicker() {
     }
   }
 
+  // Null until hydration: a server has no reader's clock to read. Recomputed
+  // on every render, which is often enough — the menu is short-lived, and the
+  // effect above is what keeps a long-open page honest.
+  const clockWants = choice === null ? "" : themeForHour(new Date().getHours());
+
   const label =
-    choice === "system"
-      ? "System"
-      : (THEMES.find((t) => t.id === choice)?.label ?? "Theme");
+    choice === "daynight"
+      ? "Day / night"
+      : choice === "system"
+        ? "System"
+        : (THEMES.find((t) => t.id === choice)?.label ?? "Theme");
 
   return (
     <div ref={rootRef} className="relative">
@@ -158,6 +202,18 @@ export function ThemePicker() {
               swatch={
                 <span className="flex size-5 items-center justify-center rounded-full border border-border text-muted">
                   <Monitor className="size-3" />
+                </span>
+              }
+            />
+
+            <Option
+              selected={choice === "daynight"}
+              onSelect={() => apply("daynight")}
+              label={`Day / night — ${clockWants}`}
+              description={`Light from ${hour(DAY_STARTS_AT)}, dark from ${hour(NIGHT_STARTS_AT)}, by your clock.`}
+              swatch={
+                <span className="flex size-5 items-center justify-center rounded-full border border-border text-muted">
+                  <Clock className="size-3" />
                 </span>
               }
             />

@@ -131,12 +131,22 @@ export const viewport: Viewport = {
  *
  * `system` is stored but deliberately stamps nothing — the absence of the
  * attribute is what hands control to the `prefers-color-scheme` block.
+ *
+ * `daynight` is resolved here rather than after hydration, and for the same
+ * reason the ids are: a reader who picked it would otherwise watch the page
+ * load light at nine in the evening and then turn dark. The two hours match
+ * DAY_STARTS_AT and NIGHT_STARTS_AT in `@/lib/themes`, which this cannot
+ * import; themes.test.ts fails if they drift apart.
  */
 const THEME_SCRIPT = `
 try {
   var t = localStorage.getItem('theme');
   var ids = ['light','dark','midnight','nature','sunset','minimal','contrast'];
   if (ids.indexOf(t) !== -1) document.documentElement.dataset.theme = t;
+  if (t === 'daynight') {
+    var h = new Date().getHours();
+    document.documentElement.dataset.theme = h >= 6 && h < 18 ? 'light' : 'dark';
+  }
   if (localStorage.getItem('sidebar') === 'collapsed') {
     document.documentElement.dataset.sidebar = 'collapsed';
   }

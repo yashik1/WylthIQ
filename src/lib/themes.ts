@@ -23,8 +23,16 @@ export type ThemeId =
   | "minimal"
   | "contrast";
 
-/** What the picker offers, including the option to follow the operating system. */
-export type ThemeChoice = ThemeId | "system";
+/**
+ * What the picker offers.
+ *
+ * Two of these are not themes but rules for choosing one. `system` follows the
+ * device's appearance setting; `daynight` follows the reader's own clock,
+ * which is what somebody means when they say a dark page on a bright morning
+ * looks wrong — no browser reports the time of day, so nothing else can
+ * answer that.
+ */
+export type ThemeChoice = ThemeId | "system" | "daynight";
 
 export interface Theme {
   id: ThemeId;
@@ -93,7 +101,43 @@ export const THEME_STORAGE_KEY = "theme";
 
 /** Narrows an unknown stored value to a choice we can actually apply. */
 export function isThemeChoice(value: unknown): value is ThemeChoice {
-  return value === "system" || THEME_IDS.includes(value as ThemeId);
+  return value === "system" || value === "daynight" || THEME_IDS.includes(value as ThemeId);
+}
+
+/*
+  When the day starts and ends, for the `daynight` choice.
+
+  Six and eighteen, which is the convention every operating system that offers
+  this uses, and close enough to sunrise and sunset for most of the year in
+  most places. Deliberately not tied to real sunrise: that needs a location,
+  and asking a reader for one to pick a colour scheme would be an absurd
+  trade. These two numbers are repeated inside the pre-paint script in
+  layout.tsx, which cannot import them — themes.test.ts fails if they drift.
+*/
+export const DAY_STARTS_AT = 6;
+export const NIGHT_STARTS_AT = 18;
+
+/** Which theme the reader's own clock asks for. */
+export function themeForHour(hour: number): "light" | "dark" {
+  return hour >= DAY_STARTS_AT && hour < NIGHT_STARTS_AT ? "light" : "dark";
+}
+
+/**
+ * How long until the page should change itself, in milliseconds.
+ *
+ * A reader who leaves a tab open across six in the evening should watch it go
+ * dark rather than find it light the next morning. Always positive, and never
+ * more than the twelve hours between one boundary and the next.
+ */
+export function msUntilThemeSwitch(now: Date = new Date()): number {
+  const next = new Date(now);
+  next.setMinutes(0, 0, 0);
+  next.setHours(now.getHours() < DAY_STARTS_AT
+    ? DAY_STARTS_AT
+    : now.getHours() < NIGHT_STARTS_AT
+      ? NIGHT_STARTS_AT
+      : DAY_STARTS_AT + 24);
+  return next.getTime() - now.getTime();
 }
 
 export function themeById(id: string): Theme | undefined {
