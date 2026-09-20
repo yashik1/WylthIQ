@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   DAY_STARTS_AT,
+  DEFAULT_THEME_CHOICE,
   NIGHT_STARTS_AT,
   THEMES,
   THEME_IDS,
@@ -119,6 +120,20 @@ describe("day and night, by the clock", () => {
 
   it("is a choice the app will accept back out of storage", () => {
     expect(isThemeChoice("daynight")).toBe(true);
+  });
+
+  /*
+    The choice it replaced. A reader still carrying `system` in storage from
+    before is not left on a value nothing can apply — the picker and the
+    pre-paint script both fall through to the clock.
+  */
+  it("no longer accepts the retired system choice", () => {
+    expect(isThemeChoice("system")).toBe(false);
+    expect(DEFAULT_THEME_CHOICE).toBe("daynight");
+  });
+
+  it("is what the pre-paint script falls back to for anything unrecognised", () => {
+    expect(layout).toContain("ids.indexOf(t) !== -1 ? t : (h >= 6 && h < 18 ? 'light' : 'dark')");
   });
 
   describe("when it next changes itself", () => {
@@ -243,14 +258,15 @@ describe("what each palette promises", () => {
 });
 
 describe("stored preferences", () => {
-  it("accepts every theme and the system option", () => {
+  it("accepts every theme and the day/night rule", () => {
     for (const id of THEME_IDS) expect(isThemeChoice(id)).toBe(true);
-    expect(isThemeChoice("system")).toBe(true);
+    expect(isThemeChoice("daynight")).toBe(true);
   });
 
   it("rejects anything else, so a stale value cannot be stamped", () => {
-    // A theme removed in a later release leaves this string in real browsers.
-    for (const bad of ["", "solarized", null, undefined, 3, {}]) {
+    // A choice removed in a later release leaves its string in real browsers,
+    // which is exactly what "system" is now.
+    for (const bad of ["", "system", "solarized", null, undefined, 3, {}]) {
       expect(isThemeChoice(bad)).toBe(false);
     }
   });

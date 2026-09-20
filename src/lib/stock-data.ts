@@ -107,11 +107,19 @@ export interface StockPageData {
    */
   displayCurrency: string;
   /**
-   * The currency the shares trade in. Prices keep this whatever the reader
-   * asks to read the filings in — a converted share price is not a price
-   * anybody can pay.
+   * The currency prices on this page are in — the same as `displayCurrency`,
+   * since a reader who asks to see a company in their own money means the
+   * share price too.
    */
   priceCurrency: string;
+  /**
+   * The currency the shares actually change hands in, which is what the price
+   * was converted from. Named on the page so nobody mistakes a converted
+   * price for one they can transact at.
+   */
+  tradedCurrency: string;
+  /** What one unit of `tradedCurrency` is worth in `priceCurrency`. */
+  priceRate: number;
   /** Set when figures were restated from another currency, for the footnote. */
   converted: { from: string; rate: number } | null;
   /**
@@ -230,7 +238,10 @@ export async function getStockPageData(
     target: options.currency,
   });
   const resolvedFundamentals = restated.fundamentals;
-  const { converted, displayCurrency, listingCurrency, marketCap } = restated;
+  const { converted, displayCurrency, listingCurrency, marketCap, priceRate } = restated;
+  // Everything below reads the restated quote, so a page in another currency
+  // has no copy of the original left to print by accident.
+  const shownQuote = restated.quote;
 
   const sector = sectorFromSic(profile?.sicCode);
 
@@ -272,7 +283,7 @@ export async function getStockPageData(
     symbol: upper,
     profile,
     fundamentals: resolvedFundamentals,
-    quote,
+    quote: shownQuote,
     news: news.items,
     newsStatus: describeNews(news.error),
     newsSource: news.source,
@@ -291,7 +302,9 @@ export async function getStockPageData(
     earlySignals: { insider, stakes, upcoming },
     reportingCurrency: fundamentals.currency,
     displayCurrency,
-    priceCurrency: listingCurrency,
+    priceCurrency: displayCurrency,
+    tradedCurrency: listingCurrency,
+    priceRate,
     converted,
   };
 }
@@ -396,6 +409,8 @@ async function getInstrumentPageData(
     reportingCurrency: null,
     displayCurrency,
     priceCurrency: displayCurrency,
+    tradedCurrency: displayCurrency,
+    priceRate: 1,
     converted: null,
   };
 }

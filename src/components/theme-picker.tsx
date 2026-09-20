@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Check, Clock, Monitor, Palette } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Clock, Palette } from "lucide-react";
 import {
   DAY_STARTS_AT,
+  DEFAULT_THEME_CHOICE,
   NIGHT_STARTS_AT,
   THEMES,
   THEME_STORAGE_KEY,
@@ -23,11 +24,11 @@ import { cn } from "@/lib/utils";
  * then snap — which is the exact flash that script exists to prevent, and which
  * is far more obvious across seven palettes than it was across two.
  *
- * "System" is a real choice rather than the absence of one: it means "follow
- * the operating system", and it is stored as `system` so a reader who picked it
- * deliberately is not mistaken for one who has never opened this menu. It is
- * represented in the DOM by removing `data-theme` entirely, which is what lets
- * the media query in globals.css take over.
+ * "Day / night" is a rule rather than a palette: it stamps whichever of light
+ * and dark the reader's clock asks for, and re-stamps when the boundary
+ * passes. It replaced a "System" choice that followed the device's appearance
+ * setting — which people set once and forget, so a machine left on dark
+ * showed a dark page on a bright morning and the option read as broken.
  */
 /** A 24-hour hour as a reader would say it: 6 becomes "6am", 18 "6pm". */
 function hour(h: number): string {
@@ -36,32 +37,9 @@ function hour(h: number): string {
   return `${twelve}${suffix}`;
 }
 
-/** True when the device asks for dark. Read on the client only. */
-function deviceWantsDark(): boolean {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
-
-/** Subscribes to the device changing its mind, for useSyncExternalStore. */
-function watchColorScheme(onChange: () => void): () => void {
-  const query = window.matchMedia("(prefers-color-scheme: dark)");
-  query.addEventListener("change", onChange);
-  return () => query.removeEventListener("change", onChange);
-}
-
 export function ThemePicker() {
   const [choice, setChoice] = useState<ThemeChoice | null>(null);
   const [open, setOpen] = useState(false);
-  /*
-    What the device is currently asking for, so "System" can say which.
-
-    A reader whose machine is set to dark reads "System", expects the app to
-    follow the time of day, and concludes the setting is broken — with nothing
-    in this menu to tell them their device asked for dark. Naming it answers
-    that on the spot. Subscribed rather than read once, so it stays right when
-    the device changes while the menu is open, and null until hydration
-    because a server has no device to ask.
-  */
-  const systemDark = useSyncExternalStore(watchColorScheme, deviceWantsDark, () => null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -76,7 +54,7 @@ export function ThemePicker() {
       } catch {
         // Private browsing can block storage; the picker still works per-page.
       }
-      setChoice(isThemeChoice(stored) ? stored : "system");
+      setChoice(isThemeChoice(stored) ? stored : DEFAULT_THEME_CHOICE);
     });
     return () => {
       cancelled = true;
@@ -127,9 +105,7 @@ export function ThemePicker() {
     setChoice(next);
     setOpen(false);
 
-    if (next === "system") {
-      delete document.documentElement.dataset.theme;
-    } else if (next === "daynight") {
+    if (next === "daynight") {
       // A rule rather than a theme: what gets stamped is whichever of the two
       // the clock asks for, which is also what the pre-paint script writes.
       document.documentElement.dataset.theme = themeForHour(new Date().getHours());
@@ -166,9 +142,7 @@ export function ThemePicker() {
   const label =
     choice === "daynight"
       ? "Day / night"
-      : choice === "system"
-        ? "System"
-        : (THEMES.find((t) => t.id === choice)?.label ?? "Theme");
+      : (THEMES.find((t) => t.id === choice)?.label ?? "Theme");
 
   return (
     <div ref={rootRef} className="relative">
@@ -194,18 +168,6 @@ export function ThemePicker() {
           </p>
 
           <div className="max-h-[70vh] overflow-y-auto py-1">
-            <Option
-              selected={choice === "system"}
-              onSelect={() => apply("system")}
-              label={systemDark == null ? "System" : `System — ${systemDark ? "dark" : "light"}`}
-              description="Follows your device, not the time of day."
-              swatch={
-                <span className="flex size-5 items-center justify-center rounded-full border border-border text-muted">
-                  <Monitor className="size-3" />
-                </span>
-              }
-            />
-
             <Option
               selected={choice === "daynight"}
               onSelect={() => apply("daynight")}
