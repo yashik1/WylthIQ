@@ -14,6 +14,9 @@ import { organisationLd, websiteLd } from "@/lib/structured-data";
 import { StructuredData } from "@/components/structured-data";
 import { auth } from "@/lib/auth";
 import { listWatchlist } from "@/lib/watchlist/actions";
+import { Suspense } from "react";
+import { MarketNews } from "@/components/market-news";
+import { getDashboardNews, pickNewsSymbols } from "@/lib/market-news";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +48,23 @@ export default async function HomePage() {
         ) : (
           universeCount != null && universeCount > 0 && <MarketSetupHint />
         )}
+
+        {/*
+          Streamed rather than awaited with the rest.
+
+          Every other panel on this page reads stored rows and renders at
+          once; this one asks a news provider about up to five companies, so
+          awaiting it up front would hold the whole dashboard behind the
+          slowest request on it.
+        */}
+        <Suspense fallback={<NewsPlaceholder />}>
+          <DashboardNewsPanel
+            watchlist={saved.map((c) => c.symbol)}
+            gainers={market.gainers.map((m) => m.symbol)}
+            losers={market.losers.map((m) => m.symbol)}
+            healthiest={healthiest.rows.map((r) => r.symbol)}
+          />
+        </Suspense>
 
         <WatchlistSync signedIn={signedIn} />
         <WatchlistPanel signedIn={signedIn} saved={saved} />
@@ -108,6 +128,50 @@ export default async function HomePage() {
         </section>
       </div>
     </div>
+  );
+}
+
+/**
+ * The headlines, once the provider has answered.
+ *
+ * Its own component so the page can stream it: everything else here renders
+ * from stored rows, and the dashboard should not wait on a news API to show
+ * them. Which companies it asks about is decided in pickNewsSymbols — a
+ * reader's watchlist first, then the day's movers.
+ */
+async function DashboardNewsPanel({
+  watchlist,
+  gainers,
+  losers,
+  healthiest,
+}: {
+  watchlist: string[];
+  gainers: string[];
+  losers: string[];
+  healthiest: string[];
+}) {
+  const symbols = pickNewsSymbols({ watchlist, gainers, losers, healthiest });
+  const news = await getDashboardNews(symbols);
+  return <MarketNews news={news} />;
+}
+
+/**
+ * A quiet stand-in while the headlines load.
+ *
+ * Sized like the panel it replaces so the rest of the dashboard does not jump
+ * when they arrive.
+ */
+function NewsPlaceholder() {
+  return (
+    <section aria-hidden>
+      <div className="mb-3">
+        <p className="eyebrow mb-1">In the news</p>
+        <h2 className="font-display text-xl">What is being written</h2>
+      </div>
+      <Card>
+        <div className="h-32 animate-pulse bg-surface-2" />
+      </Card>
+    </section>
   );
 }
 
