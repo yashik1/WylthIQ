@@ -129,24 +129,25 @@ export const viewport: Viewport = {
  * `@/lib/themes`. `themes.test.ts` compares the two and fails if they diverge,
  * which is the only reason it is safe to repeat them here.
  *
- * `system` is stored but deliberately stamps nothing — the absence of the
- * attribute is what hands control to the `prefers-color-scheme` block.
+ * Anything that is not one of those ids — `daynight`, the retired `system`,
+ * an empty slot on a first visit — resolves to the clock, which is the
+ * default this app now ships. Resolved here rather than after hydration for
+ * the same reason the ids are: otherwise a page loads light at nine in the
+ * evening and turns dark a moment later. The two hours match DAY_STARTS_AT
+ * and NIGHT_STARTS_AT in `@/lib/themes`, which this cannot import;
+ * themes.test.ts fails if they drift apart.
  *
- * `daynight` is resolved here rather than after hydration, and for the same
- * reason the ids are: a reader who picked it would otherwise watch the page
- * load light at nine in the evening and then turn dark. The two hours match
- * DAY_STARTS_AT and NIGHT_STARTS_AT in `@/lib/themes`, which this cannot
- * import; themes.test.ts fails if they drift apart.
+ * If localStorage throws — a private window, storage blocked — nothing is
+ * stamped at all, and the `prefers-color-scheme` block in globals.css picks
+ * the ground instead. That is the one case left where the device decides.
  */
 const THEME_SCRIPT = `
 try {
   var t = localStorage.getItem('theme');
   var ids = ['light','dark','midnight','nature','sunset','minimal','contrast'];
-  if (ids.indexOf(t) !== -1) document.documentElement.dataset.theme = t;
-  if (t === 'daynight') {
-    var h = new Date().getHours();
-    document.documentElement.dataset.theme = h >= 6 && h < 18 ? 'light' : 'dark';
-  }
+  var h = new Date().getHours();
+  document.documentElement.dataset.theme =
+    ids.indexOf(t) !== -1 ? t : (h >= 6 && h < 18 ? 'light' : 'dark');
   if (localStorage.getItem('sidebar') === 'collapsed') {
     document.documentElement.dataset.sidebar = 'collapsed';
   }

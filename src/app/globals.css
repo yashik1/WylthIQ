@@ -86,9 +86,13 @@
 }
 
 /*
-  A reader on "system" who has never chosen a theme. `:not([data-theme])`
-  rather than `:not([data-theme="light"])`: once any theme is stamped it must
-  win, including on a machine set to dark.
+  The last case where the device decides.
+
+  The pre-paint script stamps a theme on every visit now — the reader's
+  choice, or light or dark by their clock — so a bare `<html>` means the
+  script could not run: JavaScript off, or localStorage refused in a private
+  window. Following the device is the best answer available there, and it is
+  scoped to `:not([data-theme])` so that any stamped theme still wins.
 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {

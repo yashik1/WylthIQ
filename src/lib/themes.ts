@@ -26,13 +26,22 @@ export type ThemeId =
 /**
  * What the picker offers.
  *
- * Two of these are not themes but rules for choosing one. `system` follows the
- * device's appearance setting; `daynight` follows the reader's own clock,
- * which is what somebody means when they say a dark page on a bright morning
- * looks wrong — no browser reports the time of day, so nothing else can
- * answer that.
+ * One of these is not a theme but a rule for choosing one: `daynight` follows
+ * the reader's own clock. It replaced a `system` choice that followed the
+ * device's appearance setting — a setting most people choose once and never
+ * revisit, so a machine left on dark showed a dark page on a bright morning
+ * and the option read as broken. A clock is the thing a reader actually
+ * means, and no browser reports it, so nothing else could answer.
  */
-export type ThemeChoice = ThemeId | "system" | "daynight";
+export type ThemeChoice = ThemeId | "daynight";
+
+/**
+ * What a reader gets before they have chosen anything.
+ *
+ * Also what anyone still carrying the old `system` value gets, since that is
+ * no longer a choice this app can apply.
+ */
+export const DEFAULT_THEME_CHOICE: ThemeChoice = "daynight";
 
 export interface Theme {
   id: ThemeId;
@@ -101,7 +110,7 @@ export const THEME_STORAGE_KEY = "theme";
 
 /** Narrows an unknown stored value to a choice we can actually apply. */
 export function isThemeChoice(value: unknown): value is ThemeChoice {
-  return value === "system" || value === "daynight" || THEME_IDS.includes(value as ThemeId);
+  return value === "daynight" || THEME_IDS.includes(value as ThemeId);
 }
 
 /*
