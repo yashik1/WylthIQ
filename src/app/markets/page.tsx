@@ -12,6 +12,9 @@ import {
   groupByCategory,
   type Instrument,
 } from "@/lib/instruments";
+import { StructuredData } from "@/components/structured-data";
+import { FaqSection } from "@/components/faq-section";
+import { pageLd } from "@/lib/structured-data";
 
 /**
  * Prices move, but not so fast that a directory needs to be dynamic. Five
@@ -22,7 +25,9 @@ import {
 export const revalidate = 300;
 
 export const metadata: Metadata = {
-  title: "Markets",
+  // 30-60 characters including the " · WylthIQ" the layout appends: a bare
+  // "Markets" was 17 with it, which reads as a fragment in a result list.
+  title: "Markets — commodities, crypto and indexes",
   description:
     "Bitcoin, gold, oil, wheat and the index futures — price history and backtesting for " +
     "the markets that file no accounts.",
@@ -102,6 +107,18 @@ export default async function MarketsPage() {
 
   return (
     <div className="space-y-11">
+      <StructuredData
+        data={[
+          pageLd({
+            type: "CollectionPage",
+            name: "Markets — commodities, crypto and indexes",
+            description:
+              "Price history and backtesting for the markets that file no accounts: " +
+              "bitcoin, gold, oil, wheat and the index futures.",
+            path: "/markets",
+          }),
+        ]}
+      />
       <PageHeader
         eyebrow="Crypto · metals · energy · agriculture · index futures"
         title="Markets"
@@ -113,6 +130,23 @@ export default async function MarketsPage() {
           showing an empty panel.
         </p>
       </PageHeader>
+
+      <FaqSection
+        id="markets-faq"
+        heading="What this page covers"
+        entries={[
+          {
+            question: "Which markets can I look up here?",
+            answer:
+              "Major cryptocurrencies, precious and industrial metals, energy, agricultural contracts and the index futures. These file no accounts with any regulator, so they have prices and history but no profits, debt or health score — which is why they sit apart from the company pages.",
+          },
+          {
+            question: "Why is there no health score for gold or bitcoin?",
+            answer:
+              "Every score on this site is computed from a company's financial statements. Gold files none, and neither does a barrel of oil or a bitcoin. Rather than invent a number, these pages show what does exist: price, long-run history and how an investment in them would have done.",
+          },
+        ]}
+      />
 
       <section>
         <p className="eyebrow">Where things stand</p>

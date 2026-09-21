@@ -10,8 +10,9 @@ import { LocalTime } from "@/components/local-time";
 import { money, num, percent, signedPercent } from "@/lib/format";
 import { healthRating } from "@/lib/scoring/ratings";
 import { getHealthiest, getUniverseCount } from "@/lib/screener";
-import { organisationLd, websiteLd } from "@/lib/structured-data";
+import { websiteLd } from "@/lib/structured-data";
 import { StructuredData } from "@/components/structured-data";
+import { FaqSection } from "@/components/faq-section";
 import { auth } from "@/lib/auth";
 import { listWatchlist } from "@/lib/watchlist/actions";
 import { Suspense } from "react";
@@ -37,7 +38,8 @@ export default async function HomePage() {
 
   return (
     <div>
-      <StructuredData data={[organisationLd(), websiteLd()]} />
+      {/* The organisation itself is emitted once, by the layout. */}
+      <StructuredData data={[websiteLd()]} />
       <TranslationHero />
 
       <IndexStrip readings={indices} universeCount={universeCount} asOf={market.asOf} stale={market.stale} />
@@ -68,6 +70,33 @@ export default async function HomePage() {
 
         <WatchlistSync signedIn={signedIn} />
         <WatchlistPanel signedIn={signedIn} saved={saved} />
+
+        <FaqSection
+          id="home-faq"
+          heading="Questions people ask first"
+          entries={[
+            {
+              question: "How do I tell whether a company is financially healthy?",
+              answer:
+                "Read four things: does it make a profit, is it growing, can it cover its debts, and does its accounting look ordinary. WylthIQ answers all four from the company's own filings and scores them out of 10, with the figure behind every answer shown beside it.",
+            },
+            {
+              question: "Where do the numbers come from?",
+              answer:
+                "Company figures come from regulatory filings at SEC EDGAR — the 10-K, 10-Q, 20-F and 40-F that companies are legally required to file. Every page links the filing it read. Prices come from market data providers and are labelled with their own timestamp.",
+            },
+            {
+              question: "Is any of this investment advice?",
+              answer:
+                "No. WylthIQ explains what a company filed and what well-known models make of it. It does not know your circumstances, does not recommend buying or selling anything, and can be wrong or out of date. Check the linked filings and speak to a licensed adviser.",
+            },
+            {
+              question: "What does it cost?",
+              answer:
+                "Nothing. Every company page, the screener, the comparison tool and the backtester are free and need no account. An account only saves your watchlist, portfolio and notes.",
+            },
+          ]}
+        />
 
         <section aria-labelledby="healthiest-heading">
           <div className="mb-[18px] flex items-end justify-between gap-5">

@@ -34,6 +34,7 @@ import { validateFundamentals } from "@/lib/fundamentals/validate";
 import { isAiConfigured } from "@/lib/ai/config";
 import { AI_QUESTION_OPTIONS } from "@/lib/ai/questions";
 import { PricePanel } from "@/components/stock/peer-chart";
+import { fitTitle } from "@/lib/page-title";
 import { RecordVisit, WatchButton } from "@/components/watchlist";
 import { StrengthsAndRisks, WhatItDoes } from "@/components/stock/orientation";
 import { buildBusinessSummary } from "@/lib/scoring/business";
@@ -60,7 +61,7 @@ import { getSinceInception } from "@/lib/etf/since-inception";
 import { getSubsidiaries } from "@/lib/company/subsidiaries";
 import { EarlySignals } from "@/components/stock/early-signals";
 import { displayName } from "@/lib/company-name";
-import { breadcrumbLd, corporationLd, investmentFundLd } from "@/lib/structured-data";
+import { breadcrumbLd, corporationLd, investmentFundLd, pageLd } from "@/lib/structured-data";
 import { StructuredData } from "@/components/structured-data";
 import { buildWarnings } from "@/lib/scoring/warnings";
 import { buildDividendReport } from "@/lib/scoring/dividends";
@@ -168,13 +169,27 @@ export async function generateMetadata({
         .then((map) => map.has(upper))
         .catch(() => false);
 
+  /*
+    A title a result list shows whole.
+
+    Search engines display roughly 60 characters, and the layout appends
+    " · WylthIQ" to every one of them — so the title itself has about 50 to
+    work with. "Archer-Daniels-Midland Company (ADM) — financial health in
+    plain English" was 77 before the suffix, and every company page over the
+    line was truncated mid-phrase in results. `fitTitle` keeps the subject,
+    which is what somebody searched for, and drops the tail that no longer
+    fits rather than letting a browser cut it wherever it lands.
+  */
   const title = instrument
-    ? `${subject} — price history and backtesting`
+    ? fitTitle({ subject, tails: ["price history and backtesting", "price history"] })
     : listing
-      ? `${subject} on the ${listing.exchange}`
+      ? fitTitle({ subject, tails: [`on the ${listing.exchange}`], separator: " " })
       : isFund
-        ? `${subject} — holdings, fees and performance`
-        : `${subject} — financial health in plain English`;
+        ? fitTitle({ subject, tails: ["holdings, fees and performance", "holdings and fees"] })
+        : fitTitle({
+            subject,
+            tails: ["financial health in plain English", "financial health"],
+          });
   const description = instrument
     ? `Live price, long-run history and backtesting for ${shortSubject}. It files no accounts, so the company health scores do not apply.`
     : listing
@@ -758,6 +773,24 @@ async function StockBody({
             { name: "WylthIQ", path: "/" },
             { name: companyName, path: `/stock/${encodeURIComponent(upper)}` },
           ]),
+          /*
+            A date an engine can check, which is the thing these pages lacked.
+
+            `dateModified` is the newest fact on the page rather than the time
+            it was rendered: the price's own timestamp when there is one, and
+            the filing's date otherwise. A page stamped "modified now" on
+            every request is a claim that is technically true and worth
+            nothing — what a reader and a crawler both want to know is how old
+            the figures are.
+          */
+          pageLd({
+            name: `${companyName} (${upper})`,
+            description:
+              `Financial health, valuation and filings for ${companyName}, read from its ` +
+              "own regulatory filings.",
+            path: `/stock/${encodeURIComponent(upper)}`,
+            dateModified: (data.quote?.asOf ?? latest?.filedAt ?? undefined)?.slice(0, 10),
+          }),
         ]}
       />
 

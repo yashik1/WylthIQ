@@ -3,7 +3,17 @@ import { AuthShell, AuthFooterLink } from "@/components/auth/auth-form";
 import { SignUpForm } from "@/components/auth/signup-form";
 import { isEmailConfigured } from "@/lib/email";
 
-export const metadata: Metadata = { title: "Create an account" };
+/*
+  Deliberately not indexed.
+
+  A sign-in form has nothing to answer a search with, and an audit reads
+  it as a thin page with no structured data — which it is, correctly. The
+  links out of it are still followed, so the pages behind it are reachable.
+*/
+export const metadata: Metadata = {
+  title: "Create an account",
+  robots: { index: false, follow: true },
+};
 
 export default function SignUpPage() {
   return (

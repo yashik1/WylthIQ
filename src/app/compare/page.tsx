@@ -9,6 +9,9 @@ import { money, multiple, percent, price as fmtPrice } from "@/lib/format";
 import { describeAgainstPeers, median, type PeerFigures } from "@/lib/peer-context";
 import { ASSET_CLASS_LABEL } from "@/lib/instruments";
 import { healthRating } from "@/lib/scoring/ratings";
+import { StructuredData } from "@/components/structured-data";
+import { FaqSection } from "@/components/faq-section";
+import { pageLd } from "@/lib/structured-data";
 
 export const dynamic = "force-dynamic";
 
@@ -53,10 +56,44 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
 
   return (
     <div className="space-y-5">
+      <StructuredData
+        data={[
+          pageLd({
+            name: "Compare stocks and ETFs side by side",
+            description:
+              "Put up to five companies, funds, commodities or coins next to each other " +
+              "— health, valuation, growth and performance, from their own filings.",
+            path: "/compare",
+          }),
+        ]}
+      />
+      <FaqSection
+        id="compare-faq"
+        heading="How comparing works here"
+        entries={[
+          {
+            question: "How do I compare two companies?",
+            answer:
+              "Type the tickers into the box above — up to five at once. Every row is read from the companies' own annual filings, so a comparison shows the same measure computed the same way for each of them rather than whatever each company chose to highlight.",
+          },
+          {
+            question: "Can I compare an ETF with a stock?",
+            answer:
+              "Yes, and the table changes to suit. Two funds are compared on cost, income, spread and record, because revenue growth and debt mean nothing for a fund. A fund against a company shows only what both of them have.",
+          },
+        ]}
+      />
+
       <PageHeader eyebrow="Side by side" title="Compare">
         <p>
           Put up to {MAX_COMPARE} companies, funds, commodities or coins next to each
           other — health, valuation, growth and performance.
+        </p>
+        <p className="mt-2">
+          Every row is computed the same way for every column, from each company&apos;s own
+          annual filing, so a comparison is not a collection of whichever figures each of
+          them chose to put in a press release. Funds are compared on what a fund is
+          actually judged on: cost, income, spread and record.
         </p>
       </PageHeader>
 

@@ -8,6 +8,8 @@ import { money, signedPercent } from "@/lib/format";
 import { healthRating } from "@/lib/scoring/ratings";
 import { getEntitlement, hasAccess } from "@/lib/billing/entitlement";
 import { Paywall } from "@/components/billing/paywall";
+import { StructuredData } from "@/components/structured-data";
+import { pageLd } from "@/lib/structured-data";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +55,17 @@ export default async function ScreenerBacktestPage({
 
   return (
     <div className="space-y-5">
+      <StructuredData
+        data={[
+          pageLd({
+            name: "Backtest the screener — what the healthiest returned",
+            description:
+              "What a portfolio of the financially healthiest companies would have " +
+              "returned, rebalanced on the filings that were public at the time.",
+            path: "/backtest/screener",
+          }),
+        ]}
+      />
       <PageHeader eyebrow="Backtest" title="What the healthiest returned">
         <p>
           Ranks today&apos;s screening universe by health score at each rebalance date, using only

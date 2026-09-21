@@ -22,15 +22,17 @@ import { isInvestmentError, type InvestmentResult } from "@/lib/backtest/single-
 import { money, signedPercent } from "@/lib/format";
 import { getEntitlement, hasAccess } from "@/lib/billing/entitlement";
 import { classify, findInstrument } from "@/lib/instruments";
+import { StructuredData } from "@/components/structured-data";
+import { pageLd } from "@/lib/structured-data";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "What if I had invested…",
+  // Kept under 160 characters, which is where a result stops showing it.
   description:
     "See what an investment in any stock, crypto or commodity would be worth today, " +
-    "how the same holding did over one, three, five and ten years, and how well-known " +
-    "trading rules would have done with it.",
+    "and how well-known trading rules would have done with it.",
   // One URL per symbol, per date range, per rule — none of them worth indexing
   // separately, and the form is the same page underneath.
   alternates: { canonical: "/backtest" },
@@ -103,6 +105,17 @@ export default async function BacktestPage({ searchParams }: PageProps<"/backtes
 
   return (
     <div className="space-y-5">
+      <StructuredData
+        data={[
+          pageLd({
+            name: "Backtest — what an investment would be worth",
+            description:
+              "See what an investment in any stock, crypto or commodity would be worth " +
+              "today, and how well-known trading rules would have done with it.",
+            path: "/backtest",
+          }),
+        ]}
+      />
       <PageHeader eyebrow="Textbook parameters, deliberately untuned" title="Backtest">
         <p>
           Pick a stock, crypto, commodity or futures contract, a date and an amount. This

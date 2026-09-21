@@ -6,7 +6,7 @@ import { Card, CardHeader, PageHeader } from "@/components/ui";
 import { findGuide, GUIDES, type GuideExample } from "@/lib/guides/content";
 import { METRIC_GUIDE, learnHref } from "@/lib/learn/metric-guide";
 import { PRESETS, type PresetKey } from "@/lib/screener";
-import { breadcrumbLd, faqLd } from "@/lib/structured-data";
+import { breadcrumbLd, faqLd, pageLd } from "@/lib/structured-data";
 import { cn } from "@/lib/utils";
 
 /**
@@ -58,6 +58,14 @@ export default async function GuidePage({ params }: PageProps<"/[guide]">) {
             { name: guide.title, path: `/${guide.slug}` },
           ]),
           faqLd(guide.faq),
+          // Dated and attributed, like every other page — a guide is the kind
+          // of page an answer engine will quote, and it weights sources it
+          // can identify and confirm are current.
+          pageLd({
+            name: guide.title,
+            description: guide.description,
+            path: `/${guide.slug}`,
+          }),
         ]}
       />
 

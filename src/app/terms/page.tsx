@@ -4,6 +4,9 @@ import { Card, PageHeader, SectionHeading } from "@/components/ui";
 import { providerStatus } from "@/lib/providers";
 import { getUniverseCount } from "@/lib/screener";
 import { num } from "@/lib/format";
+import { StructuredData } from "@/components/structured-data";
+import { FaqSection } from "@/components/faq-section";
+import { pageLd } from "@/lib/structured-data";
 
 export const metadata: Metadata = {
   title: "Terms of use and privacy",
@@ -19,9 +22,58 @@ export default async function TermsPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
+      <StructuredData
+        data={[
+          pageLd({
+            type: "AboutPage",
+            name: "Terms of use and privacy",
+            description:
+              "What WylthIQ is, what it is not, where its data comes from, and what " +
+              "it stores about you.",
+            path: "/terms",
+          }),
+        ]}
+      />
       <PageHeader eyebrow="The rules" title="Terms of use & privacy">
         <p>Last updated {updated}</p>
       </PageHeader>
+
+      {/*
+        The short version, in the words somebody would actually ask it in.
+
+        A terms page is read by two audiences: a person who wants one straight
+        answer, and a crawler deciding what the page is. Both are served by
+        the same four questions and answers, which is why this is rendered
+        rather than only marked up — see FaqSection.
+      */}
+      <div className="mt-6">
+        <FaqSection
+          id="terms-faq"
+          heading="The short version"
+          entries={[
+            {
+              question: "Is WylthIQ investment advice?",
+              answer:
+                "No. It summarises public regulatory filings and computes well-known academic scores from them. It does not know your circumstances, recommends nothing, and may contain errors or stale data. Check the linked filings and speak to a licensed adviser before making financial decisions.",
+            },
+            {
+              question: "Where does WylthIQ get its data?",
+              answer:
+                "Company financials come from SEC EDGAR, the regulator's own filing archive, and are free to use. Prices and news come from market data providers under their free tiers, which are licensed for personal, non-commercial use and carry their own delays.",
+            },
+            {
+              question: "What does WylthIQ store about me?",
+              answer:
+                "Nothing at all unless you create an account. An account stores your email, your saved companies, your portfolio holdings, your notes and your trade journal. There is no tracking and no advertising, and nothing about you is sold or shared.",
+            },
+            {
+              question: "How do I delete my data?",
+              answer:
+                "Delete your account from the account page and everything tied to it goes with it: watchlist, portfolio, theses and journal entries. Anything kept only in your browser, such as your theme and recently viewed companies, is cleared by clearing site data.",
+            },
+          ]}
+        />
+      </div>
 
       <Card className="mt-6 overflow-hidden">
         <div className="border-b border-border bg-poor-soft/40 px-5 py-3">

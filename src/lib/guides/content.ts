@@ -45,7 +45,7 @@ export const GUIDES: readonly Guide[] = [
     slug: "how-to-analyze-a-company",
     title: "How to analyze a company's finances",
     description:
-      "A step-by-step way to read any public company's financial statements: what it does, whether it makes money and cash, what it owes, how it is valued, and what changed.",
+      "A step-by-step way to read any public company's accounts: what it does, whether it makes money and cash, what it owes, and how it is valued.",
     keywords: ["analyze a company", "analyse a company", "fundamental analysis", "research a stock", "financial analysis", "company research"],
     standfirst:
       "A repeatable order for reading a public company's finances from its own filings. It will not tell you what to do about a company. It will tell you what the numbers say, and where to look when they disagree with each other.",
@@ -492,7 +492,7 @@ export const GUIDES: readonly Guide[] = [
     slug: "what-is-altman-z-score",
     title: "What is the Altman Z-Score?",
     description:
-      "A model from 1968 that combines balance-sheet and income ratios to describe how close a company looks to financial distress. The formula, the zones and the variants.",
+      "A model from 1968 combining balance-sheet and income ratios to describe how close a company looks to distress. The formula, the zones, the variants.",
     keywords: ["altman", "z-score", "z score", "altman z", "bankruptcy prediction", "financial distress"],
     standfirst:
       "The Altman Z-Score blends several financial ratios into one number describing how closely a company's accounts resemble those of companies that went bankrupt. It is a statistical picture of a balance sheet, not a forecast that any particular company will fail.",
@@ -567,7 +567,7 @@ export const GUIDES: readonly Guide[] = [
     slug: "what-is-beneish-m-score",
     title: "What is the Beneish M-Score?",
     description:
-      "An eight-ratio model from 1999 that screens financial statements for patterns associated with overstated earnings. How it works, the −1.78 threshold, and why a flag is not proof.",
+      "An eight-ratio model from 1999 that screens accounts for patterns linked to overstated earnings. How it works, and why a flag is not proof.",
     keywords: ["beneish", "m-score", "m score", "mscore", "earnings manipulation", "accounting red flags"],
     standfirst:
       "The Beneish M-Score looks for accounting patterns that companies later found to have overstated their earnings tended to share. A high score is a reason to read the filings closely. It is never evidence that anything is wrong.",

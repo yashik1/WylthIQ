@@ -151,6 +151,69 @@ export function faqLd(entries: { question: string; answer: string }[]): JsonLd {
 }
 
 /**
+ * A page, as one identifiable, dated, attributable thing.
+ *
+ * An audit of the live site on 2026-09-21 found twelve pages carrying no
+ * structured data at all, no author or organisation signal, and no date an
+ * engine could confirm. A crawler reading them had prose and nothing else:
+ * nothing saying what the page is, who publishes it, or whether it is
+ * current. Answer engines weight sources they can identify and date, so the
+ * absence costs citations rather than rankings.
+ *
+ * `isPartOf` and `publisher` point at the `@id`s minted by `websiteLd` and
+ * `organisationLd` rather than repeating their fields, which is what makes
+ * every page part of one site published by one organisation instead of
+ * twenty unrelated documents.
+ *
+ * Dates are real or absent. `dateModified` defaults to the deploy's own build
+ * time, which is the last moment the page's wording could have changed; a
+ * page whose figures refresh on their own passes its own date instead. An
+ * invented date is the kind of claim a crawler checks.
+ */
+export function pageLd(input: {
+  /** "WebPage" unless the page is principally a list of other pages. */
+  type?: "WebPage" | "CollectionPage" | "AboutPage" | "ContactPage";
+  name: string;
+  description: string;
+  /** Rooted path, e.g. "/screen". */
+  path: string;
+  datePublished?: string;
+  dateModified?: string;
+}): JsonLd {
+  const base = siteUrl();
+  const url = `${base}${input.path}`;
+
+  return {
+    "@context": "https://schema.org",
+    "@type": input.type ?? "WebPage",
+    "@id": `${url}#webpage`,
+    url,
+    name: input.name,
+    description: input.description,
+    isPartOf: { "@id": `${base}/#website` },
+    publisher: { "@id": `${base}/#organisation` },
+    inLanguage: "en",
+    datePublished: input.datePublished ?? SITE_PUBLISHED,
+    dateModified: input.dateModified ?? BUILD_DATE,
+  };
+}
+
+/**
+ * When this site first published anything, and when it last changed.
+ *
+ * The build date is read from an environment variable Railway sets on every
+ * deployment, falling back to today — so a page's `dateModified` moves when
+ * the deployment does, which is the honest claim: the wording on these pages
+ * changes when the app is deployed and at no other time.
+ */
+const SITE_PUBLISHED = "2026-06-01";
+const BUILD_DATE = (
+  process.env.RAILWAY_DEPLOYMENT_CREATED_AT ??
+  process.env.BUILD_DATE ??
+  new Date().toISOString()
+).slice(0, 10);
+
+/**
  * The publisher, as one identified thing.
  *
  * This is what a search for the product's own name resolves against. Without

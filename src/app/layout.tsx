@@ -13,6 +13,8 @@ import { AccountMenu } from "@/components/auth/account-menu";
 import { NewsletterSubscribeForm } from "@/components/newsletter/subscribe-form";
 import { SLOGAN } from "@/lib/brand";
 import { siteUrl } from "@/lib/site-url";
+import { StructuredData } from "@/components/structured-data";
+import { organisationLd } from "@/lib/structured-data";
 
 /**
  * Three faces, each with one job.
@@ -196,6 +198,17 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className="flex min-h-full flex-col font-sans">
+        {/*
+          Who publishes this, on every page.
+
+          It used to appear on the home page alone, so every other page's
+          markup referred to an organisation a crawler could not see — and an
+          audit read fourteen pages as having no author or organisation signal
+          at all. Answer engines weight sources they can identify, and one
+          block of markup is a cheaper way to be identifiable than any amount
+          of prose.
+        */}
+        <StructuredData data={organisationLd()} />
         <SessionProvider session={session}>
         {/*
           One row, at every width.
@@ -336,6 +349,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
               <p className="eyebrow mb-2">Product</p>
               <ul className="grid list-none gap-0.5 text-[0.8125rem]">
                 <li><Link href="/screen" className={FOOTER_LINK}>Screener</Link></li>
+                {/* On every page, which is what makes the company pages
+                    reachable by following links rather than only through the
+                    sitemap. See /companies. */}
+                <li><Link href="/companies" className={FOOTER_LINK}>All companies</Link></li>
                 <li><Link href="/markets" className={FOOTER_LINK}>Markets</Link></li>
                 <li><Link href="/backtest" className={FOOTER_LINK}>Backtest</Link></li>
                 <li><Link href="/journal" className={FOOTER_LINK}>Journal</Link></li>
