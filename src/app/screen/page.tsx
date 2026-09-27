@@ -45,6 +45,9 @@ import {
   type SavedScreen,
 } from "@/lib/saved-screens";
 import { describeFilters } from "@/lib/screen-summary";
+import { StructuredData } from "@/components/structured-data";
+import { FaqSection } from "@/components/faq-section";
+import { pageLd } from "@/lib/structured-data";
 
 export const dynamic = "force-dynamic";
 
@@ -178,12 +181,41 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
 
   return (
     <div className="space-y-5">
+      <StructuredData
+        data={[
+          pageLd({
+            type: "CollectionPage",
+            name: "Screener — filter companies by financial health",
+            description:
+              "Filter hundreds of US and Canadian companies by financial health, " +
+              "valuation, growth and debt, with every score traced to a filing.",
+            path: "/screen",
+          }),
+        ]}
+      />
       <PageHeader eyebrow="Scores precomputed nightly" title="Screener">
         <p>
           Filters on financial health, not price action. Every column traces back to a
           filing.
         </p>
       </PageHeader>
+
+      <FaqSection
+        id="screen-faq"
+        heading="How this screen works"
+        entries={[
+          {
+            question: "How do I find financially healthy companies?",
+            answer:
+              "Start with a preset — Financial health ranks every company on profitability, debt, cash and accounting quality out of 10. Then narrow it: a maximum P/E, a minimum F-Score, a sector. Every filter reads figures taken from the companies' own annual filings.",
+          },
+          {
+            question: "What does the health score actually measure?",
+            answer:
+              "Four things from the latest annual filing, averaged: whether the company makes a profit, whether it is growing, whether it can cover its debts, and whether its accounting looks ordinary against the Beneish model. It says nothing about the share price.",
+          },
+        ]}
+      />
 
       {/* Preset screens: the entry point for anyone who does not know which
           ratio they want to filter on. */}

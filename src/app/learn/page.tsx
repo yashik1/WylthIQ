@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Card, CardHeader, PageHeader } from "@/components/ui";
-import { faqLd } from "@/lib/structured-data";
+import { faqLd, pageLd } from "@/lib/structured-data";
 import { StructuredData } from "@/components/structured-data";
 import { METRIC_GUIDES } from "@/lib/learn/metric-guide";
 import { GUIDES } from "@/lib/guides/content";
@@ -151,6 +151,19 @@ export default function LearnPage() {
             answer: `${guide.what} ${guide.how}`,
           })),
         ])}
+      />
+
+      <StructuredData
+        data={[
+          pageLd({
+            type: "CollectionPage",
+            name: "Learn — what the numbers actually mean",
+            description:
+              "Every term WylthIQ uses, explained without assuming you have read a " +
+              "balance sheet before, with longer guides and worked examples.",
+            path: "/learn",
+          }),
+        ]}
       />
 
       <PageHeader eyebrow="Reference" title="What the numbers mean">

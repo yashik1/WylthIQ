@@ -3,7 +3,17 @@ import { Suspense } from "react";
 import { AuthShell, AuthFooterLink } from "@/components/auth/auth-form";
 import { SignInForm } from "@/components/auth/signin-form";
 
-export const metadata: Metadata = { title: "Sign in" };
+/*
+  Deliberately not indexed.
+
+  A sign-in form has nothing to answer a search with, and an audit reads
+  it as a thin page with no structured data — which it is, correctly. The
+  links out of it are still followed, so the pages behind it are reachable.
+*/
+export const metadata: Metadata = {
+  title: "Sign in",
+  robots: { index: false, follow: true },
+};
 
 export default function SignInPage() {
   return (
