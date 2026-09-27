@@ -4,9 +4,9 @@ import { companies, financials, scores } from "../db/schema";
 import { getRate } from "../fx";
 import { getProvider } from "../providers";
 import { freeCashFlowOf } from "../scoring/returns";
-import type { SavedHolding } from "./actions";
 import { buildIntelligence, type HoldingProfile, type PortfolioIntelligence } from "./intelligence";
 import { valueHoldings, type CurrencyTotal, type PricedHolding, type ValuedHolding } from "./math";
+import type { PortfolioInput } from "./sources";
 
 /**
  * Prices, scores and exposures for a reader's holdings.
@@ -116,51 +116,65 @@ async function storedScores(symbols: string[]): Promise<{
   }
 }
 
+/** The currency a Canadian-suffixed listing trades in, and USD for the rest of the covered universe. */
+function currencyForSymbol(symbol: string): string {
+  return /\.(TO|V)$/.test(symbol) ? "CAD" : "USD";
+}
+
 export async function loadPortfolio(
-  saved: SavedHolding[],
+  inputs: PortfolioInput[],
   theses: { symbol: string; status: string }[],
 ): Promise<PortfolioView> {
-  const symbols = saved.map((holding) => holding.symbol);
+  // One lookup per company, however many rows hold it.
+  const symbols = [...new Set(inputs.map((holding) => holding.symbol))];
   const { bySymbol, freeCashFlow } = await storedScores(symbols);
   const now = Date.now();
 
-  // Which holdings need a live price: not stored, or stored too long ago.
-  const needLive = saved.filter((holding) => {
-    const row = bySymbol.get(holding.symbol);
+  // Which companies need a live price: not stored, or stored too long ago.
+  const needLive = symbols.filter((symbol) => {
+    const row = bySymbol.get(symbol);
     return !row?.price || !row.priceUpdatedAt || now - row.priceUpdatedAt.getTime() > STALE_AFTER_MS;
   });
   const lookups = needLive.slice(0, MAX_LIVE_QUOTES);
   const live = new Map<string, { price: number | null; currency: string | null; asOf: string | null }>();
   for (let i = 0; i < lookups.length; i += LIVE_BATCH) {
     const batch = lookups.slice(i, i + LIVE_BATCH);
-    const quotes = await Promise.all(
-      batch.map((holding) => getProvider().getQuote(holding.symbol).catch(() => null)),
-    );
-    batch.forEach((holding, index) => {
+    const quotes = await Promise.all(batch.map((symbol) => getProvider().getQuote(symbol).catch(() => null)));
+    batch.forEach((symbol, index) => {
       const quote = quotes[index];
       if (quote?.price != null) {
-        live.set(holding.symbol, { price: quote.price, currency: quote.currency ?? null, asOf: quote.asOf });
+        live.set(symbol, { price: quote.price, currency: quote.currency ?? null, asOf: quote.asOf });
       }
     });
   }
 
-  const priced: PricedHolding[] = saved.map((holding) => {
+  const priced: PricedHolding[] = inputs.map((holding) => {
     const row = bySymbol.get(holding.symbol);
     const fromLive = live.get(holding.symbol);
     const storedFresh =
       row?.price != null && row.priceUpdatedAt != null && now - row.priceUpdatedAt.getTime() <= STALE_AFTER_MS;
-    const fallbackCurrency = holding.symbol.endsWith(".TO") ? "CAD" : "USD";
+    const fallbackCurrency = currencyForSymbol(holding.symbol);
+
+    const price = storedFresh ? row!.price : (fromLive?.price ?? null);
+    const priceCurrency = storedFresh ? fallbackCurrency : (fromLive?.currency ?? fallbackCurrency).toUpperCase();
+    // A synced holding says what currency its cost is in. A price in another
+    // currency would turn the gain into a comparison of two different units,
+    // so that row is shown at cost with no price rather than valued wrongly.
+    const currencyAgrees = !holding.currency || holding.currency === priceCurrency;
 
     return {
+      key: holding.key,
+      source: holding.source,
+      reportedAt: holding.reportedAt,
       symbol: holding.symbol,
       name: row?.name ?? null,
       quantity: holding.quantity,
       averageCost: holding.averageCost,
       purchaseDate: holding.purchaseDate,
-      price: storedFresh ? row!.price : (fromLive?.price ?? null),
-      currency: storedFresh ? fallbackCurrency : (fromLive?.currency ?? fallbackCurrency).toUpperCase(),
-      priceAsOf: storedFresh ? row!.priceUpdatedAt!.toISOString() : (fromLive?.asOf ?? null),
-      priceSource: storedFresh ? "stored" : fromLive ? "live" : null,
+      price: currencyAgrees ? price : null,
+      currency: holding.currency ?? priceCurrency,
+      priceAsOf: currencyAgrees ? (storedFresh ? row!.priceUpdatedAt!.toISOString() : (fromLive?.asOf ?? null)) : null,
+      priceSource: !currencyAgrees ? null : storedFresh ? "stored" : fromLive ? "live" : null,
     };
   });
 
@@ -175,13 +189,23 @@ export async function loadPortfolio(
     }
   }
 
-  const thesisBySymbol = new Map(theses.map((t) => [t.symbol, t.status]));
-  const profiles: HoldingProfile[] = holdings.map((holding) => {
-    const row = bySymbol.get(holding.symbol);
+  // The exposures describe companies, so a company held in two rows counts
+  // once, at its combined weight — otherwise it would appear twice among the
+  // flags and could be named the largest holding at half its real size.
+  const weightBySymbol = new Map<string, number | null>();
+  for (const holding of holdings) {
     const rate = rates.get(holding.currency) ?? null;
+    const weight = holding.value != null && rate != null ? holding.value * rate : null;
+    const sofar = weightBySymbol.get(holding.symbol);
+    weightBySymbol.set(holding.symbol, weight == null ? (sofar ?? null) : (sofar ?? 0) + weight);
+  }
+
+  const thesisBySymbol = new Map(theses.map((t) => [t.symbol, t.status]));
+  const profiles: HoldingProfile[] = [...weightBySymbol].map(([symbol, weight]) => {
+    const row = bySymbol.get(symbol);
     return {
-      symbol: holding.symbol,
-      weight: holding.value != null && rate != null ? holding.value * rate : null,
+      symbol,
+      weight,
       covered: Boolean(row),
       sectorKind: row?.sectorKind ?? null,
       displaySector: row?.displaySector ?? null,
@@ -194,7 +218,7 @@ export async function loadPortfolio(
       mApplicable: row?.mApplicable ?? null,
       zZone: row?.zZone ?? null,
       zApplicable: row?.zApplicable ?? null,
-      thesisStatus: thesisBySymbol.get(holding.symbol) ?? null,
+      thesisStatus: thesisBySymbol.get(symbol) ?? null,
     };
   });
 

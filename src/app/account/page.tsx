@@ -4,7 +4,10 @@ import { redirect } from "next/navigation";
 import { Card, CardHeader, Metric, PageHeader } from "@/components/ui";
 import { BillingButton } from "@/components/billing/subscribe-button";
 import { LocalTime } from "@/components/local-time";
-import { getEntitlement } from "@/lib/billing/entitlement";
+import { canAccess, getEntitlement } from "@/lib/billing/entitlement";
+import { IbkrConnect } from "@/components/brokers/ibkr-connect";
+import { brokerTokensEnabled } from "@/lib/brokers/crypto";
+import { getBrokerConnection } from "@/lib/brokers/queries";
 import { accountIsEnough } from "@/lib/billing/access-mode";
 import { isStripeConfigured } from "@/lib/billing/stripe";
 import { auth } from "@/lib/auth";
@@ -38,11 +41,15 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
   if (!session?.user) redirect("/signin?next=/account");
 
   const params = await searchParams;
-  const [entitlement, digest, saved] = await Promise.all([
+  const [entitlement, digest, saved, broker] = await Promise.all([
     getEntitlement(),
     getDigestPreference(),
     listWatchlist(),
+    session.user.id ? getBrokerConnection(session.user.id) : Promise.resolve(null),
   ]);
+  // Shown to anyone with a connection, so a reader whose plan lapses can
+  // still see it and disconnect; offered to new readers only when they may use it.
+  const showBroker = broker !== null || canAccess(entitlement, "BROKER_SYNC");
   const justPaid = params.checkout === "done";
 
   return (
@@ -150,6 +157,33 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
           </div>
         </div>
       </Card>
+
+      {showBroker && (
+        <Card>
+          <CardHeader
+            title="Connected broker"
+            subtitle="Read-only: your holdings and trades from Interactive Brokers, updated daily"
+          />
+          <IbkrConnect
+            available={brokerTokensEnabled()}
+            connection={
+              broker && {
+                queryId: broker.queryId,
+                tokenHint: broker.tokenHint,
+                status: broker.status,
+                lastErrorCode: broker.lastErrorCode,
+                statementToDate: broker.statementToDate,
+                lastSyncedAt: broker.lastSyncedAt?.toISOString() ?? null,
+                accounts: broker.accounts,
+                positions: broker.positions,
+                linkedTrades: broker.linkedTrades,
+                journalSince: broker.journalSince,
+                skipped: broker.skipped,
+              }
+            }
+          />
+        </Card>
+      )}
 
       {/*
         Signing out sits here rather than in the header.

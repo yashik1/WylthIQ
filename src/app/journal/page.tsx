@@ -19,6 +19,7 @@ import {
 } from "@/components/journal/trade-stats";
 import { LocalTime } from "@/components/local-time";
 import { getEntitlement, hasAccess } from "@/lib/billing/entitlement";
+import { syncedTradeIds } from "@/lib/brokers/queries";
 import { listEntries } from "@/lib/journal/actions";
 import { listPlaybooks, listTrades, toTrade } from "@/lib/journal/trade-actions";
 import {
@@ -58,9 +59,10 @@ export default async function JournalPage() {
 
   // Each of these re-checks entitlement itself and returns nothing without it,
   // so this cannot expose anything even if the branch below were wrong.
-  const [entries, tradeRows, playbooks] = allowed
-    ? await Promise.all([listEntries(), listTrades(), listPlaybooks()])
-    : [[], [], []];
+  const [entries, tradeRows, playbooks, synced] =
+    allowed && entitlement.userId
+      ? await Promise.all([listEntries(), listTrades(), listPlaybooks(), syncedTradeIds(entitlement.userId)])
+      : [[], [], [], new Set<number>()];
 
   const trades: Trade[] = await Promise.all(tradeRows.map(toTrade));
   const stats = summarise(trades);
@@ -71,8 +73,12 @@ export default async function JournalPage() {
       <PageHeader eyebrow="Your record" title="Trade journal">
         <p>
           What you traded, why you thought it was a good idea, and what it actually
-          did. Every figure here is computed from prices you enter yourself — nothing
-          on this page is fetched from a market data provider.
+          did. Every figure here is computed from the prices you enter, or from the fills
+          your broker reports if you have connected one on your{" "}
+          <Link href="/account" className="text-accent underline underline-offset-2">
+            account page
+          </Link>{" "}
+          — nothing on this page is fetched from a market data provider.
         </p>
       </PageHeader>
 
@@ -122,7 +128,7 @@ export default async function JournalPage() {
             <NewTradeForm playbooks={playbooks} />
           </Card>
 
-          <TradeLog trades={trades} names={names} />
+          <TradeLog trades={trades} names={names} synced={synced} />
 
           <Card>
             <CardHeader
@@ -223,7 +229,16 @@ export default async function JournalPage() {
  * useful reading is straight down a column — which of these lost money, which
  * hit its stop, which were taken without one.
  */
-function TradeLog({ trades, names }: { trades: Trade[]; names: Map<number, string> }) {
+function TradeLog({
+  trades,
+  names,
+  synced,
+}: {
+  trades: Trade[];
+  names: Map<number, string>;
+  /** Trades added from the reader's broker, whose fills the broker is the authority on. */
+  synced: Set<number>;
+}) {
   if (trades.length === 0) {
     return (
       <Card>
@@ -284,6 +299,11 @@ function TradeLog({ trades, names }: { trades: Trade[]; names: Map<number, strin
                         {t.side === "short" ? "Short" : "Long"}
                       </Badge>
                       <ResultBadge pnl={pnl} />
+                      {synced.has(t.id) && (
+                        <Badge tone="neutral" title="Added from Interactive Brokers. Your notes, strategy and rules stay yours; the fills are updated from IBKR.">
+                          IBKR
+                        </Badge>
+                      )}
                     </div>
                     <p className="tnum mt-0.5 text-xs text-faint">
                       {num(t.quantity, 0)} @ {t.openedAt}
@@ -348,7 +368,12 @@ function TradeLog({ trades, names }: { trades: Trade[]; names: Map<number, strin
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex flex-col items-start gap-2">
-                      {!isClosed(t) && <CloseTradeForm id={t.id} />}
+                      {!isClosed(t) &&
+                        (synced.has(t.id) ? (
+                          <span className="text-xs text-faint">Closes when IBKR reports the sale</span>
+                        ) : (
+                          <CloseTradeForm id={t.id} />
+                        ))}
                       <DeleteTradeButton id={t.id} />
                     </div>
                   </td>

@@ -1,0 +1,33 @@
+<FlexQueryResponse queryName="WylthIQ sync" type="AF">
+<FlexStatements count="2">
+<FlexStatement accountId="U0000001" fromDate="20250101" toDate="20250930" period="Last365CalendarDays" whenGenerated="20251001;020000">
+<OpenPositions>
+<OpenPosition accountId="U0000001" currency="USD" assetCategory="STK" subCategory="COMMON" symbol="AAPL" description="APPLE INC" conid="265598" listingExchange="NASDAQ" reportDate="20250930" position="15" markPrice="230.1" positionValue="3451.5" costBasisPrice="180.25" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000001" currency="USD" assetCategory="STK" subCategory="COMMON" symbol="AAPL" description="APPLE INC" conid="265598" listingExchange="NASDAQ" reportDate="20250930" position="10" costBasisPrice="170" levelOfDetail="LOT" />
+<OpenPosition accountId="U0000001" currency="USD" assetCategory="STK" subCategory="COMMON" symbol="BRK B" description="BERKSHIRE HATHAWAY INC-CL B" conid="72063691" listingExchange="NYSE" reportDate="20250930" position="3" costBasisPrice="410" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000001" currency="USD" assetCategory="OPT" subCategory="C" symbol="AAPL  251219C00250000" description="AAPL 19DEC25 250 C" conid="700000001" listingExchange="CBOE" reportDate="20250930" position="1" costBasisPrice="5.2" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000001" currency="USD" assetCategory="STK" subCategory="COMMON" symbol="TSLA" description="TESLA INC" conid="76792991" listingExchange="NASDAQ" reportDate="20250930" position="-5" costBasisPrice="250" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000001" currency="JPY" assetCategory="STK" subCategory="COMMON" symbol="7203" description="TOYOTA MOTOR CORP" conid="13905" listingExchange="TSEJ" reportDate="20250930" position="100" costBasisPrice="2800" levelOfDetail="SUMMARY" />
+</OpenPositions>
+<Trades>
+<Trade accountId="U0000001" currency="USD" assetCategory="STK" symbol="AAPL" description="APPLE INC" conid="265598" listingExchange="NASDAQ" tradeID="1001" ibExecID="0000e0d5.0001.01.01" dateTime="20250210;093512" tradeDate="20250210" quantity="10" tradePrice="170" ibCommission="-1" ibCommissionCurrency="USD" buySell="BUY" levelOfDetail="EXECUTION" />
+<Trade accountId="U0000001" currency="USD" assetCategory="STK" symbol="AAPL" description="APPLE INC" conid="265598" listingExchange="NASDAQ" tradeID="" ibExecID="" dateTime="20250210;093512" tradeDate="20250210" quantity="10" tradePrice="170" ibCommission="-1" ibCommissionCurrency="USD" buySell="BUY" levelOfDetail="ORDER" />
+<Trade accountId="U0000001" currency="USD" assetCategory="STK" symbol="AAPL" description="APPLE INC" conid="265598" listingExchange="NASDAQ" tradeID="1002" ibExecID="0000e0d5.0002.01.01" dateTime="20250402;101500" tradeDate="20250402" quantity="5" tradePrice="200.5" ibCommission="-1.05" ibCommissionCurrency="USD" buySell="BUY" levelOfDetail="EXECUTION" />
+<Trade accountId="U0000001" currency="USD" assetCategory="STK" symbol="AAPL" description="APPLE INC" conid="265598" listingExchange="NASDAQ" tradeID="" ibExecID="" dateTime="20250402;101500" tradeDate="20250402" quantity="-10" tradePrice="200.5" buySell="SELL" levelOfDetail="CLOSED_LOT" />
+<Trade accountId="U0000001" currency="USD" assetCategory="OPT" symbol="AAPL  251219C00250000" description="AAPL 19DEC25 250 C" conid="700000001" listingExchange="CBOE" tradeID="1003" ibExecID="0000e0d5.0003.01.01" dateTime="20250601;110000" tradeDate="20250601" quantity="1" tradePrice="5.2" ibCommission="-0.65" ibCommissionCurrency="USD" buySell="BUY" levelOfDetail="EXECUTION" />
+<Trade accountId="U0000001" currency="JPY" assetCategory="STK" symbol="7203" description="TOYOTA &amp; CO" conid="13905" listingExchange="TSEJ" tradeID="1004" ibExecID="0000e0d5.0004.01.01" dateTime="20250701;090000" tradeDate="20250701" quantity="100" tradePrice="2800" ibCommission="-80" ibCommissionCurrency="JPY" buySell="BUY" levelOfDetail="EXECUTION" />
+</Trades>
+</FlexStatement>
+<FlexStatement accountId="U0000002" fromDate="2025-01-01" toDate="2025-09-30" period="Last365CalendarDays" whenGenerated="2025-10-01;02:00:00">
+<OpenPositions>
+<OpenPosition accountId="U0000002" currency="CAD" assetCategory="STK" subCategory="COMMON" symbol="RY" description="ROYAL BANK OF CANADA" conid="5094" listingExchange="TSE" reportDate="2025-09-30" position="20" costBasisPrice="140.5" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000002" currency="CAD" assetCategory="STK" subCategory="ETF" symbol="XEQT" description="ISHARES CORE EQUITY ETF PORT" conid="4000001" listingExchange="TSE" reportDate="2025-09-30" position="50" costBasisPrice="30.1" levelOfDetail="SUMMARY" />
+</OpenPositions>
+<Trades>
+<Trade accountId="U0000002" currency="CAD" assetCategory="STK" symbol="RY" description="ROYAL BANK OF CANADA" conid="5094" listingExchange="TSE" tradeID="2001" ibExecID="0000f1a2.0001.01.01" dateTime="2025-03-03;14:20:05" tradeDate="2025-03-03" quantity="20" tradePrice="140.5" ibCommission="-1.5" ibCommissionCurrency="CAD" buySell="BUY" levelOfDetail="EXECUTION" />
+<Trade accountId="U0000002" currency="CAD" assetCategory="STK" symbol="SHOP" description="SHOPIFY INC - CLASS A" conid="4000002" listingExchange="TSE" tradeID="2002" ibExecID="0000f1a2.0002.01.01" dateTime="2025-05-05;10:00:00" tradeDate="2025-05-05" quantity="10" tradePrice="150" ibCommission="-1" ibCommissionCurrency="CAD" buySell="BUY" levelOfDetail="EXECUTION" />
+<Trade accountId="U0000002" currency="CAD" assetCategory="STK" symbol="SHOP" description="SHOPIFY INC - CLASS A" conid="4000002" listingExchange="TSE" tradeID="2003" ibExecID="0000f1a2.0003.01.01" dateTime="2025-06-06;15:30:00" tradeDate="2025-06-06" quantity="-10" tradePrice="165" ibCommission="-1" ibCommissionCurrency="CAD" buySell="SELL" levelOfDetail="EXECUTION" />
+</Trades>
+</FlexStatement>
+</FlexStatements>
+</FlexQueryResponse>

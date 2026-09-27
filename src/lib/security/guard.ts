@@ -38,6 +38,12 @@ export const RULES = {
   ai: { limit: 6, windowSeconds: 60 },
   /** Grounded explanations, per account per day, so one account cannot run up the bill. */
   aiDaily: { limit: 40, windowSeconds: 86_400 },
+  /**
+   * Connecting a broker, per address and per account. Each attempt makes this
+   * server call IBKR with whatever token was pasted, so an open form would let
+   * anyone use it to test tokens against IBKR at our expense and in our name.
+   */
+  brokerConnect: { limit: 5, windowSeconds: 3600 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type RuleName = keyof typeof RULES;
@@ -87,5 +93,16 @@ export async function actionRateLimited(rule: RuleName): Promise<number | null> 
     "unknown";
 
   const result = limit(`${rule}:${ip}`, RULES[rule]);
+  return result.ok ? null : result.retryAfterSeconds;
+}
+
+/**
+ * The same limit, counted per signed-in account rather than per address.
+ *
+ * For the actions where one account on many addresses is the abuse to price
+ * out. Used alongside `actionRateLimited`, not instead of it.
+ */
+export function userRateLimited(rule: RuleName, userId: string): number | null {
+  const result = limit(`${rule}:user:${userId}`, RULES[rule]);
   return result.ok ? null : result.retryAfterSeconds;
 }

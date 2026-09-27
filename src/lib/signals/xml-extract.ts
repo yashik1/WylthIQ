@@ -14,8 +14,13 @@
  * "unknown", never as "zero" or "false".
  */
 
-/** Un-escapes the small set of entities SEC filings actually contain. */
-function unescapeXml(s: string): string {
+/**
+ * Un-escapes the small set of entities SEC filings actually contain.
+ *
+ * Exported for the broker statement reader, whose machine-generated XML uses
+ * the same five and no others.
+ */
+export function unescapeXml(s: string): string {
   return s
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
