@@ -11,6 +11,16 @@
  */
 
 export interface PricedHolding {
+  /**
+   * Unique per row. Not the symbol: the same company can be held twice, once
+   * entered by hand and once synced from a broker, and the two are shown as
+   * separate rows rather than silently merged or dropped.
+   */
+  key: string;
+  /** Where the holding came from: typed in, or synced from the reader's broker. */
+  source: "manual" | "ibkr";
+  /** For a synced holding, the date the broker's figures are as of. */
+  reportedAt: string | null;
   symbol: string;
   name: string | null;
   quantity: number;

@@ -97,6 +97,17 @@ export async function getEntitlement(): Promise<Entitlement> {
   const userId = session?.user?.id;
 
   if (!userId) return NOT_SIGNED_IN;
+  return entitlementForUser(userId);
+}
+
+/**
+ * The same answer for an account that is not the one making the request.
+ *
+ * For scheduled work acting on a reader's behalf — the nightly broker sync —
+ * which has no session to read but must still stop once that reader's plan
+ * no longer covers what it does.
+ */
+export async function entitlementForUser(userId: string): Promise<Entitlement> {
   if (!isDatabaseConfigured()) {
     return { ...NOT_SIGNED_IN, signedIn: true, userId };
   }

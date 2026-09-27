@@ -3,12 +3,14 @@ import Link from "next/link";
 import { HoldingForm, RemoveHoldingButton } from "@/components/portfolio/holding-form";
 import { LocalTime } from "@/components/local-time";
 import { Badge, Card, CardHeader, EmptyState, MeterBar, PageHeader, RatingBadge } from "@/components/ui";
-import { getEntitlement } from "@/lib/billing/entitlement";
+import { canAccess, getEntitlement } from "@/lib/billing/entitlement";
+import { listBrokerHoldings } from "@/lib/brokers/queries";
 import { calendarDate, percent, price as fmtPrice } from "@/lib/format";
 import { listHoldings } from "@/lib/portfolio/actions";
 import type { PortfolioIntelligence } from "@/lib/portfolio/intelligence";
 import { loadPortfolio } from "@/lib/portfolio/load";
 import type { CurrencyTotal } from "@/lib/portfolio/math";
+import { toPortfolioInputs } from "@/lib/portfolio/sources";
 import { healthRating } from "@/lib/scoring/ratings";
 import { listTheses } from "@/lib/thesis/actions";
 import { cn } from "@/lib/utils";
@@ -37,8 +39,12 @@ export default async function PortfolioPage() {
     <PageHeader eyebrow="Your holdings" title="Portfolio">
       <p>
         What you hold, what it is worth on the latest available prices, and what it is exposed to —
-        described with the same figures the company pages use. Nothing here connects to a
-        brokerage, and nothing here is a recommendation.
+        described with the same figures the company pages use. Holdings come from what you enter
+        here and, if you connect Interactive Brokers on your{" "}
+        <Link href="/account" className="text-accent underline underline-offset-2">
+          account page
+        </Link>
+        , from what it reports — read-only, it can never trade. Nothing here is a recommendation.
       </p>
     </PageHeader>
   );
@@ -63,9 +69,14 @@ export default async function PortfolioPage() {
     );
   }
 
-  const [saved, theses] = await Promise.all([listHoldings(), listTheses()]);
+  const [saved, synced, theses] = await Promise.all([
+    listHoldings(),
+    canAccess(entitlement, "BROKER_SYNC") ? listBrokerHoldings(entitlement.userId) : Promise.resolve([]),
+    listTheses(),
+  ]);
+  const { inputs, overlaps } = toPortfolioInputs(saved, synced);
   const view = await loadPortfolio(
-    saved,
+    inputs,
     theses.map((thesis) => ({ symbol: thesis.symbol, status: thesis.status })),
   );
 
@@ -82,11 +93,21 @@ export default async function PortfolioPage() {
         <Card>
           <EmptyState
             title="No holdings yet"
-            description="Add a holding above to see its value, gain, allocation and what it is exposed to."
+            description="Add a holding above, or connect Interactive Brokers on your account page, to see value, gain, allocation and what the portfolio is exposed to."
           />
         </Card>
       ) : (
         <>
+          {overlaps.length > 0 && (
+            <Card className="p-4">
+              <p className="text-sm leading-relaxed text-muted-strong">
+                {overlaps.join(", ")} {overlaps.length === 1 ? "is" : "are"} both synced from
+                Interactive Brokers and entered by hand, and both are counted. If they are the same
+                shares, remove the one you entered.
+              </p>
+            </Card>
+          )}
+
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-3">
             {view.totals.map((total) => (
               <TotalCard key={total.currency} total={total} />
@@ -122,7 +143,7 @@ export default async function PortfolioPage() {
                   {view.holdings.map((holding) => {
                     const scored = view.scored[holding.symbol];
                     return (
-                      <tr key={holding.symbol} className="align-top">
+                      <tr key={holding.key} className="align-top">
                         <th scope="row" className="px-5 py-3 text-left font-normal">
                           <Link
                             href={`/stock/${encodeURIComponent(holding.symbol)}`}
@@ -130,13 +151,27 @@ export default async function PortfolioPage() {
                           >
                             {holding.symbol}
                           </Link>
+                          {holding.source === "ibkr" && (
+                            <>
+                              {" "}
+                              <Badge tone="accent" title="Synced read-only from Interactive Brokers">
+                                IBKR
+                              </Badge>
+                            </>
+                          )}
                           {holding.name && (
                             <span className="block max-w-[14rem] truncate text-xs text-muted">{holding.name}</span>
                           )}
-                          {holding.purchaseDate && (
+                          {holding.source === "ibkr" && holding.reportedAt ? (
                             <span className="block text-xs text-faint">
-                              Bought {calendarDate(holding.purchaseDate) ?? holding.purchaseDate}
+                              As of {calendarDate(holding.reportedAt) ?? holding.reportedAt}
                             </span>
+                          ) : (
+                            holding.purchaseDate && (
+                              <span className="block text-xs text-faint">
+                                Bought {calendarDate(holding.purchaseDate) ?? holding.purchaseDate}
+                              </span>
+                            )
                           )}
                         </th>
                         <td className="tnum px-3 py-3 text-right">
@@ -196,7 +231,13 @@ export default async function PortfolioPage() {
                           )}
                         </td>
                         <td className="px-3 py-3">
-                          <RemoveHoldingButton symbol={holding.symbol} />
+                          {holding.source === "manual" ? (
+                            <RemoveHoldingButton symbol={holding.symbol} />
+                          ) : (
+                            <span className="text-xs text-faint" title="Changes when your broker's report does">
+                              Synced
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -209,6 +250,8 @@ export default async function PortfolioPage() {
               otherwise from a live lookup, labelled on each row. Both are delayed, not real time.
               {view.livePriceSkipped > 0 &&
                 ` ${view.livePriceSkipped} holdings were not looked up, to stay within the provider's limits.`}
+              {view.holdings.some((h) => h.source === "ibkr") &&
+                " Holdings marked IBKR are what your broker reported at its last daily statement; their cost is IBKR's, their price is this app's."}
             </p>
           </Card>
 

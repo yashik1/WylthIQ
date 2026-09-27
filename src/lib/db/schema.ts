@@ -855,6 +855,159 @@ export const portfolioHoldings = pgTable(
   (t) => [uniqueIndex("portfolio_holdings_user_symbol_idx").on(t.userId, t.symbol)],
 );
 
+/* ------------------------------------------------------------ brokerage sync
+ *
+ * A reader's own brokerage account, connected read-only. See
+ * drizzle/0018_broker_connections.sql for why each table exists and why they
+ * are separate from `portfolio_holdings` and `trades` rather than new columns
+ * on them.
+ *
+ * The first broker is Interactive Brokers through its Flex Web Service, whose
+ * token can download reports and nothing else. The token is stored encrypted
+ * (src/lib/brokers/crypto.ts) and never leaves the server.
+ */
+export const brokerConnections = pgTable(
+  "broker_connections",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Which adapter: "ibkr-flex" is the only one so far. */
+    broker: text("broker").notNull(),
+    /** AES-256-GCM, bound to this user and broker. Never sent to a browser. */
+    tokenCiphertext: text("token_ciphertext").notNull(),
+    /** The token's last four characters, so the reader can tell which one is saved. */
+    tokenHint: text("token_hint").notNull(),
+    queryId: text("query_id").notNull(),
+    /** ok | needs-attention | error. needs-attention is skipped by the nightly sync. */
+    status: text("status").notNull().default("ok"),
+    /** The broker's own error code from the last failure. Its message text is never kept. */
+    lastErrorCode: text("last_error_code"),
+    /** ISO date. Trades opened before this are not added to the journal. */
+    journalSince: text("journal_since").notNull(),
+    /** The last day the most recent statement covered, as the broker reported it. */
+    statementToDate: text("statement_to_date"),
+    /** What the last statement held that is not shown, and why. Capped. */
+    skipped: jsonb("skipped").notNull().default(sql`'[]'::jsonb`),
+    /** A lease, so a nightly run and a "Sync now" cannot run the same sync twice. */
+    syncStartedAt: timestamp("sync_started_at", { withTimezone: true }),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("broker_connections_user_broker_idx").on(t.userId, t.broker)],
+);
+
+/** What the broker reported holding at its last statement. Replaced whole on every sync. */
+export const brokerPositions = pgTable(
+  "broker_positions",
+  {
+    id: serial("id").primaryKey(),
+    connectionId: integer("connection_id")
+      .notNull()
+      .references(() => brokerConnections.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    /** The broker's own instrument id, which survives a ticker change. */
+    conid: text("conid").notNull(),
+    /** In this app's notation: AAPL, RY.TO, BRK.B. */
+    symbol: text("symbol").notNull(),
+    quantity: doublePrecision("quantity").notNull(),
+    /** Per share, in `currency`. */
+    averageCost: doublePrecision("average_cost").notNull(),
+    currency: text("currency").notNull(),
+    /** ISO date the broker's figures are as of. */
+    reportDate: text("report_date"),
+  },
+  (t) => [
+    uniqueIndex("broker_positions_connection_account_conid_idx").on(
+      t.connectionId,
+      t.accountId,
+      t.conid,
+    ),
+    index("broker_positions_user_idx").on(t.userId),
+  ],
+);
+
+/** Every fill the broker has reported. The journal is rebuilt from these. */
+export const brokerExecutions = pgTable(
+  "broker_executions",
+  {
+    id: serial("id").primaryKey(),
+    connectionId: integer("connection_id")
+      .notNull()
+      .references(() => brokerConnections.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    conid: text("conid").notNull(),
+    /** The broker's own id for the fill, so an overlapping download is harmless. */
+    externalId: text("external_id").notNull(),
+    symbol: text("symbol").notNull(),
+    /** Signed: positive bought, negative sold. */
+    quantity: doublePrecision("quantity").notNull(),
+    price: doublePrecision("price").notNull(),
+    /** Always positive: what the fill cost in commission. */
+    commission: doublePrecision("commission").notNull().default(0),
+    commissionCurrency: text("commission_currency"),
+    currency: text("currency").notNull(),
+    /** ISO date. */
+    tradeDate: text("trade_date").notNull(),
+    /** Sortable ISO date-time, for putting fills in order within a day. */
+    executedAt: text("executed_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("broker_executions_connection_external_idx").on(t.connectionId, t.externalId),
+    index("broker_executions_connection_account_conid_idx").on(
+      t.connectionId,
+      t.accountId,
+      t.conid,
+    ),
+  ],
+);
+
+/**
+ * Which journal trade each synced round trip became.
+ *
+ * Keyed by reader and the broker's ids, not by connection, so a reconnect
+ * finds the trades already made. `tradeId` null means the reader deleted that
+ * trade, and it is never added back.
+ */
+export const brokerTradeLinks = pgTable(
+  "broker_trade_links",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    broker: text("broker").notNull(),
+    accountId: text("account_id").notNull(),
+    /** The external id of the fill that opened the round trip. */
+    openingExternalId: text("opening_external_id").notNull(),
+    tradeId: integer("trade_id").references(() => trades.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("broker_trade_links_user_opening_idx").on(
+      t.userId,
+      t.broker,
+      t.accountId,
+      t.openingExternalId,
+    ),
+    index("broker_trade_links_trade_idx").on(t.tradeId),
+  ],
+);
+
+export type BrokerConnection = typeof brokerConnections.$inferSelect;
+export type BrokerPosition = typeof brokerPositions.$inferSelect;
+export type BrokerExecution = typeof brokerExecutions.$inferSelect;
+export type BrokerTradeLink = typeof brokerTradeLinks.$inferSelect;
+
 export type PortfolioHolding = typeof portfolioHoldings.$inferSelect;
 export type InvestmentThesis = typeof investmentTheses.$inferSelect;
 export type WatchlistGroup = typeof watchlistGroups.$inferSelect;

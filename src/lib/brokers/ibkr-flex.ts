@@ -1,0 +1,513 @@
+import { tagText } from "../signals/xml-extract";
+import { elementAttributes, hasSection, statementBlocks, type Attributes } from "./flex-xml";
+import { appSymbol } from "./ibkr-symbols";
+
+/**
+ * Interactive Brokers, read through its Flex Web Service.
+ *
+ * READ-ONLY BY CONSTRUCTION. A Flex token is issued for downloading reports
+ * and can do nothing else: there is no order, transfer or withdrawal a Flex
+ * token can make, whatever this code asks for. That is the guarantee, and it
+ * is IBKR's rather than ours. This module adds a second one on top: it can
+ * only ever send a GET to two report URLs on IBKR's own hosts, which the test
+ * beside it and src/lib/brokers/read-only.test.ts both hold it to.
+ *
+ * The exchange is two steps. SendRequest names the reader's saved query and
+ * gets back a reference code; GetStatement exchanges that code for the report,
+ * or for "still generating, try again", which is normal for a few seconds.
+ *
+ * Nothing IBKR says is passed through. Its error text and the request URL —
+ * which carries the token in its query string — are never logged, stored or
+ * shown; a failure leaves this module as a code and a category, and the
+ * reader sees wording written here.
+ */
+
+const SEND_REQUEST_URL =
+  "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest";
+const DEFAULT_STATEMENT_URL =
+  "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/GetStatement";
+
+/** The only hosts and paths a request may go to. */
+const ALLOWED_HOSTS = new Set(["ndcdyn.interactivebrokers.com", "gdcdyn.interactivebrokers.com"]);
+const ALLOWED_PATHS = new Set([
+  "/AccountManagement/FlexWebService/SendRequest",
+  "/AccountManagement/FlexWebService/GetStatement",
+]);
+
+/**
+ * IBKR's Flex servers have turned away requests carrying some client
+ * libraries' default user agents. "Java" is what its own reference client
+ * sends, and what the widely used open-source clients settled on.
+ */
+const USER_AGENT = "Java";
+
+const REQUEST_TIMEOUT_MS = 20_000;
+/** A year of fills for a busy account is a few megabytes; this is far past any real report. */
+const MAX_BODY_BYTES = 25 * 1024 * 1024;
+/** Polls of GetStatement before giving up: with the waits below, under a minute. */
+const MAX_POLLS = 6;
+const WAIT_NOT_READY_MS = 5_000;
+const WAIT_THROTTLED_MS = 10_000;
+/** IBKR allows one request a second per token; the first poll waits at least that. */
+const FIRST_POLL_DELAY_MS = 1_500;
+
+export type FlexErrorCategory =
+  | "TOKEN"
+  | "QUERY"
+  | "RATE_LIMITED"
+  | "NOT_READY"
+  | "UNAVAILABLE"
+  | "INVALID_RESPONSE";
+
+/** What a reader is told for each category. IBKR's own message is never shown. */
+export const FLEX_ERROR_WORDS: Record<FlexErrorCategory, string> = {
+  TOKEN:
+    "IBKR did not accept the token. It may have expired or been regenerated, or be limited to an IP address — create a new one in the Flex Web Service settings.",
+  QUERY:
+    "IBKR could not run that Flex query. Check the query ID, and that the query is an Activity Flex Query in XML format.",
+  RATE_LIMITED: "IBKR is limiting requests for this token right now. Try again in a minute.",
+  NOT_READY: "IBKR took too long to prepare the report. Try again in a few minutes.",
+  UNAVAILABLE: "IBKR's report service is not answering right now. Try again later.",
+  INVALID_RESPONSE: "IBKR sent back something that was not a Flex report.",
+};
+
+export class FlexError extends Error {
+  constructor(
+    readonly category: FlexErrorCategory,
+    /** IBKR's numeric code, when it gave one. */
+    readonly code: string | null = null,
+  ) {
+    super(FLEX_ERROR_WORDS[category]);
+    this.name = "FlexError";
+  }
+
+  /**
+   * Whether the reader has to do something before a retry can work. The
+   * nightly sync skips these until they reconnect, rather than spending
+   * requests on a token IBKR has already refused.
+   */
+  get needsAttention(): boolean {
+    return this.category === "TOKEN" || this.category === "QUERY";
+  }
+}
+
+/** IBKR's documented Flex Web Service error codes, grouped by what they ask of the reader. */
+function categoryForCode(code: string): FlexErrorCategory {
+  switch (code) {
+    case "1011": // service account is inactive
+    case "1012": // token has expired
+    case "1013": // IP restriction
+    case "1015": // token is invalid
+      return "TOKEN";
+    case "1010": // legacy Flex query
+    case "1014": // query is invalid
+    case "1016": // account is invalid
+      return "QUERY";
+    case "1018": // too many requests
+      return "RATE_LIMITED";
+    case "1004": // statement incomplete
+    case "1005": // settlement data not ready
+    case "1006": // FIFO P/L not ready
+    case "1007": // MTM P/L not ready
+    case "1008": // MTM and FIFO P/L not ready
+    case "1009": // server under heavy load
+    case "1019": // statement generation in progress
+      return "NOT_READY";
+    default:
+      return "UNAVAILABLE";
+  }
+}
+
+/** Throws unless `url` is one of the two Flex report URLs on IBKR's own hosts. */
+export function assertFlexUrl(url: URL): void {
+  const allowed =
+    url.protocol === "https:" &&
+    ALLOWED_HOSTS.has(url.hostname) &&
+    url.port === "" &&
+    url.username === "" &&
+    url.password === "" &&
+    ALLOWED_PATHS.has(url.pathname);
+  if (!allowed) throw new FlexError("INVALID_RESPONSE");
+}
+
+/**
+ * Where to collect the report.
+ *
+ * SendRequest names the URL itself. It is followed only if it is exactly the
+ * GetStatement path on one of IBKR's hosts: a report URL taken on trust from
+ * a response is a way to make this server send the reader's token anywhere.
+ */
+export function statementUrl(fromResponse: string | null): URL {
+  if (!fromResponse) return new URL(DEFAULT_STATEMENT_URL);
+  let url: URL;
+  try {
+    url = new URL(fromResponse);
+  } catch {
+    throw new FlexError("INVALID_RESPONSE");
+  }
+  assertFlexUrl(url);
+  if (url.pathname !== new URL(DEFAULT_STATEMENT_URL).pathname) {
+    throw new FlexError("INVALID_RESPONSE");
+  }
+  // Only the address is kept; the parameters are set here, never taken from IBKR.
+  return new URL(`${url.origin}${url.pathname}`);
+}
+
+export interface FlexDeps {
+  fetch?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+async function readCapped(res: Response): Promise<string> {
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) throw new FlexError("INVALID_RESPONSE");
+  if (!res.body) return "";
+
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_BODY_BYTES) {
+      await reader.cancel();
+      throw new FlexError("INVALID_RESPONSE");
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/**
+ * The one way this module talks to IBKR: a GET to an allowlisted URL.
+ *
+ * Redirects are refused rather than followed, because following one would
+ * carry the token to wherever it pointed. Any transport failure becomes a
+ * category, so no message that could quote the URL escapes.
+ */
+async function flexGet(url: URL, fetchImpl: typeof fetch): Promise<string> {
+  assertFlexUrl(url);
+  let res: Response;
+  try {
+    res = await fetchImpl(url, {
+      method: "GET",
+      redirect: "error",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: { "User-Agent": USER_AGENT },
+      cache: "no-store",
+    });
+  } catch {
+    throw new FlexError("UNAVAILABLE");
+  }
+  if (!res.ok) throw new FlexError(res.status === 429 ? "RATE_LIMITED" : "UNAVAILABLE");
+  return readCapped(res);
+}
+
+/** The `<FlexStatementResponse>` envelope both steps use to report status and errors. */
+function readEnvelope(xml: string): {
+  success: boolean;
+  code: string | null;
+  referenceCode: string | null;
+  url: string | null;
+} {
+  return {
+    success: tagText(xml, "Status") === "Success",
+    code: tagText(xml, "ErrorCode"),
+    referenceCode: tagText(xml, "ReferenceCode"),
+    url: tagText(xml, "Url"),
+  };
+}
+
+/**
+ * Downloads the report a reader's saved Flex query produces.
+ *
+ * At most one SendRequest and six GetStatement polls — well inside IBKR's ten
+ * requests a minute per token.
+ */
+export async function downloadFlexReport(
+  token: string,
+  queryId: string,
+  deps: FlexDeps = {},
+): Promise<string> {
+  const fetchImpl = deps.fetch ?? fetch;
+  const sleep = deps.sleep ?? realSleep;
+
+  const request = new URL(SEND_REQUEST_URL);
+  request.search = new URLSearchParams({ t: token.trim(), q: queryId.trim(), v: "3" }).toString();
+
+  const sent = readEnvelope(await flexGet(request, fetchImpl));
+  if (!sent.success || !sent.referenceCode) {
+    if (sent.code) throw new FlexError(categoryForCode(sent.code), sent.code);
+    throw new FlexError("INVALID_RESPONSE");
+  }
+
+  const collect = statementUrl(sent.url);
+  collect.search = new URLSearchParams({ t: token.trim(), q: sent.referenceCode, v: "3" }).toString();
+
+  let wait = FIRST_POLL_DELAY_MS;
+  for (let poll = 0; poll < MAX_POLLS; poll++) {
+    await sleep(wait);
+    const body = await flexGet(collect, fetchImpl);
+    if (body.includes("<FlexQueryResponse")) return body;
+
+    const status = readEnvelope(body);
+    if (!status.code) throw new FlexError("INVALID_RESPONSE");
+    const category = categoryForCode(status.code);
+    if (category === "NOT_READY") wait = WAIT_NOT_READY_MS;
+    else if (category === "RATE_LIMITED") wait = WAIT_THROTTLED_MS;
+    else throw new FlexError(category, status.code);
+  }
+  throw new FlexError("NOT_READY");
+}
+
+/* ------------------------------------------------------------------ parsing */
+
+export interface FlexPosition {
+  accountId: string;
+  conid: string;
+  symbol: string;
+  quantity: number;
+  /** Per share, in `currency`. */
+  averageCost: number;
+  currency: string;
+  reportDate: string | null;
+}
+
+export interface FlexExecution {
+  accountId: string;
+  conid: string;
+  externalId: string;
+  symbol: string;
+  /** Signed: positive bought, negative sold. */
+  quantity: number;
+  price: number;
+  /** Always positive. */
+  commission: number;
+  commissionCurrency: string | null;
+  currency: string;
+  /** ISO date. */
+  tradeDate: string;
+  /** Sortable ISO date-time. */
+  executedAt: string;
+}
+
+export interface SkippedItem {
+  symbol: string;
+  reason: string;
+}
+
+export interface FlexReport {
+  accounts: string[];
+  /** The last day any statement covers, ISO. */
+  toDate: string | null;
+  positions: FlexPosition[];
+  executions: FlexExecution[];
+  /** What was in the report and is not shown, one entry per symbol and reason. */
+  skipped: SkippedItem[];
+  /**
+   * Every stock position the report lists, long or short, shown here or not,
+   * keyed by `positionKey`. The journal needs the true holding to tell a
+   * trade opened inside the report's window from one opened before it.
+   */
+  reportedQuantities: Record<string, number>;
+  /** Whether the query includes each section this app reads. */
+  sections: { positions: boolean; trades: boolean };
+}
+
+/** How a holding is keyed across accounts: the broker's instrument id within one account. */
+export function positionKey(accountId: string, conid: string): string {
+  return `${accountId}|${conid}`;
+}
+
+/** Enough to explain what is missing without storing a reader's whole history of oddities. */
+const MAX_SKIPPED = 50;
+
+function number(value: string | undefined): number | null {
+  if (value === undefined || value.trim() === "") return null;
+  const n = Number(value.replace(/,/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * A Flex date as ISO, or null.
+ *
+ * Reads the default `yyyyMMdd` and ISO `yyyy-MM-dd`. A query can be set to
+ * other formats, including day-first and month-first ones that cannot be told
+ * apart; rather than guess between them, those are refused and the setup
+ * steps ask for the default.
+ */
+export function flexDate(value: string | undefined): string | null {
+  const raw = value?.trim() ?? "";
+  const compact = raw.match(/^(\d{4})(\d{2})(\d{2})/);
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const parts = compact ?? iso;
+  if (!parts) return null;
+  const [, y, m, d] = parts;
+  if (Number(m) < 1 || Number(m) > 12 || Number(d) < 1 || Number(d) > 31) return null;
+  return `${y}-${m}-${d}`;
+}
+
+/** A Flex date-time — `20240115;093012`, `2024-01-15, 09:30:12` and the like — as sortable ISO. */
+export function flexDateTime(value: string | undefined, fallbackDate: string): string {
+  const raw = value?.trim() ?? "";
+  const date = flexDate(raw) ?? fallbackDate;
+  const time = raw.match(/[;,T ]\s*(\d{2}):?(\d{2}):?(\d{2})/);
+  return time ? `${date}T${time[1]}:${time[2]}:${time[3]}` : `${date}T00:00:00`;
+}
+
+/**
+ * The rows of one level of detail, never two.
+ *
+ * A query can include the same fills at several levels — each execution, each
+ * order, each closed lot — and the same holding as a summary and as lots.
+ * Counting more than one level counts the same shares twice. The preferred
+ * level wins when present; rows that name no level at all are taken to be the
+ * only level the query has.
+ */
+function pickLevel(rows: Attributes[], preferred: string[]): Attributes[] {
+  for (const level of preferred) {
+    const matching = rows.filter((r) => r.levelOfDetail?.toUpperCase() === level);
+    if (matching.length > 0) return matching;
+  }
+  return rows.filter((r) => !r.levelOfDetail);
+}
+
+/** Parses a Flex report into positions and fills in this app's terms. */
+export function parseFlexReport(xml: string): FlexReport {
+  if (!xml.includes("<FlexQueryResponse")) throw new FlexError("INVALID_RESPONSE");
+
+  const blocks = statementBlocks(xml);
+  if (blocks.length === 0) throw new FlexError("QUERY");
+
+  // One entry per symbol: an option held and traded is one thing not shown, not two.
+  const skipped = new Map<string, SkippedItem>();
+  const skip = (symbol: string | undefined, reason: string) => {
+    const name = symbol?.trim() || "(unnamed)";
+    if (!skipped.has(name) && skipped.size < MAX_SKIPPED) skipped.set(name, { symbol: name, reason });
+  };
+
+  const accounts: string[] = [];
+  const reportedQuantities: Record<string, number> = {};
+  const positions: FlexPosition[] = [];
+  const executions: FlexExecution[] = [];
+  let toDate: string | null = null;
+  let hasPositions = false;
+  let hasTrades = false;
+
+  for (const block of blocks) {
+    const accountId = block.attributes.accountId?.trim();
+    if (!accountId) continue;
+    accounts.push(accountId);
+
+    const blockTo = flexDate(block.attributes.toDate);
+    if (blockTo && (!toDate || blockTo > toDate)) toDate = blockTo;
+
+    hasPositions ||= hasSection(block.body, "OpenPositions");
+    hasTrades ||= hasSection(block.body, "Trades");
+
+    const positionRows = pickLevel(elementAttributes(block.body, "OpenPosition"), ["SUMMARY"]);
+    for (const row of positionRows) {
+      if (row.assetCategory?.toUpperCase() !== "STK") {
+        skip(row.symbol, "not a stock or fund");
+        continue;
+      }
+      const quantity = number(row.position);
+      const cost = number(row.costBasisPrice);
+      const conid = row.conid?.trim();
+      if (quantity !== null && conid) {
+        const key = positionKey(accountId, conid);
+        reportedQuantities[key] = (reportedQuantities[key] ?? 0) + quantity;
+      }
+      if (quantity === null || cost === null || cost < 0 || !conid || !row.symbol) {
+        skip(row.symbol, "a position the report did not fully describe");
+        continue;
+      }
+      if (quantity <= 0) {
+        if (quantity < 0) skip(row.symbol, "a short position");
+        continue;
+      }
+      const mapped = appSymbol({
+        symbol: row.symbol,
+        listingExchange: row.listingExchange,
+        currency: row.currency,
+      });
+      if (!mapped.ok) {
+        skip(row.symbol, mapped.reason);
+        continue;
+      }
+      positions.push({
+        accountId,
+        conid,
+        symbol: mapped.symbol,
+        quantity,
+        averageCost: cost,
+        currency: row.currency!.trim().toUpperCase(),
+        reportDate: flexDate(row.reportDate) ?? blockTo,
+      });
+    }
+
+    const tradeRows = pickLevel(elementAttributes(block.body, "Trade"), ["EXECUTION", "ORDER"]);
+    for (const row of tradeRows) {
+      if (row.assetCategory?.toUpperCase() !== "STK") {
+        skip(row.symbol, "not a stock or fund, so not added to the journal");
+        continue;
+      }
+      const externalId = row.ibExecID?.trim() || row.tradeID?.trim();
+      const conid = row.conid?.trim();
+      const price = number(row.tradePrice);
+      let quantity = number(row.quantity);
+      const tradeDate = flexDate(row.tradeDate) ?? flexDate(row.dateTime);
+      if (!externalId || !conid || price === null || price <= 0 || !quantity || !tradeDate || !row.symbol) {
+        skip(row.symbol, "a fill the report did not fully describe");
+        continue;
+      }
+      // Quantity is signed in Flex reports; the side is only a cross-check.
+      const side = row.buySell?.trim().toUpperCase();
+      if (side === "SELL" && quantity > 0) quantity = -quantity;
+      if (side === "BUY" && quantity < 0) quantity = -quantity;
+
+      const mapped = appSymbol({
+        symbol: row.symbol,
+        listingExchange: row.listingExchange,
+        currency: row.currency,
+      });
+      if (!mapped.ok) {
+        skip(row.symbol, mapped.reason);
+        continue;
+      }
+
+      const commission = Math.abs(number(row.ibCommission) ?? 0);
+      executions.push({
+        accountId,
+        conid,
+        externalId,
+        symbol: mapped.symbol,
+        quantity,
+        price,
+        commission,
+        commissionCurrency: row.ibCommissionCurrency?.trim().toUpperCase() || null,
+        currency: row.currency!.trim().toUpperCase(),
+        tradeDate,
+        executedAt: flexDateTime(
+          row.dateTime ?? (row.tradeTime ? `${row.tradeDate};${row.tradeTime}` : undefined),
+          tradeDate,
+        ),
+      });
+    }
+  }
+
+  if (accounts.length === 0) throw new FlexError("QUERY");
+
+  return {
+    accounts,
+    toDate,
+    positions,
+    executions,
+    skipped: [...skipped.values()],
+    reportedQuantities,
+    sections: { positions: hasPositions, trades: hasTrades },
+  };
+}

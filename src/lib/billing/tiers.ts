@@ -60,6 +60,7 @@ export type Feature =
   | "FILING_ALERTS"
   | "PORTFOLIO"
   | "PORTFOLIO_ANALYTICS"
+  | "BROKER_SYNC"
   | "AI_EXPLANATIONS"
   | "BACKTESTING"
   | "ADVANCED_CHARTS"
@@ -115,6 +116,12 @@ export const FEATURES: Readonly<Record<Feature, FeaturePolicy>> = {
   // which lands it under PERSONAL_USE above rather than here.
   PORTFOLIO: { kind: "sellable", requires: "pro-plus" },
   PORTFOLIO_ANALYTICS: { kind: "sellable", requires: "pro-plus" },
+  // The reader's own positions and fills, read from their own broker with a
+  // token they supplied — their data, like a holding typed in by hand. The
+  // broker's marks are deliberately not stored, so the positions are valued
+  // on the same quote path as everything else rather than on a price feed
+  // this app would be reselling.
+  BROKER_SYNC: { kind: "sellable", requires: "pro-plus" },
 
   // Available to everyone with an account and metered by tier instead of
   // being locked — see `src/lib/billing/quota.ts`. A hard gate here would

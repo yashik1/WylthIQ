@@ -136,6 +136,19 @@ describe("the development access mode", () => {
     expect(requiredLevel("BASIC_STOCK_RESEARCH", OPEN)).toBe("anyone");
     expect(requiredLevel("PORTFOLIO", PAID)).toBe("pro-plus");
   });
+
+  /*
+    Connecting a broker is free to anyone signed in for now and meant to be
+    paid later. Sitting at Pro+ while the mode is open gives exactly that,
+    with nothing to change at the gate when billing is switched on.
+  */
+  it("opens broker sync to any account now, and to Pro+ once billing is on", () => {
+    expect(canAccess(member, "BROKER_SYNC", OPEN)).toBe(true);
+    expect(canAccess(anonymous, "BROKER_SYNC", OPEN)).toBe(false);
+    expect(canAccess(member, "BROKER_SYNC", PAID)).toBe(false);
+    expect(canAccess(pro, "BROKER_SYNC", PAID)).toBe(false);
+    expect(canAccess(proPlus, "BROKER_SYNC", PAID)).toBe(true);
+  });
 });
 
 describe("the features that may never be sold", () => {

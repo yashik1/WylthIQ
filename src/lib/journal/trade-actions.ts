@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "../db";
-import { playbooks, trades, type Playbook, type TradeRow } from "../db/schema";
+import { brokerTradeLinks, playbooks, trades, type Playbook, type TradeRow } from "../db/schema";
 import { ACCESS_MODE, getEntitlement, hasAccess } from "../billing/entitlement";
 import type { Side, Trade } from "./trade-math";
 
@@ -205,6 +205,19 @@ export async function closeTrade(
 
   const exitPrice = positive(form, "exitPrice");
   if (exitPrice == null) return { ok: false, message: "Enter the price you got out at." };
+
+  // A trade added from the reader's broker is closed by the broker's own
+  // report of the sale. Closed here by hand, the next sync would put the
+  // broker's figures back over whatever was typed.
+  const [synced] = await getDb()
+    .select({ id: brokerTradeLinks.id })
+    .from(brokerTradeLinks)
+    .where(and(eq(brokerTradeLinks.tradeId, id), eq(brokerTradeLinks.userId, gate.userId)))
+    .limit(1)
+    .catch(() => []);
+  if (synced) {
+    return { ok: false, message: "This trade came from IBKR, and closes when IBKR reports the sale." };
+  }
 
   const closedAt = isoDate(form, "closedAt", new Date().toISOString().slice(0, 10))!;
   const followedRaw = String(form.get("followedRules") ?? "");

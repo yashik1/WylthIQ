@@ -28,6 +28,9 @@ there accounting red flags — and links every figure back to the filing it came
   opening-range breakout, each shown against simply buying and holding. Textbook
   parameters, left untuned: a rule tuned until it looks good on the decade being
   displayed will always look good on that decade.
+- **Connect Interactive Brokers, read-only.** Readers can link their own IBKR account
+  from their account page; its holdings appear on `/portfolio` and its trades in the
+  journal, refreshed daily. See [Connecting a broker](#connecting-a-broker).
 - **Crypto, commodities and futures** at `/markets` — Bitcoin, gold, oil, wheat and the
   index contracts. None of them file accounts, so none of them get a health score; they
   get the chart, the comparison and the backtest, and the page says plainly why the rest
@@ -225,6 +228,54 @@ Check it first when something looks empty.
 
 For the scheduled refresh on GitHub Actions, add the same secrets under
 **Settings → Secrets → Actions**, using the database's **public** URL there.
+
+---
+
+## Connecting a broker
+
+Readers can connect their own **Interactive Brokers** account. Its holdings then
+appear on `/portfolio` next to anything entered by hand, and its buys and sells are
+paired into complete trades in `/journal`. Everything is refreshed once a day, after
+IBKR's daily statement.
+
+**It cannot trade or move money.** The connection uses IBKR's
+[Flex Web Service](https://www.ibkrguides.com/clientportal/flex3.htm),
+whose token can only download reports. There is no order, transfer or withdrawal a
+Flex token can make, so the guarantee is IBKR's rather than a promise in this code.
+On top of that, `src/lib/brokers/read-only.test.ts` fails CI if the code ever
+talks to IBKR anywhere but the two Flex report URLs, sends anything but a GET, or
+picks up the vocabulary of placing orders or moving funds.
+
+**What a reader does, in IBKR's Client Portal:**
+
+1. Performance & Reports → Flex Queries → create an **Activity Flex Query**, format
+   XML, with **Open Positions** (Summary level) and **Trades** (Execution level), every
+   field selected, period **Last 365 Calendar Days**, date format left as `yyyyMMdd`.
+2. Flex Web Service Configuration → switch it on and generate a token with **1-year**
+   expiry. Leave "Valid for IP address" empty — Railway's outbound address is not fixed.
+3. Paste the token and the query ID on `/account`. The first report is downloaded right
+   away, so a wrong token or query is caught on the spot.
+
+**What the operator does:**
+
+- Set `BROKER_TOKEN_KEY` (`openssl rand -base64 32`). Tokens are stored encrypted with
+  it and never sent back to a browser. Without it the feature is off.
+- Run `npm run db:migrate` for the four `broker_*` tables.
+- Add a Railway cron service that calls the sync every hour. Each call refreshes the
+  few connections that have gone longest without a sync, so the day's work is spread
+  out and each call stays short:
+
+  ```bash
+  curl --max-time 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/broker-sync"
+  ```
+
+**What is and is not shown.** Stocks and ETFs listed in the US, on the TSX or on the
+TSX Venture. Options, futures, short positions and other exchanges are listed on the
+account page as "not shown", with the reason. Holdings are valued with this app's own
+quotes, not IBKR's marks. A trade opened before the report's first day is left out of
+the journal rather than guessed at, and a trade the reader deletes from the journal is
+never added back. Connecting a broker is part of the Pro+ plan in `tiers.ts`, which,
+like every paid feature, is open to anyone signed in while `ACCESS_MODE` is `sign-in`.
 
 ---
 
