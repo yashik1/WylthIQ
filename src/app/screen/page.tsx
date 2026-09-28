@@ -107,6 +107,9 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
 
   const preset = get("preset") as PresetKey | undefined;
   const sort = (get("sort") as SortKey | undefined) ?? "health";
+  const pageSize = 100;
+  const pageParam = numericParam(get("page"));
+  const page = Math.max(1, Math.floor(pageParam ?? 1));
 
   const flag = (key: string): true | undefined => {
     const v = get(key);
@@ -169,7 +172,7 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
   const advancedRequested = usesAdvancedFilters(requested);
   const filters = mayUseAdvanced ? requested : withoutAdvancedFilters(requested);
 
-  const result = await runScreen(filters);
+  const result = await runScreen(filters, pageSize, (page - 1) * pageSize);
 
   // A run is recorded only when a saved screen was opened and the query ran.
   // A connection error is not a screen that returned nothing.
@@ -193,10 +196,10 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
           }),
         ]}
       />
-      <PageHeader eyebrow="Scores precomputed nightly" title="Screener">
+      <PageHeader eyebrow="Fundamentals precomputed nightly" title="Screener">
         <p>
-          Filters on financial health, not price action. Every column traces back to a
-          filing.
+          Screen financial health, valuation and growth. Filing-based scores and market
+          data are refreshed separately, so each figure has a clear source and age.
         </p>
       </PageHeader>
 
@@ -207,12 +210,12 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
           {
             question: "How do I find financially healthy companies?",
             answer:
-              "Start with a preset — Financial health ranks every company on profitability, debt, cash and accounting quality out of 10. Then narrow it: a maximum P/E, a minimum F-Score, a sector. Every filter reads figures taken from the companies' own annual filings.",
+              "Start with a preset — Financial health ranks companies on profitability, debt, cash and accounting quality out of 10. Then narrow it with a maximum P/E, minimum F-Score or sector. Fundamental scores come from filings; price-based fields such as P/E and market value come from the separate market-data refresh.",
           },
           {
             question: "What does the health score actually measure?",
             answer:
-              "Four things from the latest annual filing, averaged: whether the company makes a profit, whether it is growing, whether it can cover its debts, and whether its accounting looks ordinary against the Beneish model. It says nothing about the share price.",
+              "Four fundamental dimensions are averaged: profitability, growth, debt coverage and accounting quality. The score is based on the latest annual filing and does not incorporate the current share price or market valuation.",
           },
         ]}
       />
@@ -420,7 +423,11 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
           <Card>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-3">
               <p className="text-sm text-muted">
-                {result.total} {result.total === 1 ? "company" : "companies"}
+                {result.total === 0
+                  ? "0 companies"
+                  : result.rows.length < result.total
+                    ? `Showing ${result.rows.length} of ${result.total} companies`
+                    : `${result.total} ${result.total === 1 ? "company" : "companies"}`}
                 {filters.preset && ` · ${PRESETS[filters.preset].label}`}
                 {opened && ` · saved as “${opened.name}”`}
               </p>
@@ -445,6 +452,14 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
               ) : null}
             </div>
             <ResultsTable rows={result.rows} />
+            {result.total > pageSize && (
+              <Pagination
+                filters={filters}
+                page={page}
+                pageSize={pageSize}
+                total={result.total}
+              />
+            )}
           </Card>
         )}
 
@@ -482,15 +497,28 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
               />
             ) : (
               <EmptyState
-                title="No companies match these filters"
-                description="Every filter applied, but nothing cleared them all. Try relaxing a threshold, or reset and start from a preset."
+                title={result.total > 0 ? "No more companies on this page" : "No companies match these filters"}
+                description={
+                  result.total > 0
+                    ? `This page is past the end of the ${result.total} matching companies. Go back to the last page to see the remaining results.`
+                    : "Every filter applied, but nothing cleared them all. Try relaxing a threshold, or reset and start from a preset."
+                }
                 action={
-                  <Link
-                    href="/screen"
-                    className="rounded-lg border border-border px-4 py-2 text-sm font-medium"
-                  >
-                    Reset filters
-                  </Link>
+                  result.total > 0 ? (
+                    <Link
+                      href={screenPageHref(filters, Math.max(1, Math.ceil(result.total / pageSize)))}
+                      className="rounded-lg border border-border px-4 py-2 text-sm font-medium"
+                    >
+                      Go to last page
+                    </Link>
+                  ) : (
+                    <Link
+                      href="/screen"
+                      className="rounded-lg border border-border px-4 py-2 text-sm font-medium"
+                    >
+                      Reset filters
+                    </Link>
+                  )
                 }
               />
             )}
@@ -592,6 +620,80 @@ function positiveInt(value: string | undefined): number | null {
   if (!value || !/^\d{1,9}$/.test(value)) return null;
   const n = Number(value);
   return n > 0 ? n : null;
+}
+
+function Pagination({
+  filters,
+  page,
+  pageSize,
+  total,
+}: {
+  filters: ScreenFilters;
+  page: number;
+  pageSize: number;
+  total: number;
+}) {
+  const pageCount = Math.ceil(total / pageSize);
+  const first = Math.max(1, page - 2);
+  const last = Math.min(pageCount, first + 4);
+  const start = Math.max(1, last - 4);
+
+  return (
+    <nav
+      aria-label="Screener results pages"
+      className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3"
+    >
+      <p className="text-xs text-muted">
+        Page {Math.min(page, pageCount)} of {pageCount}
+      </p>
+      <div className="flex items-center gap-1">
+        {page > 1 ? (
+          <Link
+            href={screenPageHref(filters, page - 1)}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-strong hover:bg-surface-2"
+          >
+            Previous
+          </Link>
+        ) : (
+          <span className="rounded-lg border border-border px-3 py-1.5 text-xs text-faint">
+            Previous
+          </span>
+        )}
+        {Array.from({ length: last - start + 1 }, (_, index) => start + index).map((n) => (
+          <Link
+            key={n}
+            href={screenPageHref(filters, n)}
+            aria-current={n === page ? "page" : undefined}
+            className={`min-w-8 rounded-lg px-2.5 py-1.5 text-center text-xs font-medium ${
+              n === page
+                ? "bg-accent text-accent-fg"
+                : "border border-border text-muted-strong hover:bg-surface-2"
+            }`}
+          >
+            {n}
+          </Link>
+        ))}
+        {page < pageCount ? (
+          <Link
+            href={screenPageHref(filters, page + 1)}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-strong hover:bg-surface-2"
+          >
+            Next
+          </Link>
+        ) : (
+          <span className="rounded-lg border border-border px-3 py-1.5 text-xs text-faint">
+            Next
+          </span>
+        )}
+      </div>
+    </nav>
+  );
+}
+
+function screenPageHref(filters: ScreenFilters, page: number): string {
+  const params = new URLSearchParams(exportQuery(filters).replace(/^\?/, ""));
+  params.set("page", String(page));
+  return `/screen?${params.toString()}`;
 }
 
 function ResultsTable({ rows }: { rows: ScreenRow[] }) {
