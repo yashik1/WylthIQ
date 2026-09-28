@@ -216,7 +216,7 @@ export async function closeTrade(
     .limit(1)
     .catch(() => []);
   if (synced) {
-    return { ok: false, message: "This trade came from IBKR, and closes when IBKR reports the sale." };
+    return { ok: false, message: "This trade came from your broker, and closes when your broker reports the sale." };
   }
 
   const closedAt = isoDate(form, "closedAt", new Date().toISOString().slice(0, 10))!;

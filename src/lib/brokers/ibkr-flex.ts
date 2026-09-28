@@ -1,6 +1,14 @@
 import { tagText } from "../signals/xml-extract";
 import { elementAttributes, hasSection, statementBlocks, type Attributes } from "./flex-xml";
+import { readCappedText } from "./http";
 import { appSymbol } from "./ibkr-symbols";
+import {
+  positionKey,
+  skipList,
+  type BrokerReport,
+  type ReportExecution,
+  type ReportPosition,
+} from "./report";
 
 /**
  * Interactive Brokers, read through its Flex Web Service.
@@ -160,26 +168,6 @@ export interface FlexDeps {
 
 const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-async function readCapped(res: Response): Promise<string> {
-  const declared = Number(res.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) throw new FlexError("INVALID_RESPONSE");
-  if (!res.body) return "";
-
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > MAX_BODY_BYTES) {
-      await reader.cancel();
-      throw new FlexError("INVALID_RESPONSE");
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks).toString("utf8");
-}
 
 /**
  * The one way this module talks to IBKR: a GET to an allowlisted URL.
@@ -203,7 +191,9 @@ async function flexGet(url: URL, fetchImpl: typeof fetch): Promise<string> {
     throw new FlexError("UNAVAILABLE");
   }
   if (!res.ok) throw new FlexError(res.status === 429 ? "RATE_LIMITED" : "UNAVAILABLE");
-  return readCapped(res);
+  const body = await readCappedText(res, MAX_BODY_BYTES);
+  if (body === null) throw new FlexError("INVALID_RESPONSE");
+  return body;
 }
 
 /** The `<FlexStatementResponse>` envelope both steps use to report status and errors. */
@@ -265,65 +255,8 @@ export async function downloadFlexReport(
 
 /* ------------------------------------------------------------------ parsing */
 
-export interface FlexPosition {
-  accountId: string;
-  conid: string;
-  symbol: string;
-  quantity: number;
-  /** Per share, in `currency`. */
-  averageCost: number;
-  currency: string;
-  reportDate: string | null;
-}
-
-export interface FlexExecution {
-  accountId: string;
-  conid: string;
-  externalId: string;
-  symbol: string;
-  /** Signed: positive bought, negative sold. */
-  quantity: number;
-  price: number;
-  /** Always positive. */
-  commission: number;
-  commissionCurrency: string | null;
-  currency: string;
-  /** ISO date. */
-  tradeDate: string;
-  /** Sortable ISO date-time. */
-  executedAt: string;
-}
-
-export interface SkippedItem {
-  symbol: string;
-  reason: string;
-}
-
-export interface FlexReport {
-  accounts: string[];
-  /** The last day any statement covers, ISO. */
-  toDate: string | null;
-  positions: FlexPosition[];
-  executions: FlexExecution[];
-  /** What was in the report and is not shown, one entry per symbol and reason. */
-  skipped: SkippedItem[];
-  /**
-   * Every stock position the report lists, long or short, shown here or not,
-   * keyed by `positionKey`. The journal needs the true holding to tell a
-   * trade opened inside the report's window from one opened before it.
-   */
-  reportedQuantities: Record<string, number>;
-  /** Whether the query includes each section this app reads. */
-  sections: { positions: boolean; trades: boolean };
-}
-
-/** How a holding is keyed across accounts: the broker's instrument id within one account. */
-export function positionKey(accountId: string, conid: string): string {
-  return `${accountId}|${conid}`;
-}
-
-/** Enough to explain what is missing without storing a reader's whole history of oddities. */
-const MAX_SKIPPED = 50;
+/** Who holds every account in a Flex report, for the badge beside each row. */
+const INSTITUTION = "Interactive Brokers";
 
 function number(value: string | undefined): number | null {
   if (value === undefined || value.trim() === "") return null;
@@ -376,23 +309,19 @@ function pickLevel(rows: Attributes[], preferred: string[]): Attributes[] {
 }
 
 /** Parses a Flex report into positions and fills in this app's terms. */
-export function parseFlexReport(xml: string): FlexReport {
+export function parseFlexReport(xml: string): BrokerReport {
   if (!xml.includes("<FlexQueryResponse")) throw new FlexError("INVALID_RESPONSE");
 
   const blocks = statementBlocks(xml);
   if (blocks.length === 0) throw new FlexError("QUERY");
 
-  // One entry per symbol: an option held and traded is one thing not shown, not two.
-  const skipped = new Map<string, SkippedItem>();
-  const skip = (symbol: string | undefined, reason: string) => {
-    const name = symbol?.trim() || "(unnamed)";
-    if (!skipped.has(name) && skipped.size < MAX_SKIPPED) skipped.set(name, { symbol: name, reason });
-  };
+  const skipped = skipList();
+  const skip = skipped.add;
 
   const accounts: string[] = [];
   const reportedQuantities: Record<string, number> = {};
-  const positions: FlexPosition[] = [];
-  const executions: FlexExecution[] = [];
+  const positions: ReportPosition[] = [];
+  const executions: ReportExecution[] = [];
   let toDate: string | null = null;
   let hasPositions = false;
   let hasTrades = false;
@@ -446,6 +375,7 @@ export function parseFlexReport(xml: string): FlexReport {
         averageCost: cost,
         currency: row.currency!.trim().toUpperCase(),
         reportDate: flexDate(row.reportDate) ?? blockTo,
+        label: INSTITUTION,
       });
     }
 
@@ -495,6 +425,7 @@ export function parseFlexReport(xml: string): FlexReport {
           row.dateTime ?? (row.tradeTime ? `${row.tradeDate};${row.tradeTime}` : undefined),
           tradeDate,
         ),
+        label: INSTITUTION,
       });
     }
   }
@@ -506,7 +437,7 @@ export function parseFlexReport(xml: string): FlexReport {
     toDate,
     positions,
     executions,
-    skipped: [...skipped.values()],
+    skipped: skipped.list(),
     reportedQuantities,
     sections: { positions: hasPositions, trades: hasTrades },
   };

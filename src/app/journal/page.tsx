@@ -19,7 +19,7 @@ import {
 } from "@/components/journal/trade-stats";
 import { LocalTime } from "@/components/local-time";
 import { getEntitlement, hasAccess } from "@/lib/billing/entitlement";
-import { syncedTradeIds } from "@/lib/brokers/queries";
+import { syncedTradeBadges } from "@/lib/brokers/queries";
 import { listEntries } from "@/lib/journal/actions";
 import { listPlaybooks, listTrades, toTrade } from "@/lib/journal/trade-actions";
 import {
@@ -61,8 +61,8 @@ export default async function JournalPage() {
   // so this cannot expose anything even if the branch below were wrong.
   const [entries, tradeRows, playbooks, synced] =
     allowed && entitlement.userId
-      ? await Promise.all([listEntries(), listTrades(), listPlaybooks(), syncedTradeIds(entitlement.userId)])
-      : [[], [], [], new Set<number>()];
+      ? await Promise.all([listEntries(), listTrades(), listPlaybooks(), syncedTradeBadges(entitlement.userId)])
+      : [[], [], [], new Map<number, string>()];
 
   const trades: Trade[] = await Promise.all(tradeRows.map(toTrade));
   const stats = summarise(trades);
@@ -236,8 +236,8 @@ function TradeLog({
 }: {
   trades: Trade[];
   names: Map<number, string>;
-  /** Trades added from the reader's broker, whose fills the broker is the authority on. */
-  synced: Set<number>;
+  /** Trades added from the reader's broker, with the badge for each; the broker is the authority on their fills. */
+  synced: Map<number, string>;
 }) {
   if (trades.length === 0) {
     return (
@@ -300,8 +300,8 @@ function TradeLog({
                       </Badge>
                       <ResultBadge pnl={pnl} />
                       {synced.has(t.id) && (
-                        <Badge tone="neutral" title="Added from Interactive Brokers. Your notes, strategy and rules stay yours; the fills are updated from IBKR.">
-                          IBKR
+                        <Badge tone="neutral" title="Added from your broker. Your notes, strategy and rules stay yours; the fills are updated from the broker.">
+                          {synced.get(t.id)}
                         </Badge>
                       )}
                     </div>
@@ -370,7 +370,7 @@ function TradeLog({
                     <div className="flex flex-col items-start gap-2">
                       {!isClosed(t) &&
                         (synced.has(t.id) ? (
-                          <span className="text-xs text-faint">Closes when IBKR reports the sale</span>
+                          <span className="text-xs text-faint">Closes when your broker reports the sale</span>
                         ) : (
                           <CloseTradeForm id={t.id} />
                         ))}

@@ -5,6 +5,7 @@ import { LocalTime } from "@/components/local-time";
 import { Badge, Card, CardHeader, EmptyState, MeterBar, PageHeader, RatingBadge } from "@/components/ui";
 import { canAccess, getEntitlement } from "@/lib/billing/entitlement";
 import { listBrokerHoldings } from "@/lib/brokers/queries";
+import { badgeFor } from "@/lib/brokers/report";
 import { calendarDate, percent, price as fmtPrice } from "@/lib/format";
 import { listHoldings } from "@/lib/portfolio/actions";
 import type { PortfolioIntelligence } from "@/lib/portfolio/intelligence";
@@ -40,7 +41,7 @@ export default async function PortfolioPage() {
       <p>
         What you hold, what it is worth on the latest available prices, and what it is exposed to —
         described with the same figures the company pages use. Holdings come from what you enter
-        here and, if you connect Interactive Brokers on your{" "}
+        here and, if you connect your broker on your{" "}
         <Link href="/account" className="text-accent underline underline-offset-2">
           account page
         </Link>
@@ -93,7 +94,7 @@ export default async function PortfolioPage() {
         <Card>
           <EmptyState
             title="No holdings yet"
-            description="Add a holding above, or connect Interactive Brokers on your account page, to see value, gain, allocation and what the portfolio is exposed to."
+            description="Add a holding above, or connect your broker on your account page, to see value, gain, allocation and what the portfolio is exposed to."
           />
         </Card>
       ) : (
@@ -101,10 +102,18 @@ export default async function PortfolioPage() {
           {overlaps.length > 0 && (
             <Card className="p-4">
               <p className="text-sm leading-relaxed text-muted-strong">
-                {overlaps.join(", ")} {overlaps.length === 1 ? "is" : "are"} both synced from
-                Interactive Brokers and entered by hand, and both are counted. If they are the same
-                shares, remove the one you entered.
+                Some companies appear more than once, and every copy is counted. If any are the same
+                shares, remove the extra one — the hand-entered row here, or the extra connection on
+                your account page.
               </p>
+              <ul className="mt-1.5 space-y-0.5 text-sm text-muted">
+                {overlaps.map((overlap) => (
+                  <li key={overlap.symbol}>
+                    <span className="font-semibold text-foreground">{overlap.symbol}</span> —{" "}
+                    {overlap.from.join(" and ")}
+                  </li>
+                ))}
+              </ul>
             </Card>
           )}
 
@@ -151,18 +160,18 @@ export default async function PortfolioPage() {
                           >
                             {holding.symbol}
                           </Link>
-                          {holding.source === "ibkr" && (
+                          {holding.source === "synced" && (
                             <>
                               {" "}
-                              <Badge tone="accent" title="Synced read-only from Interactive Brokers">
-                                IBKR
+                              <Badge tone="accent" title={`Synced read-only from ${holding.sourceLabel ?? "your broker"}`}>
+                                {badgeFor(holding.sourceLabel)}
                               </Badge>
                             </>
                           )}
                           {holding.name && (
                             <span className="block max-w-[14rem] truncate text-xs text-muted">{holding.name}</span>
                           )}
-                          {holding.source === "ibkr" && holding.reportedAt ? (
+                          {holding.source === "synced" && holding.reportedAt ? (
                             <span className="block text-xs text-faint">
                               As of {calendarDate(holding.reportedAt) ?? holding.reportedAt}
                             </span>
@@ -250,8 +259,8 @@ export default async function PortfolioPage() {
               otherwise from a live lookup, labelled on each row. Both are delayed, not real time.
               {view.livePriceSkipped > 0 &&
                 ` ${view.livePriceSkipped} holdings were not looked up, to stay within the provider's limits.`}
-              {view.holdings.some((h) => h.source === "ibkr") &&
-                " Holdings marked IBKR are what your broker reported at its last daily statement; their cost is IBKR's, their price is this app's."}
+              {view.holdings.some((h) => h.source === "synced") &&
+                " Holdings marked with a broker are what that broker last reported; their cost is the broker's, their price is this app's."}
             </p>
           </Card>
 

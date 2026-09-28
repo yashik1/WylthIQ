@@ -44,6 +44,8 @@ export const RULES = {
    * anyone use it to test tokens against IBKR at our expense and in our name.
    */
   brokerConnect: { limit: 5, windowSeconds: 3600 },
+  /** Uploading a broker statement: a large body to parse, so bounded per address and account. */
+  brokerUpload: { limit: 10, windowSeconds: 3600 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type RuleName = keyof typeof RULES;

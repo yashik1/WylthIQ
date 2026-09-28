@@ -1,8 +1,8 @@
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "../db";
-import { brokerConnections, brokerPositions, brokerTradeLinks } from "../db/schema";
-import { IBKR_FLEX } from "./sync";
-import type { SkippedItem } from "./ibkr-flex";
+import { brokerConnections, brokerExecutions, brokerPositions, brokerTradeLinks } from "../db/schema";
+import { badgeFor, BROKERS, isBrokerKind, type BrokerKind, type SkippedItem } from "./report";
+import type { ConnectionDetails } from "./sync";
 
 /**
  * Reads for the pages, each scoped to one reader in the query itself.
@@ -13,119 +13,131 @@ import type { SkippedItem } from "./ibkr-flex";
  */
 
 export interface BrokerConnectionSummary {
-  broker: string;
-  tokenHint: string;
-  queryId: string;
+  broker: BrokerKind;
+  tokenHint: string | null;
+  queryId: string | null;
   status: "ok" | "needs-attention" | "error";
   lastErrorCode: string | null;
   statementToDate: string | null;
   skipped: SkippedItem[];
+  details: ConnectionDetails;
   lastSyncedAt: Date | null;
   lastAttemptAt: Date | null;
   journalSince: string;
-  /** Accounts the last report covered, masked for display. */
-  accounts: string[];
   positions: number;
+  /** Journal trades added from this source (or another sharing its fill ids). */
   linkedTrades: number;
 }
 
-/** "U1234567" as "U•••4567": enough to tell accounts apart, not enough to be the number. */
-export function maskAccount(accountId: string): string {
-  const id = accountId.trim();
-  if (id.length <= 5) return id;
-  return `${id.slice(0, 1)}•••${id.slice(-4)}`;
-}
-
-export async function getBrokerConnection(userId: string): Promise<BrokerConnectionSummary | null> {
-  if (!isDatabaseConfigured()) return null;
+/** Every broker connection the reader has, one per source. */
+export async function listBrokerConnections(userId: string): Promise<BrokerConnectionSummary[]> {
+  if (!isDatabaseConfigured()) return [];
   try {
     const db = getDb();
-    const [row] = await db
-      .select()
-      .from(brokerConnections)
-      .where(and(eq(brokerConnections.userId, userId), eq(brokerConnections.broker, IBKR_FLEX)))
-      .limit(1);
-    if (!row) return null;
-
-    const [accounts, [linked]] = await Promise.all([
+    const [rows, positions, links] = await Promise.all([
+      db.select().from(brokerConnections).where(eq(brokerConnections.userId, userId)),
       db
-        .selectDistinct({ accountId: brokerPositions.accountId })
+        .select({ connectionId: brokerPositions.connectionId, count: sql<number>`count(*)::int` })
         .from(brokerPositions)
-        .where(eq(brokerPositions.connectionId, row.id)),
+        .where(eq(brokerPositions.userId, userId))
+        .groupBy(brokerPositions.connectionId),
       db
-        .select({ count: sql<number>`count(*)::int` })
+        .select({ family: brokerTradeLinks.broker, count: sql<number>`count(*)::int` })
         .from(brokerTradeLinks)
-        .where(
-          and(
-            eq(brokerTradeLinks.userId, userId),
-            eq(brokerTradeLinks.broker, row.broker),
-            isNotNull(brokerTradeLinks.tradeId),
-          ),
-        ),
+        .where(and(eq(brokerTradeLinks.userId, userId), isNotNull(brokerTradeLinks.tradeId)))
+        .groupBy(brokerTradeLinks.broker),
     ]);
-    const [{ count: positions }] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(brokerPositions)
-      .where(eq(brokerPositions.connectionId, row.id));
+    const positionsBy = new Map(positions.map((p) => [p.connectionId, p.count]));
+    const linksBy = new Map(links.map((l) => [l.family, l.count]));
 
-    return {
-      broker: row.broker,
-      tokenHint: row.tokenHint,
-      queryId: row.queryId,
-      status: row.status === "needs-attention" || row.status === "error" ? row.status : "ok",
-      lastErrorCode: row.lastErrorCode,
-      statementToDate: row.statementToDate,
-      skipped: Array.isArray(row.skipped) ? (row.skipped as SkippedItem[]) : [],
-      lastSyncedAt: row.lastSyncedAt,
-      lastAttemptAt: row.lastAttemptAt,
-      journalSince: row.journalSince,
-      accounts: accounts.map((a) => maskAccount(a.accountId)),
-      positions,
-      linkedTrades: linked?.count ?? 0,
-    };
+    return rows.flatMap((row) => {
+      if (!isBrokerKind(row.broker)) return [];
+      return [
+        {
+          broker: row.broker,
+          tokenHint: row.tokenHint,
+          queryId: row.queryId,
+          status: row.status === "needs-attention" || row.status === "error" ? row.status : "ok",
+          lastErrorCode: row.lastErrorCode,
+          statementToDate: row.statementToDate,
+          skipped: Array.isArray(row.skipped) ? (row.skipped as SkippedItem[]) : [],
+          details: (row.details ?? {}) as ConnectionDetails,
+          lastSyncedAt: row.lastSyncedAt,
+          lastAttemptAt: row.lastAttemptAt,
+          journalSince: row.journalSince,
+          positions: positionsBy.get(row.id) ?? 0,
+          linkedTrades: linksBy.get(BROKERS[row.broker].linkFamily) ?? 0,
+        },
+      ];
+    });
   } catch {
     // A missing table (migration not run yet) reads as "not connected", not as a broken page.
-    return null;
+    return [];
   }
 }
 
 export interface BrokerHolding {
+  /** The connection's source, so two connections to one broker stay apart. */
+  source: string;
   symbol: string;
   quantity: number;
   averageCost: number;
   currency: string;
   reportDate: string | null;
+  /** The institution holding it. */
+  label: string | null;
 }
 
-/** The reader's synced holdings, one row per account and instrument. */
+/** The reader's synced holdings, one row per source, account and instrument. */
 export async function listBrokerHoldings(userId: string): Promise<BrokerHolding[]> {
   if (!isDatabaseConfigured()) return [];
   try {
     return await getDb()
       .select({
+        source: brokerConnections.broker,
         symbol: brokerPositions.symbol,
         quantity: brokerPositions.quantity,
         averageCost: brokerPositions.averageCost,
         currency: brokerPositions.currency,
         reportDate: brokerPositions.reportDate,
+        label: brokerPositions.label,
       })
       .from(brokerPositions)
+      .innerJoin(brokerConnections, eq(brokerConnections.id, brokerPositions.connectionId))
       .where(eq(brokerPositions.userId, userId));
   } catch {
     return [];
   }
 }
 
-/** Ids of the reader's journal trades that came from their broker. */
-export async function syncedTradeIds(userId: string): Promise<Set<number>> {
-  if (!isDatabaseConfigured()) return new Set();
+/**
+ * The reader's journal trades that came from a broker, each with the short
+ * name to badge it with: the institution when the fill that opened it is
+ * still on record, and the source's own name when it is not.
+ */
+export async function syncedTradeBadges(userId: string): Promise<Map<number, string>> {
+  if (!isDatabaseConfigured()) return new Map();
   try {
     const rows = await getDb()
-      .select({ tradeId: brokerTradeLinks.tradeId })
+      .select({ tradeId: brokerTradeLinks.tradeId, family: brokerTradeLinks.broker, label: brokerExecutions.label })
       .from(brokerTradeLinks)
+      .leftJoin(
+        brokerExecutions,
+        and(
+          eq(brokerExecutions.userId, brokerTradeLinks.userId),
+          eq(brokerExecutions.accountId, brokerTradeLinks.accountId),
+          eq(brokerExecutions.externalId, brokerTradeLinks.openingExternalId),
+        ),
+      )
       .where(and(eq(brokerTradeLinks.userId, userId), isNotNull(brokerTradeLinks.tradeId)));
-    return new Set(rows.map((r) => r.tradeId!));
+
+    const badges = new Map<number, string>();
+    for (const row of rows) {
+      const fallback = row.family === BROKERS["ibkr-flex"].linkFamily ? BROKERS["ibkr-flex"].label : null;
+      badges.set(row.tradeId!, badgeFor(row.label ?? fallback));
+    }
+    return badges;
   } catch {
-    return new Set();
+    return new Map();
   }
 }

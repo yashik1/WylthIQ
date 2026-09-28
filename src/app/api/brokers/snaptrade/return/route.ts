@@ -1,0 +1,39 @@
+import { NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
+import { getDb } from "@/lib/db";
+import { brokerConnections } from "@/lib/db/schema";
+import { brokerReader, denied } from "@/lib/brokers/gate";
+import { SNAPTRADE, syncConnection } from "@/lib/brokers/sync";
+import { refuseIfRateLimited } from "@/lib/security/guard";
+import { siteUrl } from "@/lib/site-url";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Where SnapTrade sends the reader back after they connect a broker.
+ *
+ * Nothing SnapTrade adds to this address is trusted. The reader is the one
+ * signed in, their connection is looked up from that, and the sync that runs
+ * here asks SnapTrade directly what was connected — deleting, rather than
+ * reading, any connection that is not read-only.
+ */
+export async function GET(request: Request) {
+  const refusal = refuseIfRateLimited(request, "compute");
+  if (refusal) return refusal;
+
+  const back = (outcome: string) =>
+    NextResponse.redirect(new URL(`/account?broker=${outcome}#connected-broker`, siteUrl()), 303);
+
+  const gate = await brokerReader(true);
+  if (denied(gate)) return NextResponse.redirect(new URL("/signin?next=/account", siteUrl()), 303);
+
+  const [connection] = await getDb()
+    .select({ id: brokerConnections.id })
+    .from(brokerConnections)
+    .where(and(eq(brokerConnections.userId, gate.userId), eq(brokerConnections.broker, SNAPTRADE)))
+    .limit(1);
+  if (!connection) return back("none");
+
+  const outcome = await syncConnection(connection.id);
+  return back(outcome.ok ? "connected" : "failed");
+}

@@ -1,14 +1,35 @@
 "use server";
 
-import { and, count, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { ACCESS_MODE, canAccess, getEntitlement } from "../billing/entitlement";
-import { getDb, isDatabaseConfigured } from "../db";
+import { getDb } from "../db";
 import { brokerConnections, brokerTradeLinks, trades } from "../db/schema";
 import { actionRateLimited, userRateLimited } from "../security/guard";
+import { siteUrl } from "../site-url";
+import { flexTokenAllowed } from "./access";
 import { brokerTokensEnabled, encryptToken, tokenHint } from "./crypto";
-import { downloadFlexReport, FLEX_ERROR_WORDS, FlexError, parseFlexReport, type FlexReport } from "./ibkr-flex";
-import { applyReport, IBKR_FLEX, syncConnection } from "./sync";
+import {
+  brokerReader,
+  denied,
+  duplicateWarning,
+  journalSinceFrom,
+  summarise,
+  type BrokerResult,
+} from "./gate";
+import { downloadFlexReport, FLEX_ERROR_WORDS, FlexError, parseFlexReport } from "./ibkr-flex";
+import { BROKERS, isBrokerKind, type BrokerReport } from "./report";
+import {
+  connectionPortalUrl,
+  deleteAuthorization,
+  deleteUser,
+  listAuthorizations,
+  registerUser,
+  SNAPTRADE_ERROR_WORDS,
+  SnapTradeError,
+  snaptradeConfigured,
+  type SnapTradeUser,
+} from "./snaptrade";
+import { applyReport, IBKR_FLEX, SNAPTRADE, snapTradeUserFor, syncConnection } from "./sync";
 
 /**
  * Connecting, refreshing and disconnecting a reader's broker.
@@ -16,16 +37,16 @@ import { applyReport, IBKR_FLEX, syncConnection } from "./sync";
  * Every one of these is a public endpoint — that is what a server action is —
  * so each works out who is asking from the session and touches only that
  * reader's rows. None takes an id from the form that could name someone
- * else's connection.
+ * else's connection; the one that takes a SnapTrade connection id checks it
+ * against the reader's own list at SnapTrade first.
  */
 
-export interface BrokerActionResult {
-  ok: boolean;
-  message: string;
-  notes?: string[];
-}
+export type BrokerActionResult = BrokerResult & {
+  /** SnapTrade's connection page, for the browser to open. */
+  url?: string;
+};
 
-/** "Sync now" is refused this soon after the last attempt; IBKR's reports change once a day. */
+/** "Sync now" is refused this soon after the last attempt; brokers' reports change once a day. */
 const RESYNC_MINUTES = 15;
 
 function refresh() {
@@ -34,63 +55,135 @@ function refresh() {
   revalidatePath("/journal");
 }
 
+async function rateLimited(userId: string): Promise<BrokerActionResult | null> {
+  const wait = (await actionRateLimited("brokerConnect")) ?? userRateLimited("brokerConnect", userId);
+  return wait ? { ok: false, message: `Too many attempts. Try again in ${Math.ceil(wait / 60)} minutes.` } : null;
+}
+
+/* --------------------------------------------------------------- SnapTrade */
+
 /**
- * The signed-in reader, or why not.
- *
- * `feature` is false only for disconnecting: somebody whose plan has lapsed
- * must still be able to take their token off this server.
+ * Registers the reader with SnapTrade if needed, and returns the address of
+ * SnapTrade's connection page. The reader logs in to their broker there; this
+ * app never sees that login, only the read-only access SnapTrade relays.
  */
-async function reader(feature: boolean): Promise<{ userId: string } | BrokerActionResult> {
-  if (!isDatabaseConfigured()) {
-    return { ok: false, message: "Connecting a broker is not available on this deployment." };
+export async function startSnapTradeConnect(
+  _prev: BrokerActionResult | null,
+  form: FormData,
+): Promise<BrokerActionResult> {
+  const gate = await brokerReader(true);
+  if (denied(gate)) return gate;
+  if (!snaptradeConfigured() || !brokerTokensEnabled()) {
+    return { ok: false, message: SNAPTRADE_ERROR_WORDS.NOT_CONFIGURED };
   }
-  const entitlement = await getEntitlement();
-  if (!entitlement.userId) return { ok: false, message: "Sign in to connect a broker." };
-  if (feature && !canAccess(entitlement, "BROKER_SYNC")) {
-    return {
-      ok: false,
-      message:
-        ACCESS_MODE === "sign-in"
-          ? "Connecting a broker needs an account."
-          : "Connecting a broker is part of the Pro+ plan.",
-    };
+  const limited = await rateLimited(gate.userId);
+  if (limited) return limited;
+
+  const db = getDb();
+  const [existing] = await db
+    .select()
+    .from(brokerConnections)
+    .where(and(eq(brokerConnections.userId, gate.userId), eq(brokerConnections.broker, SNAPTRADE)))
+    .limit(1);
+
+  try {
+    let user: SnapTradeUser | null = existing ? snapTradeUserFor(existing) : null;
+    if (!user) {
+      // A reader already known to SnapTrade whose secret this server cannot
+      // read (a lost row, a rotated key) is removed there and registered
+      // again, rather than left orphaned.
+      user = await registerUser(gate.userId).catch(async (err) => {
+        if (!(err instanceof SnapTradeError) || err.status !== 400) throw err;
+        await deleteUser(gate.userId);
+        return registerUser(gate.userId);
+      });
+      const now = new Date();
+      const values = {
+        userId: gate.userId,
+        broker: SNAPTRADE,
+        tokenCiphertext: encryptToken(user.userSecret, gate.userId, SNAPTRADE),
+        tokenHint: null,
+        queryId: null,
+        status: "ok",
+        lastErrorCode: null,
+        journalSince: journalSinceFrom(form),
+        updatedAt: now,
+      };
+      await db
+        .insert(brokerConnections)
+        .values(values)
+        .onConflictDoUpdate({ target: [brokerConnections.userId, brokerConnections.broker], set: values });
+    }
+
+    const url = await connectionPortalUrl(user, `${siteUrl()}/api/brokers/snaptrade/return`);
+    return { ok: true, message: "Opening SnapTrade…", url };
+  } catch (err) {
+    const category = err instanceof SnapTradeError ? err.category : "UNAVAILABLE";
+    return { ok: false, message: SNAPTRADE_ERROR_WORDS[category] };
   }
-  return { userId: entitlement.userId };
 }
 
-function denied(v: { userId: string } | BrokerActionResult): v is BrokerActionResult {
-  return "ok" in v;
+/** Removes one brokerage from the reader's SnapTrade connection. */
+export async function removeSnapTradeBrokerage(
+  _prev: BrokerActionResult | null,
+  form: FormData,
+): Promise<BrokerActionResult> {
+  const gate = await brokerReader(false);
+  if (denied(gate)) return gate;
+  const authorizationId = String(form.get("authorizationId") ?? "");
+
+  const [connection] = await getDb()
+    .select()
+    .from(brokerConnections)
+    .where(and(eq(brokerConnections.userId, gate.userId), eq(brokerConnections.broker, SNAPTRADE)))
+    .limit(1);
+  const user = connection ? snapTradeUserFor(connection) : null;
+  if (!connection || !user) return { ok: false, message: "No broker is connected through SnapTrade." };
+
+  try {
+    // Only an id SnapTrade lists for this reader, so a forged form cannot
+    // name anybody else's connection.
+    const theirs = await listAuthorizations(user);
+    if (!theirs.some((a) => a.id === authorizationId)) {
+      return { ok: false, message: "That connection is not one of yours." };
+    }
+    await deleteAuthorization(user, authorizationId);
+  } catch (err) {
+    const category = err instanceof SnapTradeError ? err.category : "UNAVAILABLE";
+    return { ok: false, message: SNAPTRADE_ERROR_WORDS[category] };
+  }
+
+  const outcome = await syncConnection(connection.id);
+  refresh();
+  return outcome.ok
+    ? { ok: true, message: `Removed. ${summarise(outcome.positions, outcome.tradesAdded, outcome.tradesUpdated)} remain.` }
+    : { ok: true, message: "Removed. The rest will refresh on the next sync." };
 }
 
-function isoDaysAgo(days: number): string {
-  return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
-}
+/* ------------------------------------------------------ Flex token (owner) */
 
-function summarise(positions: number, added: number, updated: number): string {
-  const parts = [`${positions} holding${positions === 1 ? "" : "s"}`];
-  if (added > 0) parts.push(`${added} trade${added === 1 ? "" : "s"} added to the journal`);
-  if (updated > 0) parts.push(`${updated} updated`);
-  return parts.join(", ");
-}
-
+/**
+ * Connects with a pasted IBKR Flex token — only for the addresses listed in
+ * BROKER_FLEX_TOKEN_EMAILS. Everyone else connects through SnapTrade or
+ * uploads a statement, so this app never holds a key of theirs.
+ */
 export async function connectIbkr(
   _prev: BrokerActionResult | null,
   form: FormData,
 ): Promise<BrokerActionResult> {
-  const gate = await reader(true);
+  const gate = await brokerReader(true);
   if (denied(gate)) return gate;
+  if (!flexTokenAllowed(gate.email)) {
+    return { ok: false, message: "Connect through SnapTrade or upload a statement instead." };
+  }
   if (!brokerTokensEnabled()) {
     return { ok: false, message: "Connecting a broker is not set up on this server yet." };
   }
-
-  const wait = (await actionRateLimited("brokerConnect")) ?? userRateLimited("brokerConnect", gate.userId);
-  if (wait) {
-    return { ok: false, message: `Too many attempts. Try again in ${Math.ceil(wait / 60)} minutes.` };
-  }
+  const limited = await rateLimited(gate.userId);
+  if (limited) return limited;
 
   const token = String(form.get("token") ?? "").trim();
   const queryId = String(form.get("queryId") ?? "").trim();
-  const history = form.get("history") === "new" ? "new" : "year";
 
   if (!/^[A-Za-z0-9]{10,64}$/.test(token)) {
     return { ok: false, message: "That does not look like a Flex Web Service token. Copy the whole “Current Token”." };
@@ -101,7 +194,7 @@ export async function connectIbkr(
 
   // Checked against IBKR before anything is stored, so a mistyped token is
   // caught here rather than failing quietly every night.
-  let report: FlexReport;
+  let report: BrokerReport;
   try {
     report = parseFlexReport(await downloadFlexReport(token, queryId));
   } catch (err) {
@@ -115,21 +208,9 @@ export async function connectIbkr(
     };
   }
 
-  const db = getDb();
   const notes: string[] = [];
-
-  if (history === "year") {
-    const [{ value: existing }] = await db.select({ value: count() }).from(trades).where(eq(trades.userId, gate.userId));
-    const [{ value: linked }] = await db
-      .select({ value: count() })
-      .from(brokerTradeLinks)
-      .where(eq(brokerTradeLinks.userId, gate.userId));
-    if (existing > 0 && linked === 0) {
-      notes.push(
-        `Your journal already had ${existing} trade${existing === 1 ? "" : "s"}. If you imported any of these from an IBKR file, they will now appear twice — delete one copy of each.`,
-      );
-    }
-  }
+  const warning = await duplicateWarning(gate.userId);
+  if (warning) notes.push(warning);
 
   const now = new Date();
   const values = {
@@ -140,12 +221,12 @@ export async function connectIbkr(
     queryId,
     status: "ok",
     lastErrorCode: null,
-    journalSince: history === "year" ? isoDaysAgo(365) : now.toISOString().slice(0, 10),
+    journalSince: journalSinceFrom(form),
     lastAttemptAt: now,
     syncStartedAt: null,
     updatedAt: now,
   };
-  const [connection] = await db
+  const [connection] = await getDb()
     .insert(brokerConnections)
     .values(values)
     .onConflictDoUpdate({ target: [brokerConnections.userId, brokerConnections.broker], set: values })
@@ -170,15 +251,28 @@ export async function connectIbkr(
   }
 }
 
-export async function syncIbkrNow(): Promise<BrokerActionResult> {
-  const gate = await reader(true);
+/* ------------------------------------------------------------- any source */
+
+/** The reader's own connection of the kind named in the form, or null. */
+async function ownConnection(userId: string, form: FormData) {
+  const broker = String(form.get("broker") ?? "");
+  if (!isBrokerKind(broker)) return null;
+  const [connection] = await getDb()
+    .select()
+    .from(brokerConnections)
+    .where(and(eq(brokerConnections.userId, userId), eq(brokerConnections.broker, broker)))
+    .limit(1);
+  return connection ?? null;
+}
+
+export async function syncBrokerNow(
+  _prev: BrokerActionResult | null,
+  form: FormData,
+): Promise<BrokerActionResult> {
+  const gate = await brokerReader(true);
   if (denied(gate)) return gate;
 
-  const [connection] = await getDb()
-    .select({ id: brokerConnections.id, lastAttemptAt: brokerConnections.lastAttemptAt })
-    .from(brokerConnections)
-    .where(and(eq(brokerConnections.userId, gate.userId), eq(brokerConnections.broker, IBKR_FLEX)))
-    .limit(1);
+  const connection = await ownConnection(gate.userId, form);
   if (!connection) return { ok: false, message: "No broker is connected." };
 
   const since = connection.lastAttemptAt ? (Date.now() - connection.lastAttemptAt.getTime()) / 60_000 : Infinity;
@@ -186,7 +280,7 @@ export async function syncIbkrNow(): Promise<BrokerActionResult> {
     const minutes = Math.max(1, Math.floor(since));
     return {
       ok: false,
-      message: `Synced ${minutes} minute${minutes === 1 ? "" : "s"} ago. IBKR updates these reports once a day, so there is nothing newer yet.`,
+      message: `Synced ${minutes} minute${minutes === 1 ? "" : "s"} ago. Brokers update these figures once a day, so there is nothing newer yet.`,
     };
   }
 
@@ -200,14 +294,39 @@ export async function syncIbkrNow(): Promise<BrokerActionResult> {
   };
 }
 
-export async function disconnectIbkr(
+/**
+ * Disconnects one source: deletes its credential from this server, and for
+ * SnapTrade deletes the reader at SnapTrade too, which removes every
+ * connection and all the data SnapTrade holds for them.
+ */
+export async function disconnectBroker(
   _prev: BrokerActionResult | null,
   form: FormData,
 ): Promise<BrokerActionResult> {
-  const gate = await reader(false);
+  const gate = await brokerReader(false);
   if (denied(gate)) return gate;
+  const connection = await ownConnection(gate.userId, form);
+  if (!connection) return { ok: false, message: "Nothing to disconnect." };
   const removeTrades = form.get("removeTrades") === "on";
+  const notes: string[] = [];
 
+  if (connection.broker === SNAPTRADE) {
+    try {
+      await deleteUser(gate.userId);
+    } catch (err) {
+      const category = err instanceof SnapTradeError ? err.category : "UNAVAILABLE";
+      // Unreachable for now: keep the connection, so the reader can try again
+      // and nothing is left behind at SnapTrade without a way to remove it.
+      if (category === "UNAVAILABLE" || category === "RATE_LIMITED") {
+        return { ok: false, message: SNAPTRADE_ERROR_WORDS[category] };
+      }
+      if (category !== "NOT_FOUND") {
+        notes.push("SnapTrade could not be reached to delete your data there. You can also remove the connection from your broker's settings.");
+      }
+    }
+  }
+
+  const family = isBrokerKind(connection.broker) ? BROKERS[connection.broker].linkFamily : connection.broker;
   let removed = 0;
   await getDb().transaction(async (tx) => {
     if (removeTrades) {
@@ -217,7 +336,7 @@ export async function disconnectIbkr(
         .where(
           and(
             eq(brokerTradeLinks.userId, gate.userId),
-            eq(brokerTradeLinks.broker, IBKR_FLEX),
+            eq(brokerTradeLinks.broker, family),
             isNotNull(brokerTradeLinks.tradeId),
           ),
         );
@@ -233,22 +352,19 @@ export async function disconnectIbkr(
       // treating them as trades the reader chose to delete.
       await tx
         .delete(brokerTradeLinks)
-        .where(and(eq(brokerTradeLinks.userId, gate.userId), eq(brokerTradeLinks.broker, IBKR_FLEX)));
+        .where(and(eq(brokerTradeLinks.userId, gate.userId), eq(brokerTradeLinks.broker, family)));
     }
 
     // Holdings and fills go with the connection (ON DELETE CASCADE); links are
     // kept unless asked, so a reconnect does not add every trade a second time.
-    await tx
-      .delete(brokerConnections)
-      .where(and(eq(brokerConnections.userId, gate.userId), eq(brokerConnections.broker, IBKR_FLEX)));
+    await tx.delete(brokerConnections).where(eq(brokerConnections.id, connection.id));
   });
 
   refresh();
+  const what = connection.broker === "ibkr-upload" ? "Statement removed." : "Disconnected. Nothing of it is kept on this server.";
   return {
     ok: true,
-    message:
-      removed > 0
-        ? `Disconnected, and ${removed} trade${removed === 1 ? "" : "s"} from IBKR removed from the journal. Your token has been deleted from this server.`
-        : "Disconnected. Your token has been deleted from this server.",
+    message: removed > 0 ? `${what} ${removed} trade${removed === 1 ? "" : "s"} removed from the journal.` : what,
+    notes,
   };
 }

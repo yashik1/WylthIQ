@@ -1,16 +1,19 @@
 /**
  * Holdings from every source a reader has, as one list for the portfolio.
  *
- * Two sources so far: holdings typed in by hand, and holdings synced from the
- * reader's broker. When both name the same company the app cannot tell "the
- * same shares entered twice" from "shares held at two brokers", so it does
- * not guess. Both rows are shown, counted as what they say, and the overlap is
- * named so the reader can remove whichever is a duplicate.
+ * Holdings typed in by hand, and holdings synced from the reader's brokers —
+ * through SnapTrade, an uploaded statement, or a Flex token. When two of them
+ * name the same company the app cannot tell "the same shares seen twice" from
+ * "shares held in two places", so it does not guess. Each is shown, counted as
+ * what it says, and the overlap is named so the reader can remove whichever is
+ * a duplicate.
  */
 
 export interface PortfolioInput {
   key: string;
-  source: "manual" | "ibkr";
+  source: "manual" | "synced";
+  /** For a synced holding, the institution: "Interactive Brokers", "Wealthsimple". */
+  sourceLabel: string | null;
   symbol: string;
   quantity: number;
   /** Per share. */
@@ -30,6 +33,9 @@ interface ManualHolding {
 }
 
 interface BrokerHolding {
+  /** Which connection it came from: two connections to one broker are kept apart. */
+  source: string;
+  label: string | null;
   symbol: string;
   quantity: number;
   averageCost: number;
@@ -37,21 +43,31 @@ interface BrokerHolding {
   reportDate: string | null;
 }
 
+export interface Overlap {
+  symbol: string;
+  /** Where each copy came from, in words: "entered by hand", "Interactive Brokers". */
+  from: string[];
+}
+
+const BY_HAND = "entered by hand";
+
 /**
  * One row per source and company.
  *
  * A broker's holdings arrive per account; the same company in two accounts at
  * the same broker is one row here, at the combined size and the cost-weighted
- * average — which is how the broker itself totals them.
+ * average — which is how the broker itself totals them. Two different
+ * connections are never combined, even to the same broker: that is exactly
+ * the case where the same shares could be counted twice.
  */
 export function toPortfolioInputs(
   manual: ManualHolding[],
   broker: BrokerHolding[],
-): { inputs: PortfolioInput[]; overlaps: string[] } {
+): { inputs: PortfolioInput[]; overlaps: Overlap[] } {
   const synced = new Map<string, PortfolioInput>();
   for (const row of broker) {
     if (!(row.quantity > 0)) continue;
-    const key = `ibkr:${row.symbol}:${row.currency}`;
+    const key = `synced:${row.source}:${row.label ?? ""}:${row.symbol}:${row.currency}`;
     const existing = synced.get(key);
     if (existing) {
       const quantity = existing.quantity + row.quantity;
@@ -64,7 +80,8 @@ export function toPortfolioInputs(
     }
     synced.set(key, {
       key,
-      source: "ibkr",
+      source: "synced",
+      sourceLabel: row.label,
       symbol: row.symbol,
       quantity: row.quantity,
       averageCost: row.averageCost,
@@ -77,6 +94,7 @@ export function toPortfolioInputs(
   const typed: PortfolioInput[] = manual.map((row) => ({
     key: `manual:${row.symbol}`,
     source: "manual",
+    sourceLabel: null,
     symbol: row.symbol,
     quantity: row.quantity,
     averageCost: row.averageCost,
@@ -85,13 +103,29 @@ export function toPortfolioInputs(
     reportedAt: null,
   }));
 
-  const syncedSymbols = new Set([...synced.values()].map((row) => row.symbol));
-  const overlaps = [...new Set(typed.filter((row) => syncedSymbols.has(row.symbol)).map((row) => row.symbol))].sort();
-
   // By company, and within a company what the reader typed before what was synced.
-  const order = { manual: 0, ibkr: 1 } as const;
+  const order = { manual: 0, synced: 1 } as const;
   const inputs = [...typed, ...synced.values()].sort(
     (a, b) => a.symbol.localeCompare(b.symbol) || order[a.source] - order[b.source],
   );
+
+  /*
+    An overlap is a company held both by hand and synced, or synced twice from
+    the same institution through two connections. The same company at two
+    different brokers is two real holdings, and not flagged.
+  */
+  const overlaps: Overlap[] = [];
+  const bySymbol = new Map<string, PortfolioInput[]>();
+  for (const input of inputs) bySymbol.set(input.symbol, [...(bySymbol.get(input.symbol) ?? []), input]);
+  for (const [symbol, rows] of bySymbol) {
+    if (rows.length < 2) continue;
+    const labels = rows.filter((r) => r.source === "synced").map((r) => r.sourceLabel ?? "a connected broker");
+    const handAndSynced = rows.some((r) => r.source === "manual") && labels.length > 0;
+    const syncedTwice = new Set(labels).size < labels.length;
+    if (!handAndSynced && !syncedTwice) continue;
+    const from = rows.map((r) => (r.source === "manual" ? BY_HAND : (r.sourceLabel ?? "a connected broker")));
+    overlaps.push({ symbol, from });
+  }
+
   return { inputs, overlaps };
 }

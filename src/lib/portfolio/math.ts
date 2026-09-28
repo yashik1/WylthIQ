@@ -18,7 +18,9 @@ export interface PricedHolding {
    */
   key: string;
   /** Where the holding came from: typed in, or synced from the reader's broker. */
-  source: "manual" | "ibkr";
+  source: "manual" | "synced";
+  /** For a synced holding, the institution: "Interactive Brokers", "Wealthsimple". */
+  sourceLabel: string | null;
   /** For a synced holding, the date the broker's figures are as of. */
   reportedAt: string | null;
   symbol: string;

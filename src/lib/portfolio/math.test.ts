@@ -4,6 +4,7 @@ import { valueHoldings, type PricedHolding } from "./math";
 const holding = (over: Partial<PricedHolding>): PricedHolding => ({
   key: `manual:${over.symbol ?? "AAPL"}`,
   source: "manual",
+  sourceLabel: null,
   reportedAt: null,
   symbol: "AAPL",
   name: "Apple Inc.",
