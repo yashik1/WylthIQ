@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import type { SearchPageProps } from "@/types/page-props";
 import {
   Gem,
   ShieldCheck,
@@ -95,7 +96,7 @@ const COUNTRIES = [
   { value: "CA", label: "Canada only" },
 ];
 
-export default async function ScreenPage({ searchParams }: PageProps<"/screen">) {
+export default async function ScreenPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
 
   const get = (key: string): string | undefined => {
@@ -183,7 +184,7 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
   const startedFrom = fromId ? (savedScreens.find((s) => s.id === fromId) ?? null) : null;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <StructuredData
         data={[
           pageLd({
