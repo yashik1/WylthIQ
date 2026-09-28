@@ -67,6 +67,7 @@ async function rateLimited(userId: string): Promise<BrokerActionResult | null> {
  * Registers the reader with SnapTrade if needed, and returns the address of
  * SnapTrade's connection page. The reader logs in to their broker there; this
  * app never sees that login, only the read-only access SnapTrade relays.
+ * Given a `reconnect` id, the page repairs that connection instead.
  */
 async function startSnapTradeConnectUnguarded(
   _prev: BrokerActionResult | null,
@@ -87,8 +88,21 @@ async function startSnapTradeConnectUnguarded(
     .where(and(eq(brokerConnections.userId, gate.userId), eq(brokerConnections.broker, SNAPTRADE)))
     .limit(1);
 
+  // A connection the broker has disabled is repaired in place, not added
+  // again beside itself.
+  const reconnect = String(form.get("reconnect") ?? "") || null;
+
   try {
     let user: SnapTradeUser | null = existing ? snapTradeUserFor(existing) : null;
+    if (reconnect) {
+      if (!user) return { ok: false, message: "No broker is connected through SnapTrade." };
+      // Only a read-only connection SnapTrade lists for this reader, so a
+      // forged form cannot name anybody else's, or one that could trade.
+      const theirs = await listAuthorizations(user);
+      if (!theirs.some((a) => a.id === reconnect && a.type === "read")) {
+        return { ok: false, message: "That connection is not one of yours." };
+      }
+    }
     if (!user) {
       // A reader already known to SnapTrade whose secret this server cannot
       // read (a lost row, a rotated key) is removed there and registered
@@ -116,7 +130,7 @@ async function startSnapTradeConnectUnguarded(
         .onConflictDoUpdate({ target: [brokerConnections.userId, brokerConnections.broker], set: values });
     }
 
-    const url = await connectionPortalUrl(user, `${siteUrl()}/api/brokers/snaptrade/return`);
+    const url = await connectionPortalUrl(user, `${siteUrl()}/api/brokers/snaptrade/return`, reconnect);
     return { ok: true, message: "Opening SnapTrade…", url };
   } catch (err) {
     const category = err instanceof SnapTradeError ? err.category : "UNAVAILABLE";

@@ -279,12 +279,19 @@ refused, so an old file never puts back holdings since sold.
 - For SnapTrade, create an account at snaptrade.com and set `SNAPTRADE_CLIENT_ID` and
   `SNAPTRADE_CONSUMER_KEY`. The free plan covers one connected user with up to five
   brokerage connections — enough to build and test with your own account; real users
-  need a paid plan.
+  need a paid plan. Before opening it to them, SnapTrade's
+  [launch guide](https://docs.snaptrade.com/docs/launch-guide) asks for its
+  pre-production review against the
+  [Compliance Policy](https://snaptrade.com/compliance-policy), and its
+  [Developer Terms](https://snaptrade.com/developer-terms-of-use) require telling
+  SnapTrade within 24 hours of any breach of this app's systems.
 - Optionally list your own address in `BROKER_FLEX_TOKEN_EMAILS` to use a Flex token.
 - Run `npm run db:migrate` for the `broker_*` tables (migrations 0018 and 0019).
 - Add a Railway cron service that calls the sync every hour. Each call refreshes the
   few connections that have gone longest without a sync; uploads are left to the
-  reader:
+  reader. SnapTrade asks partners to read an account's trades no more than once a
+  day, so a SnapTrade connection's trades are read once every 24 hours, while its
+  holdings also refresh when the reader presses Sync now:
 
   ```bash
   curl --max-time 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/broker-sync"

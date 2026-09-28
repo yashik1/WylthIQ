@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 };
 
 export default async function TermsPage() {
-  const updated = "September 2026";
+  const updated = "September 28, 2026";
   const status = providerStatus();
   const universeCount = await getUniverseCount();
 
@@ -64,12 +64,17 @@ export default async function TermsPage() {
             {
               question: "What does WylthIQ store about me?",
               answer:
-                "Nothing at all unless you create an account. An account stores your email, your saved companies, your portfolio holdings, your notes and your trade journal. There is no tracking and no advertising, and nothing about you is sold or shared.",
+                "Nothing at all unless you create an account. An account stores your email, your saved companies, your portfolio holdings, your notes and your trade journal — and, if you connect a brokerage account, the holdings and trades that account reports. There is no tracking and no advertising, and nothing about you is sold or shared.",
+            },
+            {
+              question: "Can WylthIQ trade or move money in my brokerage account?",
+              answer:
+                "No. Connecting a broker is optional and read-only: WylthIQ can read your holdings and trades, and cannot place orders, withdraw, deposit or transfer anything. You connect on SnapTrade's own page, so WylthIQ never receives your broker login, password or API key — or you can upload a statement file instead of connecting at all. You can disconnect at any time from your account page.",
             },
             {
               question: "How do I delete my data?",
               answer:
-                "Delete your account from the account page and everything tied to it goes with it: watchlist, portfolio, theses and journal entries. Anything kept only in your browser, such as your theme and recently viewed companies, is cleared by clearing site data.",
+                "Delete your account from the account page and everything tied to it goes with it: watchlist, portfolio, theses and journal entries. Disconnecting a broker from your account page deletes what WylthIQ stored from it. Anything kept only in your browser, such as your theme and recently viewed companies, is cleared by clearing site data.",
             },
           ]}
         />
@@ -104,8 +109,8 @@ export default async function TermsPage() {
           WylthIQ reads company financial statements from public regulatory sources and
           presents them in plain language, alongside scores drawn from published research.
           It also provides screening, comparison, portfolio, watchlist, journal, thesis,
-          backtesting and educational tools. It is provided as-is for personal and
-          educational use.
+          backtesting and educational tools, and an optional read-only connection to your own
+          brokerage account. It is provided as-is for personal and educational use.
         </Clause>
 
         <Clause title="Accuracy is not guaranteed">
@@ -127,6 +132,23 @@ export default async function TermsPage() {
           exchange. Each supported price view should identify its known freshness. A missing
           or stale-data notice means the displayed figure should not be treated as current.
           Never rely on WylthIQ for time-sensitive trading decisions.
+        </Clause>
+
+        <Clause title="Connecting a brokerage account">
+          Connecting a broker is optional. You can connect through SnapTrade, a third-party
+          service, on SnapTrade&apos;s own page, or upload a statement file downloaded from your
+          broker. Either way the connection is read-only: WylthIQ can read your holdings and
+          trade history, and cannot place, change or cancel orders or move money into, out of
+          or between accounts. A connection that would allow trading is removed rather than
+          used. Synced figures reflect your broker&apos;s last report, usually once a day, and
+          may be delayed, incomplete or unable to show some holdings; holdings are valued with
+          WylthIQ&apos;s own prices, not your broker&apos;s. Your broker&apos;s own statements are the
+          authoritative record. When you connect through SnapTrade, you also agree to
+          SnapTrade&apos;s <ExternalLink href={SNAPTRADE_TERMS}>End User Terms</ExternalLink> and{" "}
+          <ExternalLink href={SNAPTRADE_PRIVACY}>Privacy Policy</ExternalLink>, which apply to that
+          connection, and you remain responsible for complying with your broker&apos;s terms for
+          sharing your account information. You can disconnect at any time from your account
+          page.
         </Clause>
 
         <Clause title="AI-generated explanations">
@@ -177,6 +199,7 @@ export default async function TermsPage() {
           <Source name="Twelve Data, Finnhub, Tiingo" role="Share prices and quotes" note="Used under their applicable plans. Provider terms govern access, permitted use and redistribution." href="https://twelvedata.com/terms" />
           <Source name="Alpha Vantage" role="Fundamentals for companies outside SEC coverage" note="Optional — only active if a key is configured. Provider terms govern use." href="https://www.alphavantage.co/terms_of_service/" />
           <Source name="Yahoo Finance" role="International prices and fundamentals" note="Optional and disabled by default. Yahoo publishes terms governing automated access and use; enabled deployments must comply with those terms." href="https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html" />
+          <Source name="SnapTrade" role="Read-only connections to your brokerage account" note="Used only if you connect a broker. You connect on SnapTrade's own page, and SnapTrade's End User Terms and Privacy Policy apply to that connection." href={SNAPTRADE_TERMS} />
         </ul>
         <p className="mt-4 text-sm leading-relaxed text-muted">
           Coverage is primarily US-listed companies plus Canadian ones that also list in the
@@ -197,14 +220,15 @@ export default async function TermsPage() {
           Company pages, the screener, comparisons, charts, market views and educational
           content work signed out. An account is optional and enables account-scoped features
           such as saved companies, saved screens, the trade journal, thesis tracking,
-          portfolio data and research history.
+          portfolio data, broker connections and research history.
         </Clause>
 
         <Clause title="What an account stores">
           Your email address, a bcrypt hash of your password — never the password itself —
           and a username if you choose one. Depending on which features you use, the service
           can also store saved companies and screens, journal entries, investment theses,
-          portfolio and holding information, research activity and notification preferences.
+          portfolio and holding information, broker connection data, research activity and
+          notification preferences.
           This account data is scoped to your account and is not sold to advertisers.
         </Clause>
 
@@ -212,7 +236,25 @@ export default async function TermsPage() {
           Information you enter into your portfolio, investment thesis or journal is user
           content. WylthIQ stores it so those features can work across sessions and devices.
           Treat it as research information, not as a regulated custody or brokerage record.
-          WylthIQ does not execute trades or hold securities on your behalf.
+          WylthIQ does not execute trades or hold securities on your behalf, including in any
+          account you connect.
+        </Clause>
+
+        <Clause title="Broker connections">
+          If you connect a brokerage account, WylthIQ stores what that account reports: your
+          holdings (the company, number of shares, average cost and currency), your trade
+          history (dates, quantities, prices and commissions), the name of the institution, and
+          account numbers shown only in shortened form. Trades from your broker are added to
+          your journal, where they are your content like any other entry. When you connect
+          through SnapTrade, WylthIQ never receives your broker login, password or API key; it
+          keeps only an identifier SnapTrade issues for your connection, stored encrypted and
+          never shown back. You sign in to your broker on your broker&apos;s own page where it
+          offers one; where it does not, you enter your login on SnapTrade&apos;s page and SnapTrade,
+          not WylthIQ, keeps it, encrypted, under its own privacy policy. WylthIQ tells SnapTrade
+          only a random identifier for your WylthIQ account — not your name or email. A
+          statement file you upload is read once and not kept — only the holdings and trades
+          taken from it are. This data is used only to show you your own portfolio and journal,
+          and is never sold or shared for advertising.
         </Clause>
 
         <Clause title="What stays in your browser">
@@ -238,7 +280,12 @@ export default async function TermsPage() {
 
         <Clause title="Deleting your data">
           Removing a saved company, screen or journal item deletes that item where the feature
-          supports deletion. Account deletion and any associated data are subject to the
+          supports deletion. Disconnecting a broker deletes its stored identifier, holdings and
+          trade history from WylthIQ, and a SnapTrade connection also asks SnapTrade to delete
+          what it holds for you, apart from records SnapTrade is required by law to keep;
+          journal trades added from that broker stay unless you choose
+          to remove them when disconnecting, and a broker trade you delete from your journal is
+          not added back. Account deletion and any associated data are subject to the
           deletion controls provided by the service; if a self-service control is unavailable,
           use the support/security contact specified by the deployment. Backup copies may
           persist for a limited operational period where required for recovery or security.
@@ -260,7 +307,10 @@ export default async function TermsPage() {
           Railway may host the application and Postgres database. Resend may deliver email.
           If AI explanations are enabled, the configured AI provider may process the prompt
           and supplied research context. Stripe may process payments if subscriptions are
-          enabled. Each provider&apos;s applicable terms and privacy policy govern its processing.
+          enabled. If you connect a broker through SnapTrade, SnapTrade processes that
+          connection and the account data it relays on WylthIQ&apos;s behalf, under its{" "}
+          <ExternalLink href={SNAPTRADE_PRIVACY}>Privacy Policy</ExternalLink>. Each provider&apos;s
+          applicable terms and privacy policy govern its processing.
         </Clause>
       </Card>
 
@@ -288,6 +338,17 @@ function Clause({ title, children }: { title: string; children: React.ReactNode 
       <h3 className="text-sm font-semibold">{title}</h3>
       <p className="mt-1.5 text-sm leading-relaxed text-muted-strong">{children}</p>
     </section>
+  );
+}
+
+const SNAPTRADE_TERMS = "https://snaptrade.com/terms-and-conditions";
+const SNAPTRADE_PRIVACY = "https://snaptrade.com/privacy-policy";
+
+function ExternalLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">
+      {children}
+    </a>
   );
 }
 

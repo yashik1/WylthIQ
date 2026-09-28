@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { LocalTime } from "@/components/local-time";
 import {
@@ -42,6 +43,9 @@ export interface ConnectionView {
     refused?: string[];
   };
 }
+
+const SNAPTRADE_TERMS = "https://snaptrade.com/terms-and-conditions";
+const SNAPTRADE_PRIVACY = "https://snaptrade.com/privacy-policy";
 
 const button =
   "rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:border-accent hover:text-accent disabled:opacity-60";
@@ -189,6 +193,29 @@ function StartSnapTrade({ again }: { again: boolean }) {
   );
 }
 
+/** Repairs a connection the broker has disabled, on SnapTrade's page, rather than adding a second one. */
+function ReconnectBrokerage({ id, institution }: { id: string; institution: string }) {
+  const [state, action, pending] = useActionState(startSnapTradeConnect, null);
+  useEffect(() => {
+    if (state?.ok && state.url) window.location.assign(state.url);
+  }, [state]);
+  return (
+    <form action={action} className="inline">
+      <input type="hidden" name="reconnect" value={id} />
+      <span className="text-xs text-poor">needs reconnecting</span>{" "}
+      <button
+        type="submit"
+        disabled={pending || Boolean(state?.url)}
+        className="text-xs font-medium text-accent underline underline-offset-2"
+        aria-label={`Reconnect ${institution}`}
+      >
+        {pending || state?.url ? "Opening SnapTrade…" : "Reconnect"}
+      </button>
+      {state && !state.ok && <span className="ml-2 text-xs text-poor">{state.message}</span>}
+    </form>
+  );
+}
+
 function RemoveBrokerage({ id, institution }: { id: string; institution: string }) {
   const [state, action, pending] = useActionState(removeSnapTradeBrokerage, null);
   return (
@@ -223,10 +250,31 @@ function SnapTradeSection({
         Every connection is read-only: it cannot place an order or move money, and a connection that could trade is
         removed rather than used. For Interactive Brokers, SnapTrade asks you to switch it on in IBKR&apos;s Client
         Portal under <strong>Performance &amp; Reports → Third-Party Reports</strong>, and to paste the code IBKR shows
-        into SnapTrade&apos;s page.
+        into SnapTrade&apos;s page. Holdings refresh whenever you sync; trades are read once a day.
+      </p>
+      <p className="text-xs leading-relaxed text-muted">
+        By connecting, you agree to SnapTrade&apos;s{" "}
+        <a href={SNAPTRADE_TERMS} target="_blank" rel="noreferrer noopener" className="underline underline-offset-2 hover:text-accent">
+          End User Terms
+        </a>{" "}
+        and{" "}
+        <a href={SNAPTRADE_PRIVACY} target="_blank" rel="noreferrer noopener" className="underline underline-offset-2 hover:text-accent">
+          Privacy Policy
+        </a>
+        , and to WylthIQ&apos;s{" "}
+        <Link href="/terms" className="underline underline-offset-2 hover:text-accent">
+          terms and privacy policy
+        </Link>
+        .
       </p>
 
       {returned === "connected" && <p className="text-sm text-up">Connected. Your holdings and trades are below.</p>}
+      {returned === "connected-holdings" && (
+        <p className="text-sm text-up">
+          Connected. Your holdings are below. Trades are read once a day, so this broker&apos;s trades reach your journal
+          with the next daily sync.
+        </p>
+      )}
       {returned === "unavailable" && (
         <p className="text-sm text-fair-fg">That connection couldn&apos;t be completed right now. Please try again later.</p>
       )}
@@ -254,7 +302,7 @@ function SnapTradeSection({
                 <li key={brokerage.id} className="flex flex-wrap items-baseline gap-x-2">
                   <span className="font-medium">{brokerage.institution}</span>
                   <span className="rounded-full bg-good-soft px-2 py-0.5 text-[11px] font-medium text-good-fg">Read-only</span>
-                  {brokerage.disabled && <span className="text-xs text-poor">needs reconnecting — connect it again</span>}
+                  {brokerage.disabled && <ReconnectBrokerage id={brokerage.id} institution={brokerage.institution} />}
                   <span className="text-xs text-muted">
                     {(connection.details.accounts ?? [])
                       .filter((a) => a.institution === brokerage.institution)
