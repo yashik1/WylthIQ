@@ -8,6 +8,7 @@ import { actionRateLimited, userRateLimited } from "../security/guard";
 import { siteUrl } from "../site-url";
 import { flexTokenAllowed } from "./access";
 import { brokerTokensEnabled, encryptToken, tokenHint } from "./crypto";
+import { failsafe } from "./failsafe";
 import {
   brokerReader,
   denied,
@@ -67,7 +68,7 @@ async function rateLimited(userId: string): Promise<BrokerActionResult | null> {
  * SnapTrade's connection page. The reader logs in to their broker there; this
  * app never sees that login, only the read-only access SnapTrade relays.
  */
-export async function startSnapTradeConnect(
+async function startSnapTradeConnectUnguarded(
   _prev: BrokerActionResult | null,
   form: FormData,
 ): Promise<BrokerActionResult> {
@@ -124,7 +125,7 @@ export async function startSnapTradeConnect(
 }
 
 /** Removes one brokerage from the reader's SnapTrade connection. */
-export async function removeSnapTradeBrokerage(
+async function removeSnapTradeBrokerageUnguarded(
   _prev: BrokerActionResult | null,
   form: FormData,
 ): Promise<BrokerActionResult> {
@@ -167,7 +168,7 @@ export async function removeSnapTradeBrokerage(
  * BROKER_FLEX_TOKEN_EMAILS. Everyone else connects through SnapTrade or
  * uploads a statement, so this app never holds a key of theirs.
  */
-export async function connectIbkr(
+async function connectIbkrUnguarded(
   _prev: BrokerActionResult | null,
   form: FormData,
 ): Promise<BrokerActionResult> {
@@ -265,7 +266,7 @@ async function ownConnection(userId: string, form: FormData) {
   return connection ?? null;
 }
 
-export async function syncBrokerNow(
+async function syncBrokerNowUnguarded(
   _prev: BrokerActionResult | null,
   form: FormData,
 ): Promise<BrokerActionResult> {
@@ -299,7 +300,7 @@ export async function syncBrokerNow(
  * SnapTrade deletes the reader at SnapTrade too, which removes every
  * connection and all the data SnapTrade holds for them.
  */
-export async function disconnectBroker(
+async function disconnectBrokerUnguarded(
   _prev: BrokerActionResult | null,
   form: FormData,
 ): Promise<BrokerActionResult> {
@@ -367,4 +368,39 @@ export async function disconnectBroker(
     message: removed > 0 ? `${what} ${removed} trade${removed === 1 ? "" : "s"} removed from the journal.` : what,
     notes,
   };
+}
+
+/* ---------------------------------------------------------------- exported */
+
+/*
+  What the browser can call. Each runs its action inside `failsafe`, so a
+  failure anywhere in it — the broker tables not created yet, the database
+  unreachable — answers the form with a plain sentence instead of throwing,
+  which would replace the whole account page with the error screen.
+*/
+
+export async function startSnapTradeConnect(
+  prev: BrokerActionResult | null,
+  form: FormData,
+): Promise<BrokerActionResult> {
+  return failsafe("connecting through SnapTrade", () => startSnapTradeConnectUnguarded(prev, form));
+}
+
+export async function removeSnapTradeBrokerage(
+  prev: BrokerActionResult | null,
+  form: FormData,
+): Promise<BrokerActionResult> {
+  return failsafe("removing a SnapTrade brokerage", () => removeSnapTradeBrokerageUnguarded(prev, form));
+}
+
+export async function connectIbkr(prev: BrokerActionResult | null, form: FormData): Promise<BrokerActionResult> {
+  return failsafe("connecting a Flex token", () => connectIbkrUnguarded(prev, form));
+}
+
+export async function syncBrokerNow(prev: BrokerActionResult | null, form: FormData): Promise<BrokerActionResult> {
+  return failsafe("syncing on request", () => syncBrokerNowUnguarded(prev, form));
+}
+
+export async function disconnectBroker(prev: BrokerActionResult | null, form: FormData): Promise<BrokerActionResult> {
+  return failsafe("disconnecting", () => disconnectBrokerUnguarded(prev, form));
 }

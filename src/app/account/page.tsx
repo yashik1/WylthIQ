@@ -47,11 +47,11 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
     getEntitlement(),
     getDigestPreference(),
     listWatchlist(),
-    session.user.id ? listBrokerConnections(session.user.id) : Promise.resolve([]),
+    session.user.id ? listBrokerConnections(session.user.id) : Promise.resolve(null),
   ]);
   // Shown to anyone with a connection, so a reader whose plan lapses can
   // still see it and disconnect; offered to new readers only when they may use it.
-  const showBroker = brokers.length > 0 || canAccess(entitlement, "BROKER_SYNC");
+  const showBroker = (brokers?.length ?? 0) > 0 || canAccess(entitlement, "BROKER_SYNC");
   const justPaid = params.checkout === "done";
 
   return (
@@ -167,13 +167,14 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
             subtitle="Read-only: your holdings and trades from your broker, without giving this site a key"
           />
           <BrokerConnections
+            unavailable={brokers === null}
             snaptradeAvailable={snaptradeConfigured() && brokerTokensEnabled()}
             showFlexToken={
-              brokers.some((b) => b.broker === "ibkr-flex") ||
+              (brokers ?? []).some((b) => b.broker === "ibkr-flex") ||
               (flexTokenAllowed(session.user.email) && brokerTokensEnabled())
             }
             returned={typeof params.broker === "string" ? params.broker : null}
-            connections={brokers.map((b) => ({
+            connections={(brokers ?? []).map((b) => ({
               broker: b.broker,
               status: b.status,
               lastErrorCode: b.lastErrorCode,
