@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
+import type { LayoutPageProps } from "@/types/page-props";
 import { CircleHelp } from "lucide-react";
 import { Barlow, Barlow_Condensed } from "next/font/google";
 import "./globals.css";
@@ -179,7 +180,7 @@ const NAV = [
  */
 const FOOTER_LINK = "block py-1 text-muted transition-colors hover:text-accent";
 
-export default async function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutPageProps) {
   // Read once here rather than per page: the header needs it on every route,
   // and this is a JWT session so it costs no database round trip.
   const session = await auth().catch(() => null);
