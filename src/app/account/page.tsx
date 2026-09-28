@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import type { SearchPageProps } from "@/types/page-props";
 import { redirect } from "next/navigation";
 import { Card, CardHeader, Metric, PageHeader } from "@/components/ui";
 import { BillingButton } from "@/components/billing/subscribe-button";
@@ -34,7 +35,7 @@ const STATUS_TEXT: Record<string, string> = {
   paused: "Paused",
 };
 
-export default async function AccountPage({ searchParams }: PageProps<"/account">) {
+export default async function AccountPage({ searchParams }: SearchPageProps) {
   // Caught for the same reason the layout catches it: auth() throws when
   // AUTH_SECRET is unset, and a configuration mistake should send somebody to
   // the sign-in page rather than a stack trace. Failing to "signed out" is
@@ -55,7 +56,7 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
   const justPaid = params.checkout === "done";
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-5 py-2">
+    <div className="mx-auto w-full max-w-2xl space-y-4 py-1">
       {/*
         Led by the name when there is one, with the address underneath rather
         than dropped: this is the page somebody opens to check which account
