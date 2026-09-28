@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { brokerConnections } from "@/lib/db/schema";
+import { logBrokerFailure } from "@/lib/brokers/failsafe";
 import { brokerReader, denied } from "@/lib/brokers/gate";
 import { SNAPTRADE, syncConnection } from "@/lib/brokers/sync";
 import { refuseIfRateLimited } from "@/lib/security/guard";
@@ -27,13 +28,20 @@ export async function GET(request: Request) {
   const gate = await brokerReader(true);
   if (denied(gate)) return NextResponse.redirect(new URL("/signin?next=/account", siteUrl()), 303);
 
-  const [connection] = await getDb()
-    .select({ id: brokerConnections.id })
-    .from(brokerConnections)
-    .where(and(eq(brokerConnections.userId, gate.userId), eq(brokerConnections.broker, SNAPTRADE)))
-    .limit(1);
-  if (!connection) return back("none");
+  // Back to the account page whatever happens, with a sentence to show,
+  // rather than an error screen in place of it.
+  try {
+    const [connection] = await getDb()
+      .select({ id: brokerConnections.id })
+      .from(brokerConnections)
+      .where(and(eq(brokerConnections.userId, gate.userId), eq(brokerConnections.broker, SNAPTRADE)))
+      .limit(1);
+    if (!connection) return back("none");
 
-  const outcome = await syncConnection(connection.id);
-  return back(outcome.ok ? "connected" : "failed");
+    const outcome = await syncConnection(connection.id);
+    return back(outcome.ok ? "connected" : "failed");
+  } catch (err) {
+    logBrokerFailure("returning from SnapTrade", err);
+    return back("unavailable");
+  }
 }

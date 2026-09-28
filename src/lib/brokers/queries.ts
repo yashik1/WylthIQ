@@ -1,6 +1,7 @@
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "../db";
 import { brokerConnections, brokerExecutions, brokerPositions, brokerTradeLinks } from "../db/schema";
+import { logBrokerFailure } from "./failsafe";
 import { badgeFor, BROKERS, isBrokerKind, type BrokerKind, type SkippedItem } from "./report";
 import type { ConnectionDetails } from "./sync";
 
@@ -29,9 +30,14 @@ export interface BrokerConnectionSummary {
   linkedTrades: number;
 }
 
-/** Every broker connection the reader has, one per source. */
-export async function listBrokerConnections(userId: string): Promise<BrokerConnectionSummary[]> {
-  if (!isDatabaseConfigured()) return [];
+/**
+ * Every broker connection the reader has, one per source — or null when the
+ * connections cannot be read at all (the tables not created yet, the database
+ * down), so the account page can say the feature is unavailable instead of
+ * offering buttons that cannot work.
+ */
+export async function listBrokerConnections(userId: string): Promise<BrokerConnectionSummary[] | null> {
+  if (!isDatabaseConfigured()) return null;
   try {
     const db = getDb();
     const [rows, positions, links] = await Promise.all([
@@ -70,9 +76,9 @@ export async function listBrokerConnections(userId: string): Promise<BrokerConne
         },
       ];
     });
-  } catch {
-    // A missing table (migration not run yet) reads as "not connected", not as a broken page.
-    return [];
+  } catch (err) {
+    logBrokerFailure("reading connections", err);
+    return null;
   }
 }
 

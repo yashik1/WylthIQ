@@ -227,6 +227,9 @@ function SnapTradeSection({
       </p>
 
       {returned === "connected" && <p className="text-sm text-up">Connected. Your holdings and trades are below.</p>}
+      {returned === "unavailable" && (
+        <p className="text-sm text-fair-fg">That connection couldn&apos;t be completed right now. Please try again later.</p>
+      )}
       {returned === "failed" && (
         <p className="text-sm text-fair-fg">Connected, but the first update did not complete. Use Sync now in a few minutes.</p>
       )}
@@ -394,11 +397,14 @@ function FlexTokenSection({ connection }: { connection: ConnectionView | undefin
 }
 
 export function BrokerConnections({
+  unavailable,
   connections,
   snaptradeAvailable,
   showFlexToken,
   returned,
 }: {
+  /** True when connections cannot be read at all right now; nothing else is offered. */
+  unavailable: boolean;
   connections: ConnectionView[];
   /** False when SnapTrade's keys or the encryption key are not set on this server. */
   snaptradeAvailable: boolean;
@@ -407,6 +413,16 @@ export function BrokerConnections({
   /** What the SnapTrade return route reported, from the address it sent the reader back to. */
   returned: string | null;
 }) {
+  if (unavailable) {
+    return (
+      <div className="p-5">
+        <p className="text-sm leading-relaxed text-muted">
+          Connecting a broker isn&apos;t available right now. Please check back later.
+        </p>
+      </div>
+    );
+  }
+
   const find = (kind: Kind) => connections.find((c) => c.broker === kind);
   return (
     <div>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
+import { logBrokerFailure, UNAVAILABLE_MESSAGE } from "@/lib/brokers/failsafe";
 import { brokerReader, denied, journalSinceFrom } from "@/lib/brokers/gate";
 import { ingestStatement, MAX_STATEMENT_BYTES } from "@/lib/brokers/upload";
 import { refuseIfRateLimited, userRateLimited } from "@/lib/security/guard";
@@ -53,7 +54,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "That file is too large. The limit is 25 MB." }, { status: 413 });
   }
 
-  const result = await ingestStatement(gate.userId, await file.text(), journalSinceFrom(form));
+  let result;
+  try {
+    result = await ingestStatement(gate.userId, await file.text(), journalSinceFrom(form));
+  } catch (err) {
+    logBrokerFailure("uploading a statement", err);
+    return NextResponse.json({ ok: false, message: UNAVAILABLE_MESSAGE }, { status: 503 });
+  }
   if (result.ok) {
     revalidatePath("/account");
     revalidatePath("/portfolio");
