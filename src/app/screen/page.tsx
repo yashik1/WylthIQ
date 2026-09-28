@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import type { SearchPageProps } from "@/types/page-props";
 import {
   Gem,
   ShieldCheck,
@@ -95,7 +96,7 @@ const COUNTRIES = [
   { value: "CA", label: "Canada only" },
 ];
 
-export default async function ScreenPage({ searchParams }: PageProps<"/screen">) {
+export default async function ScreenPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
 
   const get = (key: string): string | undefined => {
@@ -183,7 +184,7 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
   const startedFrom = fromId ? (savedScreens.find((s) => s.id === fromId) ?? null) : null;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <StructuredData
         data={[
           pageLd({
@@ -302,7 +303,7 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
         the results column is minmax(0, 1fr) so a wide row scrolls inside its
         own box instead of stretching the page sideways.
       */}
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(240px,268px)_minmax(0,1fr)] lg:items-start">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(220px,252px)_minmax(0,1fr)] lg:items-start">
         <Card className="min-w-0 lg:sticky lg:top-5">
           <form method="get" className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
           {filters.preset && <input type="hidden" name="preset" value={filters.preset} />}

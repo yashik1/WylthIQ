@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import type { SearchPageProps } from "@/types/page-props";
 import type { ReactNode } from "react";
 import { LocalTime } from "@/components/local-time";
 import {
@@ -40,7 +41,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function WatchlistPage({ searchParams }: PageProps<"/watchlist">) {
+export default async function WatchlistPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
   const get = (key: string): string | undefined => {
     const v = params[key];
@@ -62,7 +63,7 @@ export default async function WatchlistPage({ searchParams }: PageProps<"/watchl
 
   if (!signedIn) {
     return (
-      <div className="space-y-5">
+      <div className="space-y-4">
         {header}
         <Card className="p-5">
           <p className="max-w-2xl text-sm leading-relaxed text-muted-strong">
@@ -209,7 +210,7 @@ function WatchlistTable({ rows, groups }: { rows: WatchlistRow[]; groups: string
         <tbody className="divide-y divide-border">
           {rows.map((row) => (
             <tr key={row.symbol} className="align-top transition-colors hover:bg-surface-2">
-              <td className="px-5 py-3">
+              <td className="px-5 py-2.5">
                 <Link
                   href={`/stock/${encodeURIComponent(row.symbol)}`}
                   className="block transition-colors hover:text-accent"
@@ -234,7 +235,7 @@ function WatchlistTable({ rows, groups }: { rows: WatchlistRow[]; groups: string
                 )}
               </td>
 
-              <td className="px-3 py-3">
+              <td className="px-3 py-2.5">
                 {row.covered ? (
                   <div className="flex flex-col items-start gap-1">
                     <RatingBadge

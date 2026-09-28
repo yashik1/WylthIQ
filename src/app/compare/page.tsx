@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import type { SearchPageProps } from "@/types/page-props";
 import { CompareChart } from "@/components/compare-chart";
 import { FundComparisonCard } from "@/components/compare/fund-comparison";
 import { loadFundComparison } from "@/lib/etf/compare-funds";
@@ -30,7 +31,7 @@ const SUGGESTIONS = [
   { label: "Retail", symbols: "WMT,COST,TGT" },
 ];
 
-export default async function ComparePage({ searchParams }: PageProps<"/compare">) {
+export default async function ComparePage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
   const symbols = parseSymbols(params.symbols);
   const items = symbols.length > 0 ? await loadComparison(symbols) : [];
@@ -55,7 +56,7 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
       : null;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <StructuredData
         data={[
           pageLd({
@@ -113,7 +114,7 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
         */}
         <form
           method="get"
-          className="grid grid-cols-[minmax(0,1fr)] gap-3 p-5 @md:grid-cols-[minmax(0,1fr)_auto]"
+          className="grid grid-cols-[minmax(0,1fr)] gap-2.5 p-4 @md:grid-cols-[minmax(0,1fr)_auto]"
         >
           <div className="min-w-0">
             <label htmlFor="symbols" className="text-xs text-muted">
@@ -135,7 +136,7 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
           </button>
         </form>
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-3">
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-border px-4 py-2.5">
           <span className="text-xs text-muted">Try:</span>
           {SUGGESTIONS.map((s) => (
             <Link

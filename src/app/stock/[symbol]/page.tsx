@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { StockPageProps } from "@/types/page-props";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { parseExchangeSuffix } from "@/lib/exchange-suffix";
@@ -105,7 +106,7 @@ const FRESHNESS_WORD: Record<string, string> = {
 
 export async function generateMetadata({
   params,
-}: PageProps<"/stock/[symbol]">): Promise<Metadata> {
+}: StockPageProps): Promise<Metadata> {
   const { symbol } = await params;
   const upper = decodeURIComponent(symbol).toUpperCase();
 
@@ -225,7 +226,7 @@ export async function generateMetadata({
 export default async function StockPage({
   params,
   searchParams,
-}: PageProps<"/stock/[symbol]">) {
+}: StockPageProps) {
   const { symbol } = await params;
   /*
     A currency in the URL, which beats the saved one.
@@ -732,7 +733,7 @@ async function StockBody({
   ].filter((s): s is StockSection => Boolean(s));
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/*
         Structured data, so a search result can say this page is about a
         corporation with a ticker rather than leaving a crawler to infer it
@@ -921,7 +922,7 @@ async function StockBody({
       {/* ---- verdict ---- */}
       <Section id="health">
       {report ? (
-        <div className="space-y-5">
+        <div className="space-y-4">
           <VerdictCard
             report={report}
             companyName={profile?.name ?? unsupported?.name ?? upper}
@@ -951,7 +952,7 @@ async function StockBody({
           unanalysable, only analysable differently, so when its own portfolio
           filing can be read it goes directly underneath.
         */
-        <div className="space-y-5">
+        <div className="space-y-4">
           <Card className="p-5">
             <h2 className="text-base font-semibold">This is a fund, not a company</h2>
             <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted">
@@ -1030,7 +1031,7 @@ async function StockBody({
       </Section>
 
       {/* ---- price chart ---- */}
-      <Section id="price" className="space-y-5">
+      <Section id="price" className="space-y-4">
       {movement && (
         <MovementContextCard
           context={movement}
@@ -1180,7 +1181,7 @@ async function StockBody({
       </Section>
 
       {/* ---- sources ---- */}
-      <Section id="sources" className="space-y-5">
+      <Section id="sources" className="space-y-4">
       <SectionHeading
         eyebrow="Go deeper"
         title={filesAccounts ? "Sources and further reading" : "News and further reading"}
