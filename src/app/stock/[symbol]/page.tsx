@@ -733,7 +733,7 @@ async function StockBody({
   ].filter((s): s is StockSection => Boolean(s));
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/*
         Structured data, so a search result can say this page is about a
         corporation with a ticker rather than leaving a crawler to infer it
@@ -922,7 +922,7 @@ async function StockBody({
       {/* ---- verdict ---- */}
       <Section id="health">
       {report ? (
-        <div className="space-y-5">
+        <div className="space-y-4">
           <VerdictCard
             report={report}
             companyName={profile?.name ?? unsupported?.name ?? upper}
@@ -952,7 +952,7 @@ async function StockBody({
           unanalysable, only analysable differently, so when its own portfolio
           filing can be read it goes directly underneath.
         */
-        <div className="space-y-5">
+        <div className="space-y-4">
           <Card className="p-5">
             <h2 className="text-base font-semibold">This is a fund, not a company</h2>
             <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted">
@@ -1031,7 +1031,7 @@ async function StockBody({
       </Section>
 
       {/* ---- price chart ---- */}
-      <Section id="price" className="space-y-5">
+      <Section id="price" className="space-y-4">
       {movement && (
         <MovementContextCard
           context={movement}
@@ -1181,7 +1181,7 @@ async function StockBody({
       </Section>
 
       {/* ---- sources ---- */}
-      <Section id="sources" className="space-y-5">
+      <Section id="sources" className="space-y-4">
       <SectionHeading
         eyebrow="Go deeper"
         title={filesAccounts ? "Sources and further reading" : "News and further reading"}
