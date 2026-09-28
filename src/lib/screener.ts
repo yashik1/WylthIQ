@@ -401,7 +401,7 @@ export function numericParam(raw: string | undefined | null): number | undefined
   return Number.isFinite(value) ? value : undefined;
 }
 
-export async function runScreen(filters: ScreenFilters, limit = 100): Promise<ScreenResult> {
+export async function runScreen(filters: ScreenFilters, limit = 100, offset = 0): Promise<ScreenResult> {
   if (!isDatabaseConfigured()) {
     return { status: "no-database", rows: [], total: 0 };
   }
@@ -466,6 +466,9 @@ export async function runScreen(filters: ScreenFilters, limit = 100): Promise<Sc
     );
   }
 
+  const safeLimit = Math.max(1, Math.floor(limit));
+  const safeOffset = Math.max(0, Math.floor(offset));
+
   const sort = SORTS[filters.sort ?? "health"];
   // NULLS LAST everywhere: a company with no data should never top a ranking.
   const orderBy =
@@ -474,7 +477,15 @@ export async function runScreen(filters: ScreenFilters, limit = 100): Promise<Sc
       : sql`${sort.column} ASC NULLS LAST`;
 
   try {
-    const rows = await db
+    const countRows = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(companies)
+      .innerJoin(scores, eq(scores.companyId, companies.id))
+      .where(and(...conditions));
+
+    const total = countRows[0]?.count ?? 0;
+
+    const rowsQuery = db
       .select({
         symbol: companies.symbol,
         name: companies.name,
@@ -510,13 +521,17 @@ export async function runScreen(filters: ScreenFilters, limit = 100): Promise<Sc
       .innerJoin(scores, eq(scores.companyId, companies.id))
       .where(and(...conditions))
       .orderBy(orderBy)
-      .limit(limit);
+      .limit(safeLimit);
 
-    if (rows.length > 0) {
+    if (safeOffset > 0) rowsQuery.offset(safeOffset);
+
+    const rows = await rowsQuery;
+
+    if (rows.length > 0 || total > 0) {
       return {
         status: "ok",
         rows: rows.map((row) => ({ ...row, priceStale: isPriceStale(row.priceUpdatedAt) })),
-        total: rows.length,
+        total,
       };
     }
 
