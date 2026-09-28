@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import type { SearchPageProps } from "@/types/page-props";
 import { CompareChart } from "@/components/compare-chart";
 import { FundComparisonCard } from "@/components/compare/fund-comparison";
 import { loadFundComparison } from "@/lib/etf/compare-funds";
@@ -30,7 +31,7 @@ const SUGGESTIONS = [
   { label: "Retail", symbols: "WMT,COST,TGT" },
 ];
 
-export default async function ComparePage({ searchParams }: PageProps<"/compare">) {
+export default async function ComparePage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
   const symbols = parseSymbols(params.symbols);
   const items = symbols.length > 0 ? await loadComparison(symbols) : [];
@@ -55,7 +56,7 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
       : null;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <StructuredData
         data={[
           pageLd({
