@@ -114,7 +114,7 @@ export default async function ComparePage({ searchParams }: SearchPageProps) {
         */}
         <form
           method="get"
-          className="grid grid-cols-[minmax(0,1fr)] gap-3 p-5 @md:grid-cols-[minmax(0,1fr)_auto]"
+          className="grid grid-cols-[minmax(0,1fr)] gap-2.5 p-4 @md:grid-cols-[minmax(0,1fr)_auto]"
         >
           <div className="min-w-0">
             <label htmlFor="symbols" className="text-xs text-muted">
@@ -136,7 +136,7 @@ export default async function ComparePage({ searchParams }: SearchPageProps) {
           </button>
         </form>
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-3">
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-border px-4 py-2.5">
           <span className="text-xs text-muted">Try:</span>
           {SUGGESTIONS.map((s) => (
             <Link
