@@ -349,6 +349,102 @@ export default async function ScreenPage({ searchParams }: PageProps<"/screen">)
             hint="What the whole company is worth at today's share price."
           />
 
+          {mayUseAdvanced && (
+            <details
+              open={usesAdvancedFilters(filters)}
+              className="rounded-lg border border-border bg-surface-2/40"
+            >
+              <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium">
+                Advanced filters
+                {usesAdvancedFilters(filters) && (
+                  <span className="ml-1.5 text-xs font-normal text-muted">active</span>
+                )}
+              </summary>
+              <div className="grid gap-3 border-t border-border p-3">
+                <NumberField
+                  label="Max P/B"
+                  name="maxPb"
+                  value={filters.maxPb}
+                  placeholder="e.g. 3"
+                  hint="Price relative to book value per share. Lower means a lower price relative to accounting equity."
+                />
+                <NumberField
+                  label="Max P/S"
+                  name="maxPs"
+                  value={filters.maxPs}
+                  placeholder="e.g. 5"
+                  hint="Price relative to trailing sales. Useful when earnings are temporarily low or negative."
+                />
+                <NumberField
+                  label="Min dividend yield"
+                  name="minDividendYield"
+                  value={filters.minDividendYield}
+                  placeholder="0.03 = 3%"
+                  step="0.005"
+                  hint="Trailing dividend yield as a decimal. 0.03 means 3%."
+                />
+                <NumberField
+                  label="Min net margin"
+                  name="minNetMargin"
+                  value={filters.minNetMargin}
+                  placeholder="0.10 = 10%"
+                  step="0.01"
+                  hint="Net income as a share of revenue. 0.10 means 10%."
+                />
+                <NumberField
+                  label="Min return on assets"
+                  name="minRoa"
+                  value={filters.minRoa}
+                  placeholder="0.08 = 8%"
+                  step="0.01"
+                  hint="Net income relative to assets. 0.08 means 8%."
+                />
+                <NumberField
+                  label="Max debt / equity"
+                  name="maxDebtToEquity"
+                  value={filters.maxDebtToEquity}
+                  placeholder="e.g. 1.5"
+                  step="0.1"
+                  hint="Total debt relative to shareholders' equity. Lower generally means less leverage."
+                />
+                <NumberField
+                  label="Min current ratio"
+                  name="minCurrentRatio"
+                  value={filters.minCurrentRatio}
+                  placeholder="e.g. 1.5"
+                  step="0.1"
+                  hint="Current assets divided by current liabilities."
+                />
+                <label className="flex items-start gap-2 text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    name="safeZoneOnly"
+                    value="1"
+                    defaultChecked={filters.safeZoneOnly ?? false}
+                    className="mt-0.5 size-4 rounded border-border"
+                  />
+                  <span>
+                    <span className="block font-medium text-muted-strong">Altman safe zone only</span>
+                    <span className="block mt-0.5">Keep companies the Altman Z-Score model classifies as safe, where the model applies.</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    name="excludeAccountingFlags"
+                    value="1"
+                    defaultChecked={filters.excludeAccountingFlags ?? false}
+                    className="mt-0.5 size-4 rounded border-border"
+                  />
+                  <span>
+                    <span className="block font-medium text-muted-strong">Exclude accounting flags</span>
+                    <span className="block mt-0.5">Exclude companies flagged by the Beneish M-Score; companies where the model does not apply are retained.</span>
+                  </span>
+                </label>
+              </div>
+            </details>
+          )}
+
           <div className="min-w-0">
             <label htmlFor="sort" className="text-xs text-muted">
               Sort by
