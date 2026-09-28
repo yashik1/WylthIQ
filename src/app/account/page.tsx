@@ -5,9 +5,11 @@ import { Card, CardHeader, Metric, PageHeader } from "@/components/ui";
 import { BillingButton } from "@/components/billing/subscribe-button";
 import { LocalTime } from "@/components/local-time";
 import { canAccess, getEntitlement } from "@/lib/billing/entitlement";
-import { IbkrConnect } from "@/components/brokers/ibkr-connect";
+import { BrokerConnections } from "@/components/brokers/broker-connections";
+import { flexTokenAllowed } from "@/lib/brokers/access";
 import { brokerTokensEnabled } from "@/lib/brokers/crypto";
-import { getBrokerConnection } from "@/lib/brokers/queries";
+import { listBrokerConnections } from "@/lib/brokers/queries";
+import { snaptradeConfigured } from "@/lib/brokers/snaptrade";
 import { accountIsEnough } from "@/lib/billing/access-mode";
 import { isStripeConfigured } from "@/lib/billing/stripe";
 import { auth } from "@/lib/auth";
@@ -41,15 +43,15 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
   if (!session?.user) redirect("/signin?next=/account");
 
   const params = await searchParams;
-  const [entitlement, digest, saved, broker] = await Promise.all([
+  const [entitlement, digest, saved, brokers] = await Promise.all([
     getEntitlement(),
     getDigestPreference(),
     listWatchlist(),
-    session.user.id ? getBrokerConnection(session.user.id) : Promise.resolve(null),
+    session.user.id ? listBrokerConnections(session.user.id) : Promise.resolve([]),
   ]);
   // Shown to anyone with a connection, so a reader whose plan lapses can
   // still see it and disconnect; offered to new readers only when they may use it.
-  const showBroker = broker !== null || canAccess(entitlement, "BROKER_SYNC");
+  const showBroker = brokers.length > 0 || canAccess(entitlement, "BROKER_SYNC");
   const justPaid = params.checkout === "done";
 
   return (
@@ -162,25 +164,29 @@ export default async function AccountPage({ searchParams }: PageProps<"/account"
         <Card>
           <CardHeader
             title="Connected broker"
-            subtitle="Read-only: your holdings and trades from Interactive Brokers, updated daily"
+            subtitle="Read-only: your holdings and trades from your broker, without giving this site a key"
           />
-          <IbkrConnect
-            available={brokerTokensEnabled()}
-            connection={
-              broker && {
-                queryId: broker.queryId,
-                tokenHint: broker.tokenHint,
-                status: broker.status,
-                lastErrorCode: broker.lastErrorCode,
-                statementToDate: broker.statementToDate,
-                lastSyncedAt: broker.lastSyncedAt?.toISOString() ?? null,
-                accounts: broker.accounts,
-                positions: broker.positions,
-                linkedTrades: broker.linkedTrades,
-                journalSince: broker.journalSince,
-                skipped: broker.skipped,
-              }
+          <BrokerConnections
+            snaptradeAvailable={snaptradeConfigured() && brokerTokensEnabled()}
+            showFlexToken={
+              brokers.some((b) => b.broker === "ibkr-flex") ||
+              (flexTokenAllowed(session.user.email) && brokerTokensEnabled())
             }
+            returned={typeof params.broker === "string" ? params.broker : null}
+            connections={brokers.map((b) => ({
+              broker: b.broker,
+              status: b.status,
+              lastErrorCode: b.lastErrorCode,
+              statementToDate: b.statementToDate,
+              lastSyncedAt: b.lastSyncedAt?.toISOString() ?? null,
+              positions: b.positions,
+              linkedTrades: b.linkedTrades,
+              journalSince: b.journalSince,
+              tokenHint: b.tokenHint,
+              queryId: b.queryId,
+              skipped: b.skipped,
+              details: b.details,
+            }))}
           />
         </Card>
       )}

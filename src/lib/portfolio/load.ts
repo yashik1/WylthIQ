@@ -165,6 +165,7 @@ export async function loadPortfolio(
     return {
       key: holding.key,
       source: holding.source,
+      sourceLabel: holding.sourceLabel,
       reportedAt: holding.reportedAt,
       symbol: holding.symbol,
       name: row?.name ?? null,

@@ -860,11 +860,12 @@ export const portfolioHoldings = pgTable(
  * A reader's own brokerage account, connected read-only. See
  * drizzle/0018_broker_connections.sql for why each table exists and why they
  * are separate from `portfolio_holdings` and `trades` rather than new columns
- * on them.
+ * on them, and 0019 for the sources added since.
  *
- * The first broker is Interactive Brokers through its Flex Web Service, whose
- * token can download reports and nothing else. The token is stored encrypted
- * (src/lib/brokers/crypto.ts) and never leaves the server.
+ * Three sources, in src/lib/brokers/report.ts: SnapTrade (the reader connects
+ * on SnapTrade's own page), a statement file the reader uploads, and an IBKR
+ * Flex token that only allowlisted accounts may use. Any secret is stored
+ * encrypted (src/lib/brokers/crypto.ts) and never leaves the server.
  */
 export const brokerConnections = pgTable(
   "broker_connections",
@@ -873,13 +874,17 @@ export const brokerConnections = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    /** Which adapter: "ibkr-flex" is the only one so far. */
+    /** Which source: "ibkr-flex", "ibkr-upload" or "snaptrade". See `BROKERS`. */
     broker: text("broker").notNull(),
-    /** AES-256-GCM, bound to this user and broker. Never sent to a browser. */
-    tokenCiphertext: text("token_ciphertext").notNull(),
+    /**
+     * AES-256-GCM, bound to this user and broker. Never sent to a browser.
+     * The Flex token, or SnapTrade's per-user secret; null for an upload.
+     */
+    tokenCiphertext: text("token_ciphertext"),
     /** The token's last four characters, so the reader can tell which one is saved. */
-    tokenHint: text("token_hint").notNull(),
-    queryId: text("query_id").notNull(),
+    tokenHint: text("token_hint"),
+    /** The Flex query, for a token connection only. */
+    queryId: text("query_id"),
     /** ok | needs-attention | error. needs-attention is skipped by the nightly sync. */
     status: text("status").notNull().default("ok"),
     /** The broker's own error code from the last failure. Its message text is never kept. */
@@ -890,6 +895,8 @@ export const brokerConnections = pgTable(
     statementToDate: text("statement_to_date"),
     /** What the last statement held that is not shown, and why. Capped. */
     skipped: jsonb("skipped").notNull().default(sql`'[]'::jsonb`),
+    /** What the account page shows about it — institutions, masked accounts. Nothing secret. */
+    details: jsonb("details").notNull().default(sql`'{}'::jsonb`),
     /** A lease, so a nightly run and a "Sync now" cannot run the same sync twice. */
     syncStartedAt: timestamp("sync_started_at", { withTimezone: true }),
     lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
@@ -922,6 +929,8 @@ export const brokerPositions = pgTable(
     currency: text("currency").notNull(),
     /** ISO date the broker's figures are as of. */
     reportDate: text("report_date"),
+    /** The institution holding it, for the badge: one SnapTrade connection can span several. */
+    label: text("label"),
   },
   (t) => [
     uniqueIndex("broker_positions_connection_account_conid_idx").on(
@@ -960,6 +969,7 @@ export const brokerExecutions = pgTable(
     tradeDate: text("trade_date").notNull(),
     /** Sortable ISO date-time, for putting fills in order within a day. */
     executedAt: text("executed_at").notNull(),
+    label: text("label"),
   },
   (t) => [
     uniqueIndex("broker_executions_connection_external_idx").on(t.connectionId, t.externalId),
@@ -985,6 +995,11 @@ export const brokerTradeLinks = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    /**
+     * The source's link family (`BROKERS[kind].linkFamily`), not the source
+     * itself: a Flex token and an uploaded statement carry the same fill ids,
+     * so they share links and a trade seen through both is added once.
+     */
     broker: text("broker").notNull(),
     accountId: text("account_id").notNull(),
     /** The external id of the fill that opened the round trip. */

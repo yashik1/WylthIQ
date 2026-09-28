@@ -28,9 +28,9 @@ there accounting red flags — and links every figure back to the filing it came
   opening-range breakout, each shown against simply buying and holding. Textbook
   parameters, left untuned: a rule tuned until it looks good on the decade being
   displayed will always look good on that decade.
-- **Connect Interactive Brokers, read-only.** Readers can link their own IBKR account
-  from their account page; its holdings appear on `/portfolio` and its trades in the
-  journal, refreshed daily. See [Connecting a broker](#connecting-a-broker).
+- **Connect a broker, read-only.** Readers link their own brokerage account through
+  SnapTrade, or upload an IBKR statement — never giving this site a key for it. Holdings
+  appear on `/portfolio` and trades in the journal. See [Connecting a broker](#connecting-a-broker).
 - **Crypto, commodities and futures** at `/markets` — Bitcoin, gold, oil, wheat and the
   index contracts. None of them file accounts, so none of them get a health score; they
   get the chart, the comparison and the backtest, and the page says plainly why the rest
@@ -233,49 +233,72 @@ For the scheduled refresh on GitHub Actions, add the same secrets under
 
 ## Connecting a broker
 
-Readers can connect their own **Interactive Brokers** account. Its holdings then
-appear on `/portfolio` next to anything entered by hand, and its buys and sells are
-paired into complete trades in `/journal`. Everything is refreshed once a day, after
-IBKR's daily statement.
+Readers can connect their own brokerage account. Its holdings then appear on
+`/portfolio` next to anything entered by hand, and its buys and sells are paired into
+complete trades in `/journal`, refreshed once a day. **Readers never give this site a
+key for their broker.** There are three ways in:
 
-**It cannot trade or move money.** The connection uses IBKR's
-[Flex Web Service](https://www.ibkrguides.com/clientportal/flex3.htm),
-whose token can only download reports. There is no order, transfer or withdrawal a
-Flex token can make, so the guarantee is IBKR's rather than a promise in this code.
-On top of that, `src/lib/brokers/read-only.test.ts` fails CI if the code ever
-talks to IBKR anywhere but the two Flex report URLs, sends anything but a GET, or
-picks up the vocabulary of placing orders or moving funds.
+| Route | Who | What this app holds |
+| --- | --- | --- |
+| **SnapTrade** | everyone | SnapTrade's per-reader secret for this app — no broker login, password or key |
+| **Statement upload** | everyone | nothing: the file is read and not kept |
+| **Flex token** | only addresses in `BROKER_FLEX_TOKEN_EMAILS` | the IBKR Flex token, encrypted |
 
-**What a reader does, in IBKR's Client Portal:**
+**SnapTrade** ([snaptrade.com](https://snaptrade.com)) covers Interactive Brokers,
+Wealthsimple, Questrade, Schwab, Fidelity and around thirty more. The reader presses
+*Connect a broker* on `/account` and connects on SnapTrade's own page. Most brokers
+use their own login there; for Interactive Brokers, SnapTrade asks the reader to
+switch it on in IBKR's Client Portal under **Performance & Reports → Third-Party
+Reports** and paste the code IBKR shows into SnapTrade's page. Either way nothing is
+typed into this site.
 
-1. Performance & Reports → Flex Queries → create an **Activity Flex Query**, format
-   XML, with **Open Positions** (Summary level) and **Trades** (Execution level), every
-   field selected, period **Last 365 Calendar Days**, date format left as `yyyyMMdd`.
-2. Flex Web Service Configuration → switch it on and generate a token with **1-year**
-   expiry. Leave "Valid for IP address" empty — Railway's outbound address is not fixed.
-3. Paste the token and the query ID on `/account`. The first report is downloaded right
-   away, so a wrong token or query is caught on the spot.
+**Statement upload** needs no connection at all. The reader creates an **Activity Flex
+Query** in IBKR's Client Portal (Performance & Reports → Flex Queries: **Open
+Positions** at Summary level, **Trades** at Execution level, every field, format
+**XML**, period **Last 365 Calendar Days**, date format left as `yyyyMMdd`), runs it,
+and uploads the XML on `/account`. A statement older than the one already loaded is
+refused, so an old file never puts back holdings since sold.
+
+**It cannot trade or move money.**
+
+- SnapTrade connections are only ever requested read-only (`connectionType: "read"`),
+  and every connection SnapTrade reports is checked on every sync: one that could
+  trade is deleted at SnapTrade and its accounts are never read.
+- An IBKR Flex token can only download reports — there is no order, transfer or
+  withdrawal it can make.
+- `src/lib/brokers/read-only.test.ts` fails CI if the code ever talks to IBKR anywhere
+  but the two Flex report URLs, makes any SnapTrade request outside a fixed list
+  (register, open the connection page, list, read positions and fills, delete), asks
+  SnapTrade for anything but a read-only connection, or picks up the vocabulary of
+  placing orders or moving funds.
 
 **What the operator does:**
 
-- Set `BROKER_TOKEN_KEY` (`openssl rand -base64 32`). Tokens are stored encrypted with
-  it and never sent back to a browser. Without it the feature is off.
-- Run `npm run db:migrate` for the four `broker_*` tables.
+- Set `BROKER_TOKEN_KEY` (`openssl rand -base64 32`). SnapTrade secrets and Flex tokens
+  are stored encrypted with it and never sent to a browser.
+- For SnapTrade, create an account at snaptrade.com and set `SNAPTRADE_CLIENT_ID` and
+  `SNAPTRADE_CONSUMER_KEY`. The free plan covers one connected user with up to five
+  brokerage connections — enough to build and test with your own account; real users
+  need a paid plan.
+- Optionally list your own address in `BROKER_FLEX_TOKEN_EMAILS` to use a Flex token.
+- Run `npm run db:migrate` for the `broker_*` tables (migrations 0018 and 0019).
 - Add a Railway cron service that calls the sync every hour. Each call refreshes the
-  few connections that have gone longest without a sync, so the day's work is spread
-  out and each call stays short:
+  few connections that have gone longest without a sync; uploads are left to the
+  reader:
 
   ```bash
   curl --max-time 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/broker-sync"
   ```
 
 **What is and is not shown.** Stocks and ETFs listed in the US, on the TSX or on the
-TSX Venture. Options, futures, short positions and other exchanges are listed on the
-account page as "not shown", with the reason. Holdings are valued with this app's own
-quotes, not IBKR's marks. A trade opened before the report's first day is left out of
-the journal rather than guessed at, and a trade the reader deletes from the journal is
-never added back. Connecting a broker is part of the Pro+ plan in `tiers.ts`, which,
-like every paid feature, is open to anyone signed in while `ACCESS_MODE` is `sign-in`.
+TSX Venture. Options, futures, crypto, short positions and other exchanges are listed
+on the account page as "not shown", with the reason. Holdings are valued with this
+app's own quotes, not the broker's. A trade opened before the record begins is left
+out of the journal rather than guessed at, and a trade the reader deletes from the
+journal is never added back. Two connections to the same broker are shown as separate
+rows and flagged, never silently added together. Connecting a broker is part of the
+Pro+ plan in `tiers.ts`, which, like every paid feature, is open to anyone signed in
+while `ACCESS_MODE` is `sign-in`.
 
 ---
 

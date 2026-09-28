@@ -1,4 +1,4 @@
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { getDb } from "../db";
 import {
   brokerConnections,
@@ -9,18 +9,24 @@ import {
   type BrokerConnection,
 } from "../db/schema";
 import { decryptToken } from "./crypto";
-import {
-  downloadFlexReport,
-  FLEX_ERROR_WORDS,
-  FlexError,
-  parseFlexReport,
-  positionKey,
-  type FlexDeps,
-  type FlexReport,
-  type SkippedItem,
-} from "./ibkr-flex";
+import { downloadFlexReport, FLEX_ERROR_WORDS, FlexError, parseFlexReport, type FlexDeps } from "./ibkr-flex";
 import { planJournalWrites, type ExistingLink } from "./journal-plan";
+import { BROKERS, isBrokerKind, positionKey, type BrokerReport, type SkippedItem } from "./report";
 import { pairRoundTrips } from "./round-trips";
+import {
+  accountActivities,
+  accountPositions,
+  deleteAuthorization,
+  describeAccount,
+  listAccounts,
+  listAuthorizations,
+  SNAPTRADE_ERROR_WORDS,
+  SnapTradeError,
+  toBrokerReport,
+  type SnapAccountData,
+  type SnapTradeDeps,
+  type SnapTradeUser,
+} from "./snaptrade";
 
 /**
  * Bringing a connected broker's figures into the app.
@@ -32,6 +38,8 @@ import { pairRoundTrips } from "./round-trips";
  */
 
 export const IBKR_FLEX = "ibkr-flex";
+export const IBKR_UPLOAD = "ibkr-upload";
+export const SNAPTRADE = "snaptrade";
 
 /** How long a sync may hold its lease before another run may assume it died. */
 const LEASE_EXPIRED = sql`now() - interval '10 minutes'`;
@@ -42,6 +50,16 @@ const MAX_POSITIONS = 300;
 /** Trades added per sync. More arrive on the next one, so a busy year is spread out, not refused. */
 const MAX_JOURNAL_INSERTS = 2_000;
 const INSERT_CHUNK = 500;
+
+/** What the account page shows about a connection. Nothing in it is secret. */
+export interface ConnectionDetails {
+  /** SnapTrade: each brokerage connected, and whether it needs reconnecting at the broker. */
+  brokerages?: { id: string; institution: string; disabled: boolean }[];
+  /** Every account, described without its full number. */
+  accounts?: { id: string; institution: string; description: string }[];
+  /** Institutions whose connection could trade, and was therefore removed rather than used. */
+  refused?: string[];
+}
 
 export type SyncOutcome =
   | {
@@ -56,8 +74,9 @@ export type SyncOutcome =
 
 const BUSY = "A sync for this account is already running. Try again in a few minutes.";
 const UNREADABLE =
-  "The saved token can no longer be read on this server. Disconnect and connect again with your token.";
+  "The saved credential can no longer be read on this server. Disconnect and connect again.";
 const FAILED = "The sync could not be saved. Try again later.";
+const UPLOAD_ONLY = "Statements you upload are refreshed by uploading a newer one.";
 
 function chunks<T>(rows: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -65,9 +84,21 @@ function chunks<T>(rows: T[], size: number): T[][] {
   return out;
 }
 
+/** The journal links a connection reads and writes. See `BROKERS`. */
+function linkFamily(connection: BrokerConnection): string {
+  return isBrokerKind(connection.broker) ? BROKERS[connection.broker].linkFamily : connection.broker;
+}
+
+/** "U1234567" as "U•••4567": enough to tell accounts apart, not enough to be the number. */
+export function maskAccount(accountId: string): string {
+  const id = accountId.trim();
+  if (id.length <= 5) return id;
+  return `${id.slice(0, 1)}•••${id.slice(-4)}`;
+}
+
 /** Holdings keyed by account and instrument, summed if a report listed one twice. */
-function positionRows(connection: BrokerConnection, report: FlexReport) {
-  const byKey = new Map<string, (typeof brokerPositions.$inferInsert)>();
+function positionRows(connection: BrokerConnection, report: BrokerReport) {
+  const byKey = new Map<string, typeof brokerPositions.$inferInsert>();
   for (const p of report.positions) {
     const key = positionKey(p.accountId, p.conid);
     const existing = byKey.get(key);
@@ -87,25 +118,31 @@ function positionRows(connection: BrokerConnection, report: FlexReport) {
       averageCost: p.averageCost,
       currency: p.currency,
       reportDate: p.reportDate,
+      label: p.label,
     });
   }
   return [...byKey.values()].slice(0, MAX_POSITIONS);
 }
 
 /**
- * Writes one downloaded report: fills, holdings and the journal, in one
- * transaction, so a failure part-way leaves yesterday's figures standing
+ * Writes one report, from any source: fills, holdings and the journal, in
+ * one transaction, so a failure part-way leaves yesterday's figures standing
  * rather than half of today's.
  */
-export async function applyReport(connection: BrokerConnection, report: FlexReport): Promise<SyncOutcome> {
+export async function applyReport(
+  connection: BrokerConnection,
+  report: BrokerReport,
+  details?: ConnectionDetails,
+): Promise<SyncOutcome> {
   const notes: string[] = [];
   const skipped: SkippedItem[] = [...report.skipped];
+  const family = linkFamily(connection);
 
   if (!report.sections.positions) {
-    notes.push("The Flex query has no Open Positions section, so holdings were not updated.");
+    notes.push("The report has no Open Positions section, so holdings were not updated.");
   }
   if (!report.sections.trades) {
-    notes.push("The Flex query has no Trades section, so no trades were added to the journal.");
+    notes.push("The report has no Trades section, so no trades were added to the journal.");
   }
 
   const result = await getDb().transaction(async (tx) => {
@@ -127,6 +164,7 @@ export async function applyReport(connection: BrokerConnection, report: FlexRepo
             currency: e.currency,
             tradeDate: e.tradeDate,
             executedAt: e.executedAt,
+            label: e.label,
           })),
         )
         .onConflictDoNothing({ target: [brokerExecutions.connectionId, brokerExecutions.externalId] });
@@ -143,8 +181,8 @@ export async function applyReport(connection: BrokerConnection, report: FlexRepo
     let tradesAdded = 0;
     let tradesUpdated = 0;
     // Pairing needs the true holding to seed each instrument, which only the
-    // positions section gives; without it, trades opened before the record
-    // could not be told from new ones, so the journal is left alone.
+    // positions give; without them, trades opened before the record could not
+    // be told from new ones, so the journal is left alone.
     if (report.sections.positions && report.sections.trades) {
       const fills = await tx
         .select()
@@ -168,7 +206,7 @@ export async function applyReport(connection: BrokerConnection, report: FlexRepo
         })
         .from(brokerTradeLinks)
         .leftJoin(trades, eq(trades.id, brokerTradeLinks.tradeId))
-        .where(and(eq(brokerTradeLinks.userId, connection.userId), eq(brokerTradeLinks.broker, connection.broker)));
+        .where(and(eq(brokerTradeLinks.userId, connection.userId), eq(brokerTradeLinks.broker, family)));
 
       const links: ExistingLink[] = linkRows.map((row) => ({
         accountId: row.accountId,
@@ -209,7 +247,7 @@ export async function applyReport(connection: BrokerConnection, report: FlexRepo
             .returning({ id: trades.id });
           linked.push({
             userId: connection.userId,
-            broker: connection.broker,
+            broker: family,
             accountId: roundTrip.accountId,
             openingExternalId: roundTrip.openingExternalId,
             tradeId: created.id,
@@ -236,6 +274,13 @@ export async function applyReport(connection: BrokerConnection, report: FlexRepo
         lastErrorCode: null,
         statementToDate: report.toDate,
         skipped,
+        details: details ?? {
+          accounts: report.accounts.map((id) => ({
+            id,
+            institution: report.positions.find((p) => p.accountId === id)?.label ?? BROKERS["ibkr-flex"].label,
+            description: maskAccount(id),
+          })),
+        },
         lastSyncedAt: new Date(),
         syncStartedAt: null,
         updatedAt: new Date(),
@@ -256,14 +301,72 @@ async function recordFailure(connectionId: number, status: "needs-attention" | "
     .where(eq(brokerConnections.id, connectionId));
 }
 
+/** SnapTrade's per-reader secret for this connection, or null if it cannot be read. */
+export function snapTradeUserFor(connection: BrokerConnection): SnapTradeUser | null {
+  if (!connection.tokenCiphertext) return null;
+  const userSecret = decryptToken(connection.tokenCiphertext, connection.userId, connection.broker);
+  return userSecret ? { userId: connection.userId, userSecret } : null;
+}
+
 /**
- * Downloads and applies the latest report for one connection.
+ * Everything SnapTrade holds for a reader, as a report plus what the account
+ * page shows.
+ *
+ * READ-ONLY, CHECKED EVERY TIME. Connections are only ever requested as
+ * read-only, but a reader could still end up with one that can trade — so
+ * every connection SnapTrade reports is checked here, and one that is not
+ * read-only is deleted at SnapTrade and its accounts are never read.
+ */
+export async function fetchSnapTrade(
+  user: SnapTradeUser,
+  deps: SnapTradeDeps = {},
+): Promise<{ report: BrokerReport; details: ConnectionDetails }> {
+  const authorizations = await listAuthorizations(user, deps);
+
+  const refused: string[] = [];
+  const kept = [];
+  for (const authorization of authorizations) {
+    if (authorization.type === "read") {
+      kept.push(authorization);
+      continue;
+    }
+    await deleteAuthorization(user, authorization.id, deps);
+    refused.push(authorization.institution);
+  }
+
+  const readable = new Set(kept.map((a) => a.id));
+  const accounts = (await listAccounts(user, deps)).filter((account) => readable.has(account.authorizationId));
+
+  const data: SnapAccountData[] = [];
+  for (const account of accounts) {
+    const { positions, asOf } = await accountPositions(user, account.id, deps);
+    const activities = await accountActivities(user, account.id, deps);
+    data.push({ account, positions, asOf, activities });
+  }
+
+  return {
+    report: toBrokerReport(data),
+    details: {
+      brokerages: kept.map((a) => ({ id: a.id, institution: a.institution, disabled: a.disabled })),
+      accounts: accounts.map((a) => ({ id: a.id, institution: a.institution, description: describeAccount(a) })),
+      refused,
+    },
+  };
+}
+
+export interface SyncDeps {
+  flex?: FlexDeps;
+  snaptrade?: SnapTradeDeps;
+}
+
+/**
+ * Downloads and applies the latest figures for one connection.
  *
  * Takes a lease first, in the database rather than in memory, so the nightly
  * job and a reader's "Sync now" cannot both run it — and neither can two
  * instances of the app.
  */
-export async function syncConnection(connectionId: number, deps: FlexDeps = {}): Promise<SyncOutcome> {
+export async function syncConnection(connectionId: number, deps: SyncDeps = {}): Promise<SyncOutcome> {
   const db = getDb();
   const [connection] = await db
     .update(brokerConnections)
@@ -271,36 +374,60 @@ export async function syncConnection(connectionId: number, deps: FlexDeps = {}):
     .where(
       and(
         eq(brokerConnections.id, connectionId),
-        or(
-          isNull(brokerConnections.syncStartedAt),
-          lt(brokerConnections.syncStartedAt, LEASE_EXPIRED),
-        ),
+        or(isNull(brokerConnections.syncStartedAt), lt(brokerConnections.syncStartedAt, LEASE_EXPIRED)),
       ),
     )
     .returning();
   if (!connection) return { ok: false, message: BUSY };
 
-  const token = decryptToken(connection.tokenCiphertext, connection.userId, connection.broker);
-  if (!token) {
-    await recordFailure(connection.id, "needs-attention", "TOKEN_UNREADABLE");
-    return { ok: false, message: UNREADABLE };
+  if (connection.broker === IBKR_UPLOAD) {
+    await db.update(brokerConnections).set({ syncStartedAt: null }).where(eq(brokerConnections.id, connection.id));
+    return { ok: false, message: UPLOAD_ONLY };
   }
 
-  let report: FlexReport;
-  try {
-    report = parseFlexReport(await downloadFlexReport(token, connection.queryId, deps));
-  } catch (err) {
-    const failure = err instanceof FlexError ? err : new FlexError("UNAVAILABLE");
-    await recordFailure(
-      connection.id,
-      failure.needsAttention ? "needs-attention" : "error",
-      failure.code ?? failure.category,
-    );
-    return { ok: false, message: FLEX_ERROR_WORDS[failure.category] };
+  let report: BrokerReport;
+  let details: ConnectionDetails | undefined;
+
+  if (connection.broker === SNAPTRADE) {
+    const user = snapTradeUserFor(connection);
+    if (!user) {
+      await recordFailure(connection.id, "needs-attention", "SECRET_UNREADABLE");
+      return { ok: false, message: UNREADABLE };
+    }
+    try {
+      ({ report, details } = await fetchSnapTrade(user, deps.snaptrade));
+    } catch (err) {
+      const failure = err instanceof SnapTradeError ? err : new SnapTradeError("UNAVAILABLE");
+      // SnapTrade no longer knowing this reader is theirs to fix by connecting again.
+      await recordFailure(
+        connection.id,
+        failure.category === "NOT_FOUND" ? "needs-attention" : "error",
+        failure.status ? `${failure.category}_${failure.status}` : failure.category,
+      );
+      return { ok: false, message: SNAPTRADE_ERROR_WORDS[failure.category] };
+    }
+  } else {
+    const token =
+      connection.tokenCiphertext && decryptToken(connection.tokenCiphertext, connection.userId, connection.broker);
+    if (!token || !connection.queryId) {
+      await recordFailure(connection.id, "needs-attention", "TOKEN_UNREADABLE");
+      return { ok: false, message: UNREADABLE };
+    }
+    try {
+      report = parseFlexReport(await downloadFlexReport(token, connection.queryId, deps.flex));
+    } catch (err) {
+      const failure = err instanceof FlexError ? err : new FlexError("UNAVAILABLE");
+      await recordFailure(
+        connection.id,
+        failure.needsAttention ? "needs-attention" : "error",
+        failure.code ?? failure.category,
+      );
+      return { ok: false, message: FLEX_ERROR_WORDS[failure.category] };
+    }
   }
 
   try {
-    return await applyReport(connection, report);
+    return await applyReport(connection, report, details);
   } catch (err) {
     // The database's own message can name tables and values; only its class is logged.
     console.error("[brokers] applying a report failed:", err instanceof Error ? err.name : "unknown");
@@ -313,7 +440,8 @@ export async function syncConnection(connectionId: number, deps: FlexDeps = {}):
  * Connections due a nightly sync, stalest first.
  *
  * Skips the ones waiting on their reader — an expired token stays expired
- * however often it is tried — and the ones another run holds.
+ * however often it is tried — the ones another run holds, and uploaded
+ * statements, which only the reader can refresh.
  */
 export async function connectionsDue(limit: number): Promise<{ id: number; userId: string }[]> {
   return getDb()
@@ -321,16 +449,14 @@ export async function connectionsDue(limit: number): Promise<{ id: number; userI
     .from(brokerConnections)
     .where(
       and(
+        ne(brokerConnections.broker, IBKR_UPLOAD),
         sql`${brokerConnections.status} <> 'needs-attention'`,
         or(
           isNull(brokerConnections.lastSyncedAt),
           lt(brokerConnections.lastSyncedAt, sql`now() - interval '20 hours'`),
         ),
         or(isNull(brokerConnections.lastAttemptAt), lt(brokerConnections.lastAttemptAt, RETRY_AFTER)),
-        or(
-          isNull(brokerConnections.syncStartedAt),
-          lt(brokerConnections.syncStartedAt, LEASE_EXPIRED),
-        ),
+        or(isNull(brokerConnections.syncStartedAt), lt(brokerConnections.syncStartedAt, LEASE_EXPIRED)),
       ),
     )
     .orderBy(sql`${brokerConnections.lastSyncedAt} asc nulls first`)
