@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { StockPageProps } from "@/types/page-props";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { parseExchangeSuffix } from "@/lib/exchange-suffix";
@@ -105,7 +106,7 @@ const FRESHNESS_WORD: Record<string, string> = {
 
 export async function generateMetadata({
   params,
-}: PageProps<"/stock/[symbol]">): Promise<Metadata> {
+}: StockPageProps): Promise<Metadata> {
   const { symbol } = await params;
   const upper = decodeURIComponent(symbol).toUpperCase();
 
@@ -225,7 +226,7 @@ export async function generateMetadata({
 export default async function StockPage({
   params,
   searchParams,
-}: PageProps<"/stock/[symbol]">) {
+}: StockPageProps) {
   const { symbol } = await params;
   /*
     A currency in the URL, which beats the saved one.
