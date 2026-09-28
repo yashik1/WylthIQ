@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import type { SearchPageProps } from "@/types/page-props";
 import { Card, CardHeader, EmptyState, Metric, PageHeader } from "@/components/ui";
 import { EquityChart } from "@/components/backtest/equity-chart";
 import { LocalTime } from "@/components/local-time";
@@ -52,7 +53,7 @@ function suggestionHref(s: (typeof SUGGESTIONS)[number]) {
   return `/backtest?symbol=${encodeURIComponent(s.symbol)}&start=${s.start}&amount=10000`;
 }
 
-export default async function BacktestPage({ searchParams }: PageProps<"/backtest">) {
+export default async function BacktestPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
   const symbol = typeof params.symbol === "string" ? params.symbol.trim().toUpperCase() : "";
   const start = typeof params.start === "string" ? params.start : "";
