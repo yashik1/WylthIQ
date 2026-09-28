@@ -70,6 +70,44 @@ describe("reading a reader's SnapTrade connections", () => {
     expect(details.accounts).toEqual([{ id: "acc-ib", institution: "Interactive Brokers", description: "Margin ···0001" }]);
   });
 
+  describe("reading trades no more than once a day, as SnapTrade asks", () => {
+    const now = new Date("2025-10-01T12:00:00Z");
+    const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000).toISOString();
+
+    it("reads them the first time, and records when", async () => {
+      const { fetchImpl, calls } = fakeSnapTrade(routes);
+      const { report, details } = await fetchSnapTrade(USER, { fetch: fetchImpl }, {}, now);
+      expect(calls).toContain("GET /accounts/acc-ib/activities");
+      expect(report.sections.trades).toBe(true);
+      expect(details.tradesReadAt).toBe(now.toISOString());
+    });
+
+    it("refreshes holdings but not trades within the day", async () => {
+      const { fetchImpl, calls } = fakeSnapTrade(routes);
+      const { report, details } = await fetchSnapTrade(USER, { fetch: fetchImpl }, { tradesReadAt: hoursAgo(23) }, now);
+      expect(calls).toContain("GET /accounts/acc-ib/positions/all");
+      expect(calls.some((c) => c.endsWith("/activities"))).toBe(false);
+      expect(report.positions).toHaveLength(1);
+      expect(report.executions).toEqual([]);
+      // Without trades the journal is left alone rather than paired against no fills.
+      expect(report.sections).toEqual({ positions: true, trades: false });
+      expect(details.tradesReadAt).toBe(hoursAgo(23));
+    });
+
+    it("reads them again once a day has passed", async () => {
+      const { fetchImpl, calls } = fakeSnapTrade(routes);
+      const { details } = await fetchSnapTrade(USER, { fetch: fetchImpl }, { tradesReadAt: hoursAgo(24) }, now);
+      expect(calls).toContain("GET /accounts/acc-ib/activities");
+      expect(details.tradesReadAt).toBe(now.toISOString());
+    });
+
+    it("does not count a read with no account connected yet", async () => {
+      const { fetchImpl } = fakeSnapTrade({ "GET /authorizations": [], "GET /accounts": [] });
+      const { details } = await fetchSnapTrade(USER, { fetch: fetchImpl }, {}, now);
+      expect(details.tradesReadAt).toBeUndefined();
+    });
+  });
+
   it("stops rather than half-reading when SnapTrade fails part-way", async () => {
     const broken: Record<string, unknown> = { ...routes };
     delete broken["GET /accounts/acc-ib/activities"];

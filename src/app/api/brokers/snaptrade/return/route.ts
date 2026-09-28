@@ -39,7 +39,10 @@ export async function GET(request: Request) {
     if (!connection) return back("none");
 
     const outcome = await syncConnection(connection.id);
-    return back(outcome.ok ? "connected" : "failed");
+    if (!outcome.ok) return back("failed");
+    // Trades are read once a day, so a broker added since the last read
+    // shows its holdings now and its trades with the next daily sync.
+    return back(outcome.tradesRead ? "connected" : "connected-holdings");
   } catch (err) {
     logBrokerFailure("returning from SnapTrade", err);
     return back("unavailable");

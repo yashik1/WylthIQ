@@ -55,6 +55,15 @@ const OWN_ROUTE_CALL = /fetch\(\s*"\/api\/brokers\/[^"]*",\s*\{\s*method:\s*"POS
 const brokerFacing = (p: string) => code(p).replace(OWN_ROUTE_CALL, "");
 
 /**
+ * SnapTrade's own terms and privacy policy, which a reader agrees to by
+ * connecting, are linked from the account card and the terms page. A link a
+ * reader follows is not a request this app makes, so these two addresses —
+ * exactly these — are taken out before looking for code that talks to
+ * SnapTrade.
+ */
+const SNAPTRADE_LEGAL_PAGE = /"https:\/\/snaptrade\.com\/(terms-and-conditions|privacy-policy)"/g;
+
+/**
  * Every request the SnapTrade client may make. Registering, opening the
  * connection page and deleting are the only writes, and none of them touches
  * an account: they manage the reader's link to SnapTrade itself.
@@ -88,7 +97,7 @@ describe("the broker connections can only read", () => {
   });
 
   it("talks to SnapTrade from one file only", () => {
-    const naming = everything.filter((p) => /snaptrade\.com/i.test(code(p)));
+    const naming = everything.filter((p) => /snaptrade\.com/i.test(code(p).replace(SNAPTRADE_LEGAL_PAGE, "")));
     expect(naming.map(rel)).toEqual([join("lib", "brokers", "snaptrade.ts")]);
   });
 

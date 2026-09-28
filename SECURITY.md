@@ -24,7 +24,9 @@ Worth knowing when judging the impact of a finding:
   CI). Any secret kept for a connection — SnapTrade's per-reader secret, or a
   Flex token for the allowlisted owner — is encrypted with AES-256-GCM under
   `BROKER_TOKEN_KEY` and never sent to a browser. No broker login or password
-  is ever received; uploaded statement files are not stored.
+  is ever received; uploaded statement files are not stored. SnapTrade's
+  Developer Terms require the operator to tell SnapTrade within 24 hours of any
+  breach of this app's systems.
 - **No payment details.** Billing is paused, and card data never touches this
   application even when it is switched on; Stripe holds it.
 - **No market data of our own.** Prices come from third-party providers under

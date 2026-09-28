@@ -140,17 +140,25 @@ describe("talking to SnapTrade", () => {
 
   it("always asks for a read-only connection", async () => {
     const { fetchImpl, calls } = answering({ redirectURI: "https://app.snaptrade.com/snapTrade/redeemToken?token=x" });
-    await connectionPortalUrl(USER, "https://wylthiq.example/api/brokers/snaptrade/return", { fetch: fetchImpl });
-    expect(JSON.parse(String(calls[0].init?.body))).toMatchObject({
+    await connectionPortalUrl(USER, "https://wylthiq.example/api/brokers/snaptrade/return", null, { fetch: fetchImpl });
+    const body = JSON.parse(String(calls[0].init?.body));
+    expect(body).toMatchObject({
       connectionType: "read",
       customRedirect: "https://wylthiq.example/api/brokers/snaptrade/return",
     });
+    expect(body).not.toHaveProperty("reconnect");
+  });
+
+  it("repairs a disabled connection in place, still read-only", async () => {
+    const { fetchImpl, calls } = answering({ redirectURI: "https://app.snaptrade.com/snapTrade/redeemToken?token=x" });
+    await connectionPortalUrl(USER, "https://wylthiq.example/r", "auth-1", { fetch: fetchImpl });
+    expect(JSON.parse(String(calls[0].init?.body))).toMatchObject({ connectionType: "read", reconnect: "auth-1" });
   });
 
   it("will not send a reader anywhere but SnapTrade's own page", async () => {
     for (const redirectURI of ["https://evil.example/login", "http://app.snaptrade.com/x", "https://snaptrade.com.evil.example/", "nonsense"]) {
       const { fetchImpl } = answering({ redirectURI });
-      await expect(connectionPortalUrl(USER, "https://x.example/r", { fetch: fetchImpl })).rejects.toMatchObject({
+      await expect(connectionPortalUrl(USER, "https://x.example/r", null, { fetch: fetchImpl })).rejects.toMatchObject({
         category: "INVALID_RESPONSE",
       });
     }

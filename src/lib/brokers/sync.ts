@@ -45,6 +45,12 @@ export const SNAPTRADE = "snaptrade";
 const LEASE_EXPIRED = sql`now() - interval '10 minutes'`;
 /** A connection that just failed is not retried by the nightly job for this long. */
 const RETRY_AFTER = sql`now() - interval '1 hour'`;
+/**
+ * SnapTrade asks that an account's trades be read no more than once every 24
+ * hours (its launch checklist). Holdings may be read whenever the reader
+ * syncs; trades wait until a day has passed since they were last read.
+ */
+const SNAPTRADE_TRADES_EVERY_MS = 24 * 60 * 60 * 1000;
 /** More than any reader's holdings; a bound on what one report can write. */
 const MAX_POSITIONS = 300;
 /** Trades added per sync. More arrive on the next one, so a busy year is spread out, not refused. */
@@ -59,6 +65,8 @@ export interface ConnectionDetails {
   accounts?: { id: string; institution: string; description: string }[];
   /** Institutions whose connection could trade, and was therefore removed rather than used. */
   refused?: string[];
+  /** SnapTrade: when its trades were last read, as an ISO time. See SNAPTRADE_TRADES_EVERY_MS. */
+  tradesReadAt?: string;
 }
 
 export type SyncOutcome =
@@ -67,6 +75,8 @@ export type SyncOutcome =
       positions: number;
       tradesAdded: number;
       tradesUpdated: number;
+      /** Whether this sync read trades and brought the journal up to date. */
+      tradesRead: boolean;
       /** Things the reader should know about this sync, in plain words. */
       notes: string[];
     }
@@ -142,7 +152,11 @@ export async function applyReport(
     notes.push("The report has no Open Positions section, so holdings were not updated.");
   }
   if (!report.sections.trades) {
-    notes.push("The report has no Trades section, so no trades were added to the journal.");
+    notes.push(
+      connection.broker === SNAPTRADE
+        ? "Trades are read from SnapTrade once a day, so new ones reach your journal with the next daily sync."
+        : "The report has no Trades section, so no trades were added to the journal.",
+    );
   }
 
   const result = await getDb().transaction(async (tx) => {
@@ -290,7 +304,7 @@ export async function applyReport(
     return { positions, tradesAdded, tradesUpdated };
   });
 
-  return { ok: true, ...result, notes };
+  return { ok: true, ...result, tradesRead: report.sections.positions && report.sections.trades, notes };
 }
 
 /** Records a failure without keeping any of the broker's own wording. */
@@ -320,6 +334,8 @@ export function snapTradeUserFor(connection: BrokerConnection): SnapTradeUser | 
 export async function fetchSnapTrade(
   user: SnapTradeUser,
   deps: SnapTradeDeps = {},
+  previous: ConnectionDetails = {},
+  now = new Date(),
 ): Promise<{ report: BrokerReport; details: ConnectionDetails }> {
   const authorizations = await listAuthorizations(user, deps);
 
@@ -337,19 +353,29 @@ export async function fetchSnapTrade(
   const readable = new Set(kept.map((a) => a.id));
   const accounts = (await listAccounts(user, deps)).filter((account) => readable.has(account.authorizationId));
 
+  // Every account's trades or none: pairing checks the fills against the
+  // holdings, so fills a day behind the holdings they sit beside would pair
+  // wrongly. An account connected since the last read waits for the next one.
+  const lastRead = Date.parse(previous.tradesReadAt ?? "");
+  const readTrades = !Number.isFinite(lastRead) || now.getTime() - lastRead >= SNAPTRADE_TRADES_EVERY_MS;
+
   const data: SnapAccountData[] = [];
   for (const account of accounts) {
     const { positions, asOf } = await accountPositions(user, account.id, deps);
-    const activities = await accountActivities(user, account.id, deps);
+    const activities = readTrades ? await accountActivities(user, account.id, deps) : [];
     data.push({ account, positions, asOf, activities });
   }
 
+  const report = toBrokerReport(data);
   return {
-    report: toBrokerReport(data),
+    report: { ...report, sections: { ...report.sections, trades: readTrades } },
     details: {
       brokerages: kept.map((a) => ({ id: a.id, institution: a.institution, disabled: a.disabled })),
       accounts: accounts.map((a) => ({ id: a.id, institution: a.institution, description: describeAccount(a) })),
       refused,
+      // Only a read that covered an account counts; with none connected yet,
+      // the first one connected is read straight away.
+      tradesReadAt: readTrades && accounts.length > 0 ? now.toISOString() : previous.tradesReadAt,
     },
   };
 }
@@ -395,7 +421,7 @@ export async function syncConnection(connectionId: number, deps: SyncDeps = {}):
       return { ok: false, message: UNREADABLE };
     }
     try {
-      ({ report, details } = await fetchSnapTrade(user, deps.snaptrade));
+      ({ report, details } = await fetchSnapTrade(user, deps.snaptrade, (connection.details ?? {}) as ConnectionDetails));
     } catch (err) {
       const failure = err instanceof SnapTradeError ? err : new SnapTradeError("UNAVAILABLE");
       // SnapTrade no longer knowing this reader is theirs to fix by connecting again.
@@ -442,6 +468,10 @@ export async function syncConnection(connectionId: number, deps: SyncDeps = {}):
  * Skips the ones waiting on their reader — an expired token stays expired
  * however often it is tried — the ones another run holds, and uploaded
  * statements, which only the reader can refresh.
+ *
+ * A SnapTrade connection is due once its trades were last read a day ago,
+ * so every background sync reads them, and a reader's own "Sync now" in
+ * between (holdings only) does not push the next read back.
  */
 export async function connectionsDue(limit: number): Promise<{ id: number; userId: string }[]> {
   return getDb()
@@ -453,7 +483,14 @@ export async function connectionsDue(limit: number): Promise<{ id: number; userI
         sql`${brokerConnections.status} <> 'needs-attention'`,
         or(
           isNull(brokerConnections.lastSyncedAt),
-          lt(brokerConnections.lastSyncedAt, sql`now() - interval '20 hours'`),
+          and(
+            ne(brokerConnections.broker, SNAPTRADE),
+            lt(brokerConnections.lastSyncedAt, sql`now() - interval '20 hours'`),
+          ),
+          and(
+            eq(brokerConnections.broker, SNAPTRADE),
+            sql`coalesce((${brokerConnections.details} ->> 'tradesReadAt')::timestamptz, ${brokerConnections.lastSyncedAt}) < now() - interval '24 hours'`,
+          ),
         ),
         or(isNull(brokerConnections.lastAttemptAt), lt(brokerConnections.lastAttemptAt, RETRY_AFTER)),
         or(isNull(brokerConnections.syncStartedAt), lt(brokerConnections.syncStartedAt, LEASE_EXPIRED)),

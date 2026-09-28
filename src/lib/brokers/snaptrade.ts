@@ -206,16 +206,29 @@ export async function registerUser(userId: string, deps?: SnapTradeDeps): Promis
  * `connectionType` is always "read": this app never asks for a connection
  * that could trade. The address is checked to be SnapTrade's own before it
  * is handed to a browser, so a bad response cannot send a reader elsewhere.
+ *
+ * With `reconnect`, the page repairs that existing connection — one the
+ * broker has disabled — instead of adding a second one beside it, as
+ * SnapTrade asks partners to do.
  */
 export async function connectionPortalUrl(
   user: SnapTradeUser,
   returnTo: string,
+  reconnect: string | null,
   deps?: SnapTradeDeps,
 ): Promise<string> {
   const result = await snaptradeRequest<{ redirectURI?: string }>(
     "POST",
     "/snapTrade/login",
-    { user, body: { connectionType: "read", immediateRedirect: true, customRedirect: returnTo } },
+    {
+      user,
+      body: {
+        connectionType: "read",
+        immediateRedirect: true,
+        customRedirect: returnTo,
+        ...(reconnect ? { reconnect } : {}),
+      },
+    },
     deps,
   );
   let url: URL;

@@ -143,10 +143,12 @@ export default async function TermsPage() {
           used. Synced figures reflect your broker&apos;s last report, usually once a day, and
           may be delayed, incomplete or unable to show some holdings; holdings are valued with
           WylthIQ&apos;s own prices, not your broker&apos;s. Your broker&apos;s own statements are the
-          authoritative record. When you connect through SnapTrade, SnapTrade&apos;s end-user
-          terms also apply to that connection, and you remain responsible for complying with
-          your broker&apos;s terms for sharing your account information. You can disconnect at any
-          time from your account page.
+          authoritative record. When you connect through SnapTrade, you also agree to
+          SnapTrade&apos;s <ExternalLink href={SNAPTRADE_TERMS}>End User Terms</ExternalLink> and{" "}
+          <ExternalLink href={SNAPTRADE_PRIVACY}>Privacy Policy</ExternalLink>, which apply to that
+          connection, and you remain responsible for complying with your broker&apos;s terms for
+          sharing your account information. You can disconnect at any time from your account
+          page.
         </Clause>
 
         <Clause title="AI-generated explanations">
@@ -197,7 +199,7 @@ export default async function TermsPage() {
           <Source name="Twelve Data, Finnhub, Tiingo" role="Share prices and quotes" note="Used under their applicable plans. Provider terms govern access, permitted use and redistribution." href="https://twelvedata.com/terms" />
           <Source name="Alpha Vantage" role="Fundamentals for companies outside SEC coverage" note="Optional — only active if a key is configured. Provider terms govern use." href="https://www.alphavantage.co/terms_of_service/" />
           <Source name="Yahoo Finance" role="International prices and fundamentals" note="Optional and disabled by default. Yahoo publishes terms governing automated access and use; enabled deployments must comply with those terms." href="https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html" />
-          <Source name="SnapTrade" role="Read-only connections to your brokerage account" note="Used only if you connect a broker. You connect on SnapTrade's own page, and SnapTrade's end-user terms apply to that connection." href="https://snaptrade.com/terms-and-conditions" />
+          <Source name="SnapTrade" role="Read-only connections to your brokerage account" note="Used only if you connect a broker. You connect on SnapTrade's own page, and SnapTrade's End User Terms and Privacy Policy apply to that connection." href={SNAPTRADE_TERMS} />
         </ul>
         <p className="mt-4 text-sm leading-relaxed text-muted">
           Coverage is primarily US-listed companies plus Canadian ones that also list in the
@@ -246,9 +248,13 @@ export default async function TermsPage() {
           your journal, where they are your content like any other entry. When you connect
           through SnapTrade, WylthIQ never receives your broker login, password or API key; it
           keeps only an identifier SnapTrade issues for your connection, stored encrypted and
-          never shown back. A statement file you upload is read once and not kept — only the
-          holdings and trades taken from it are. This data is used only to show you your own
-          portfolio and journal, and is never sold or shared for advertising.
+          never shown back. You sign in to your broker on your broker&apos;s own page where it
+          offers one; where it does not, you enter your login on SnapTrade&apos;s page and SnapTrade,
+          not WylthIQ, keeps it, encrypted, under its own privacy policy. WylthIQ tells SnapTrade
+          only a random identifier for your WylthIQ account — not your name or email. A
+          statement file you upload is read once and not kept — only the holdings and trades
+          taken from it are. This data is used only to show you your own portfolio and journal,
+          and is never sold or shared for advertising.
         </Clause>
 
         <Clause title="What stays in your browser">
@@ -276,7 +282,8 @@ export default async function TermsPage() {
           Removing a saved company, screen or journal item deletes that item where the feature
           supports deletion. Disconnecting a broker deletes its stored identifier, holdings and
           trade history from WylthIQ, and a SnapTrade connection also asks SnapTrade to delete
-          what it holds for you; journal trades added from that broker stay unless you choose
+          what it holds for you, apart from records SnapTrade is required by law to keep;
+          journal trades added from that broker stay unless you choose
           to remove them when disconnecting, and a broker trade you delete from your journal is
           not added back. Account deletion and any associated data are subject to the
           deletion controls provided by the service; if a self-service control is unavailable,
@@ -301,7 +308,8 @@ export default async function TermsPage() {
           If AI explanations are enabled, the configured AI provider may process the prompt
           and supplied research context. Stripe may process payments if subscriptions are
           enabled. If you connect a broker through SnapTrade, SnapTrade processes that
-          connection and the account data it relays on WylthIQ&apos;s behalf. Each provider&apos;s
+          connection and the account data it relays on WylthIQ&apos;s behalf, under its{" "}
+          <ExternalLink href={SNAPTRADE_PRIVACY}>Privacy Policy</ExternalLink>. Each provider&apos;s
           applicable terms and privacy policy govern its processing.
         </Clause>
       </Card>
@@ -330,6 +338,17 @@ function Clause({ title, children }: { title: string; children: React.ReactNode 
       <h3 className="text-sm font-semibold">{title}</h3>
       <p className="mt-1.5 text-sm leading-relaxed text-muted-strong">{children}</p>
     </section>
+  );
+}
+
+const SNAPTRADE_TERMS = "https://snaptrade.com/terms-and-conditions";
+const SNAPTRADE_PRIVACY = "https://snaptrade.com/privacy-policy";
+
+function ExternalLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">
+      {children}
+    </a>
   );
 }
 
