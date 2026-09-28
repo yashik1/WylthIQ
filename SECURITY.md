@@ -17,6 +17,14 @@ Worth knowing when judging the impact of a finding:
 - **Saved companies, trade journal entries and saved screens**, each owned by
   one account and scoped by `user_id` in the query itself.
 - **Newsletter subscribers** — email address only, double opt-in.
+- **Broker connections**, each owned by one account and scoped by `user_id` in
+  the query itself: holdings, trade fills and masked account numbers reported by
+  the reader's broker. Connections are read-only — nothing in this app can place
+  an order or move money (`src/lib/brokers/read-only.test.ts` enforces that in
+  CI). Any secret kept for a connection — SnapTrade's per-reader secret, or a
+  Flex token for the allowlisted owner — is encrypted with AES-256-GCM under
+  `BROKER_TOKEN_KEY` and never sent to a browser. No broker login or password
+  is ever received; uploaded statement files are not stored.
 - **No payment details.** Billing is paused, and card data never touches this
   application even when it is switched on; Stripe holds it.
 - **No market data of our own.** Prices come from third-party providers under
