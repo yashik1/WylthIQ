@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AllocationChart } from "@/components/portfolio/allocation-chart";
 import { HoldingForm, RemoveHoldingButton } from "@/components/portfolio/holding-form";
+import { HoldingsMap } from "@/components/portfolio/holdings-map";
 import { LocalTime } from "@/components/local-time";
 import { Badge, Card, CardHeader, EmptyState, MeterBar, PageHeader, RatingBadge } from "@/components/ui";
 import { canAccess, getEntitlement } from "@/lib/billing/entitlement";
@@ -8,6 +10,7 @@ import { listBrokerHoldings } from "@/lib/brokers/queries";
 import { badgeFor } from "@/lib/brokers/report";
 import { calendarDate, percent, price as fmtPrice } from "@/lib/format";
 import { listHoldings } from "@/lib/portfolio/actions";
+import { mapCompanies, type PortfolioChart } from "@/lib/portfolio/charts";
 import type { PortfolioIntelligence } from "@/lib/portfolio/intelligence";
 import { loadPortfolio } from "@/lib/portfolio/load";
 import type { CurrencyTotal } from "@/lib/portfolio/math";
@@ -122,6 +125,24 @@ export default async function PortfolioPage() {
               <TotalCard key={total.currency} total={total} />
             ))}
           </div>
+
+          {mapCompanies(view.chart).length >= 2 && (
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-3 xl:grid-cols-2">
+              <Card>
+                <CardHeader title="Allocation" subtitle={`Where the portfolio's value sits, in ${view.chart.currency}`} />
+                <AllocationChart chart={view.chart} />
+                <ChartNote chart={view.chart} />
+              </Card>
+              <Card>
+                <CardHeader
+                  title="Portfolio map"
+                  subtitle="Each tile is a company, sized by its value and shaded by its gain or loss on cost. Select one to open it."
+                />
+                <HoldingsMap chart={view.chart} />
+                <ChartNote chart={view.chart} />
+              </Card>
+            </div>
+          )}
 
           <Card>
             <CardHeader
@@ -275,6 +296,19 @@ export default async function PortfolioPage() {
         </>
       )}
     </div>
+  );
+}
+
+/** What the charts leave out or convert, said once under each. Nothing when there is nothing to say. */
+function ChartNote({ chart }: { chart: PortfolioChart }) {
+  if (!chart.converted && chart.leftOut === 0) return null;
+  return (
+    <p className="border-t border-border px-5 py-3 text-xs leading-relaxed text-muted">
+      {chart.converted && `Holdings in other currencies are converted to ${chart.currency} at the latest rate.`}
+      {chart.converted && chart.leftOut > 0 && " "}
+      {chart.leftOut > 0 &&
+        `${chart.leftOut} ${chart.leftOut === 1 ? "holding is" : "holdings are"} left out, having no price or exchange rate.`}
+    </p>
   );
 }
 
