@@ -1,7 +1,7 @@
 import { tagText } from "../signals/xml-extract";
 import { elementAttributes, hasSection, statementBlocks, type Attributes } from "./flex-xml";
 import { readCappedText } from "./http";
-import { appSymbol } from "./ibkr-symbols";
+import { appSymbol, appSymbolFromExecution } from "./ibkr-symbols";
 import {
   positionKey,
   skipList,
@@ -473,8 +473,9 @@ export function symbolsByConid(report: BrokerReport): Map<string, string> {
  * close; a Trade Confirmation report has them within minutes of execution.
  * Its rows name no listing exchange, so a contract is named from the
  * statement where it appears there; one the statement has never seen is
- * named only if the row carries its listing exchange after all, and is
- * otherwise left for the statement to bring in, rather than guessed at.
+ * named from the row's listing exchange if it has one, or from the venue the
+ * fill was executed on where that settles the market (see ibkr-symbols.ts),
+ * and is otherwise left for the statement to bring in, rather than guessed at.
  */
 export function parseTradeConfirms(
   xml: string,
@@ -513,17 +514,18 @@ export function parseTradeConfirms(
       if (side === "SELL" && quantity > 0) quantity = -quantity;
       if (side === "BUY" && quantity < 0) quantity = -quantity;
 
+      // Named from the statement where it knows the contract; else from the
+      // row's listing exchange; else from where the fill was executed, when
+      // that settles the market. Otherwise the statement brings it in later.
       let symbol = symbols.get(conid) ?? null;
-      if (!symbol && row.listingExchange && row.symbol) {
-        const mapped = appSymbol({ symbol: row.symbol, listingExchange: row.listingExchange, currency: row.currency });
-        if (!mapped.ok) {
-          skip(row.symbol, mapped.reason);
-          continue;
-        }
-        symbol = mapped.symbol;
+      if (!symbol && row.symbol) {
+        const mapped = row.listingExchange
+          ? appSymbol({ symbol: row.symbol, listingExchange: row.listingExchange, currency: row.currency })
+          : appSymbolFromExecution({ symbol: row.symbol, exchange: row.exchange, currency: row.currency });
+        if (mapped.ok) symbol = mapped.symbol;
       }
       if (!symbol) {
-        skip(row.symbol, "new today; it joins the journal once IBKR's daily statement lists it");
+        skip(row.symbol, "new today, on a venue that does not say which market it lists on; it joins the journal once IBKR's daily statement lists it");
         continue;
       }
 

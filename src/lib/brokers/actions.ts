@@ -30,7 +30,15 @@ import {
   snaptradeConfigured,
   type SnapTradeUser,
 } from "./snaptrade";
-import { applyReport, IBKR_FLEX, readConfirmations, SNAPTRADE, snapTradeUserFor, syncConnection } from "./sync";
+import {
+  applyReport,
+  IBKR_FLEX,
+  readConfirmations,
+  SNAPTRADE,
+  snapTradeUserFor,
+  syncConnection,
+  type ConnectionDetails,
+} from "./sync";
 
 /**
  * Connecting, refreshing and disconnecting a reader's broker.
@@ -293,6 +301,60 @@ async function ownConnection(userId: string, form: FormData) {
   return connection ?? null;
 }
 
+/**
+ * Sets, changes or clears the Trade Confirmation query a Flex token also
+ * reads, without asking for the token again, and reads today's trades with it
+ * straight away. A query that is not a Trade Confirmation query says so in
+ * the result, and the statement's update goes ahead regardless.
+ */
+async function setIbkrConfirmQueryUnguarded(
+  _prev: BrokerActionResult | null,
+  form: FormData,
+): Promise<BrokerActionResult> {
+  const gate = await brokerReader(true);
+  if (denied(gate)) return gate;
+  if (!flexTokenAllowed(gate.email)) {
+    return { ok: false, message: "Connect through SnapTrade or upload a statement instead." };
+  }
+  const limited = await rateLimited(gate.userId);
+  if (limited) return limited;
+
+  const [connection] = await getDb()
+    .select()
+    .from(brokerConnections)
+    .where(and(eq(brokerConnections.userId, gate.userId), eq(brokerConnections.broker, IBKR_FLEX)))
+    .limit(1);
+  if (!connection) return { ok: false, message: "Connect with a Flex token first." };
+
+  const confirmQueryId = String(form.get("confirmQueryId") ?? "").trim();
+  if (confirmQueryId && (!/^\d{1,12}$/.test(confirmQueryId) || confirmQueryId === connection.queryId)) {
+    return {
+      ok: false,
+      message: "The confirmation query ID is the number shown next to a separate Trade Confirmation Flex Query.",
+    };
+  }
+
+  const { confirmQueryId: _previous, ...rest } = (connection.details ?? {}) as ConnectionDetails;
+  void _previous;
+  await getDb()
+    .update(brokerConnections)
+    .set({ details: confirmQueryId ? { ...rest, confirmQueryId } : rest, updatedAt: new Date() })
+    .where(eq(brokerConnections.id, connection.id));
+  if (!confirmQueryId) {
+    refresh();
+    return { ok: true, message: "Today's trades will no longer be read; trades arrive with the daily statement." };
+  }
+
+  const outcome = await syncConnection(connection.id);
+  refresh();
+  if (!outcome.ok) return { ok: false, message: `Saved. ${outcome.message}` };
+  return {
+    ok: true,
+    message: `Saved and synced. ${summarise(outcome.positions, outcome.tradesAdded, outcome.tradesUpdated)}.`,
+    notes: outcome.notes,
+  };
+}
+
 async function syncBrokerNowUnguarded(
   _prev: BrokerActionResult | null,
   form: FormData,
@@ -306,9 +368,10 @@ async function syncBrokerNowUnguarded(
   const since = connection.lastAttemptAt ? (Date.now() - connection.lastAttemptAt.getTime()) / 60_000 : Infinity;
   if (since < RESYNC_MINUTES) {
     const minutes = Math.max(1, Math.floor(since));
+    const wait = Math.max(1, Math.ceil(RESYNC_MINUTES - since));
     return {
       ok: false,
-      message: `Synced ${minutes} minute${minutes === 1 ? "" : "s"} ago. Brokers update these figures once a day, so there is nothing newer yet.`,
+      message: `Synced ${minutes} minute${minutes === 1 ? "" : "s"} ago. You can sync again in ${wait} minute${wait === 1 ? "" : "s"}.`,
     };
   }
 
@@ -422,6 +485,13 @@ export async function removeSnapTradeBrokerage(
 
 export async function connectIbkr(prev: BrokerActionResult | null, form: FormData): Promise<BrokerActionResult> {
   return failsafe("connecting a Flex token", () => connectIbkrUnguarded(prev, form));
+}
+
+export async function setIbkrConfirmQuery(
+  prev: BrokerActionResult | null,
+  form: FormData,
+): Promise<BrokerActionResult> {
+  return failsafe("setting the confirmation query", () => setIbkrConfirmQueryUnguarded(prev, form));
 }
 
 export async function syncBrokerNow(prev: BrokerActionResult | null, form: FormData): Promise<BrokerActionResult> {

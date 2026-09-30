@@ -197,3 +197,29 @@ describe("when the confirmation report cannot be read", () => {
     expect(note).not.toContain("123456789012345678901234");
   });
 });
+
+describe("naming a stock first bought today", () => {
+  const row = (attrs: string) =>
+    `<FlexQueryResponse type="TCF"><FlexStatements><FlexStatement accountId="U1"><TradeConfirms>` +
+    `<TradeConfirm accountId="U1" assetCategory="STK" tradeDate="20260930" dateTime="20260930;100000" quantity="10" buySell="BUY" price="10" ibExecID="e1" levelOfDetail="EXECUTION" ${attrs} />` +
+    `</TradeConfirms></FlexStatement></FlexStatements></FlexQueryResponse>`;
+  const read = (attrs: string) => parseTradeConfirms(row(attrs), { after: "2026-09-29", symbols: new Map() });
+
+  it("reads a US listing from a US venue in dollars", () => {
+    expect(read(`symbol="PLTR" conid="1" currency="USD" exchange="ISLAND"`).executions[0].symbol).toBe("PLTR");
+    expect(read(`symbol="BRK B" conid="2" currency="USD" exchange="NYSE"`).executions[0].symbol).toBe("BRK.B");
+  });
+
+  it("reads Toronto and the Venture only from their own exchanges", () => {
+    expect(read(`symbol="RY" conid="3" currency="CAD" exchange="TSE"`).executions[0].symbol).toBe("RY.TO");
+    expect(read(`symbol="ABC" conid="4" currency="CAD" exchange="VENTURE"`).executions[0].symbol).toBe("ABC.V");
+    // An alternative venue trades both markets, so it settles neither.
+    expect(read(`symbol="RY" conid="5" currency="CAD" exchange="CHIX"`).executions).toEqual([]);
+  });
+
+  it("leaves a fill whose venue and currency disagree for the statement", () => {
+    const { executions, skipped } = read(`symbol="SHOP" conid="6" currency="CAD" exchange="ISLAND"`);
+    expect(executions).toEqual([]);
+    expect(skipped[0].reason).toContain("daily statement");
+  });
+});

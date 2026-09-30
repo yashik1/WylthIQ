@@ -7,6 +7,7 @@ import {
   connectIbkr,
   disconnectBroker,
   removeSnapTradeBrokerage,
+  setIbkrConfirmQuery,
   startSnapTradeConnect,
   syncBrokerNow,
   type BrokerActionResult,
@@ -424,6 +425,32 @@ function FlexTokenForm({ replacing }: { replacing: boolean }) {
   );
 }
 
+/** The Trade Confirmation query, set or changed without pasting the token again. */
+function ConfirmQueryForm({ current }: { current: string | undefined }) {
+  const [state, action, pending] = useActionState(setIbkrConfirmQuery, null);
+  return (
+    <form action={action} className="space-y-2">
+      <label htmlFor="ibkr-confirm-set" className="text-xs text-muted">
+        Trade Confirmation query ID, for today&apos;s trades
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          id="ibkr-confirm-set"
+          name="confirmQueryId"
+          defaultValue={current ?? ""}
+          inputMode="numeric"
+          autoComplete="off"
+          className={cn(input, "mt-0 w-40")}
+        />
+        <button type="submit" disabled={pending} className={button}>
+          {pending ? "Reading today's trades…" : "Save and sync"}
+        </button>
+      </div>
+      <Result state={state} />
+    </form>
+  );
+}
+
 function FlexTokenSection({ connection }: { connection: ConnectionView | undefined }) {
   return (
     <Section title="Connect with a Flex token (your account only)">
@@ -459,8 +486,9 @@ function FlexTokenSection({ connection }: { connection: ConnectionView | undefin
           <p className="text-sm text-muted">
             {connection.details.confirmQueryId
               ? `Today's trades from confirmation query ${connection.details.confirmQueryId}, read every few hours and whenever you sync.`
-              : "Trades appear once IBKR's daily statement has them. Add a Trade Confirmation query below to see today's."}
+              : "Trades appear once IBKR's daily statement has them. Add a Trade Confirmation query to see today's."}
           </p>
+          <ConfirmQueryForm current={connection.details.confirmQueryId} />
           <Status connection={connection} />
           <div className="flex flex-wrap items-start gap-4">
             <SyncButton broker="ibkr-flex" />
