@@ -11,7 +11,8 @@ export const dynamic = "force-dynamic";
  * Refreshes connected brokers, a few at a time.
  *
  * Meant to be called every hour. Each call syncs the handful of connections
- * whose last sync is oldest and more than 20 hours old, one after another, so
+ * that are due — a day since the last sync, or a few hours for a Flex token
+ * that also reads today's trade confirmations — oldest first, one after another, so
  * the day's work spreads across the day instead of arriving at IBKR as one
  * burst — and so a single call stays well inside a request timeout, since one
  * report can take the better part of a minute to generate.

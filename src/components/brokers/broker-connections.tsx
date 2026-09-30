@@ -41,6 +41,7 @@ export interface ConnectionView {
     brokerages?: { id: string; institution: string; disabled: boolean }[];
     accounts?: { id: string; institution: string; description: string }[];
     refused?: string[];
+    confirmQueryId?: string;
   };
 }
 
@@ -397,9 +398,21 @@ function FlexTokenForm({ replacing }: { replacing: boolean }) {
         </div>
         <div>
           <label htmlFor="ibkr-query" className="text-xs text-muted">
-            Flex query ID
+            Activity Flex query ID
           </label>
           <input id="ibkr-query" name="queryId" inputMode="numeric" autoComplete="off" required className={input} />
+        </div>
+        <div className="sm:col-span-2">
+          <label htmlFor="ibkr-confirm-query" className="text-xs text-muted">
+            Trade Confirmation query ID <span className="text-faint">(optional, for today&apos;s trades)</span>
+          </label>
+          <input
+            id="ibkr-confirm-query"
+            name="confirmQueryId"
+            inputMode="numeric"
+            autoComplete="off"
+            className={cn(input, "sm:max-w-[calc(50%-0.375rem)]")}
+          />
         </div>
       </div>
       <HistoryChoice />
@@ -418,6 +431,24 @@ function FlexTokenSection({ connection }: { connection: ConnectionView | undefin
         Shown only to the addresses listed in this server&apos;s settings. The token can only download reports; it is
         stored encrypted and never shown again.
       </p>
+      <ol className="list-decimal space-y-1.5 pl-5 text-sm leading-relaxed text-muted">
+        <li>
+          In IBKR&apos;s Client Portal, open <strong>Performance &amp; Reports → Flex Queries</strong> and create an{" "}
+          <strong>Activity Flex Query</strong> with <strong>Open Positions</strong> (Summary level) and{" "}
+          <strong>Trades</strong> (Execution level), every field selected, format <strong>XML</strong>, period{" "}
+          <strong>Last 365 Calendar Days</strong>, date format left as <strong>yyyyMMdd</strong>.
+        </li>
+        <li>
+          For today&apos;s trades, also create a <strong>Trade Confirmation Flex Query</strong> with{" "}
+          <strong>Executions</strong>, every field selected, format <strong>XML</strong>, period{" "}
+          <strong>Last 7 Calendar Days</strong> (or <strong>Today</strong>), date format <strong>yyyyMMdd</strong>.
+          The Activity statement only has a day&apos;s trades a few hours after the close; this one has them within
+          minutes, and the statement takes over once it has the day.
+        </li>
+        <li>
+          Under <strong>Flex Web Service</strong> in the same settings, switch the service on and copy the token.
+        </li>
+      </ol>
       {connection ? (
         <div className="space-y-4">
           <p className="text-sm text-muted">
@@ -425,13 +456,18 @@ function FlexTokenSection({ connection }: { connection: ConnectionView | undefin
             {(connection.details.accounts ?? []).length > 0 &&
               ` · ${connection.details.accounts!.map((a) => a.description).join(", ")}`}
           </p>
+          <p className="text-sm text-muted">
+            {connection.details.confirmQueryId
+              ? `Today's trades from confirmation query ${connection.details.confirmQueryId}, read every few hours and whenever you sync.`
+              : "Trades appear once IBKR's daily statement has them. Add a Trade Confirmation query below to see today's."}
+          </p>
           <Status connection={connection} />
           <div className="flex flex-wrap items-start gap-4">
             <SyncButton broker="ibkr-flex" />
             <DisconnectForm broker="ibkr-flex" linkedTrades={connection.linkedTrades} label="Disconnect" />
           </div>
           <details open={connection.status === "needs-attention"}>
-            <summary className="cursor-pointer text-sm text-muted">Replace the token or query</summary>
+            <summary className="cursor-pointer text-sm text-muted">Replace the token or queries</summary>
             <div className="mt-3">
               <FlexTokenForm replacing />
             </div>

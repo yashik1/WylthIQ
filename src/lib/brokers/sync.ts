@@ -1,4 +1,4 @@
-import { and, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, eq, isNull, like, lt, lte, ne, or, sql } from "drizzle-orm";
 import { getDb } from "../db";
 import {
   brokerConnections,
@@ -9,7 +9,17 @@ import {
   type BrokerConnection,
 } from "../db/schema";
 import { decryptToken } from "./crypto";
-import { downloadFlexReport, FLEX_ERROR_WORDS, FlexError, parseFlexReport, type FlexDeps } from "./ibkr-flex";
+import { holdingsAfterLaterFills, matchProvisional, withConfirmations } from "./confirmations";
+import {
+  CONFIRMATION_PREFIX,
+  downloadFlexReport,
+  FLEX_ERROR_WORDS,
+  FlexError,
+  parseFlexReport,
+  parseTradeConfirms,
+  symbolsByConid,
+  type FlexDeps,
+} from "./ibkr-flex";
 import { planJournalWrites, type ExistingLink } from "./journal-plan";
 import { BROKERS, isBrokerKind, positionKey, type BrokerReport, type SkippedItem } from "./report";
 import { pairRoundTrips } from "./round-trips";
@@ -67,6 +77,11 @@ export interface ConnectionDetails {
   refused?: string[];
   /** SnapTrade: when its trades were last read, as an ISO time. See SNAPTRADE_TRADES_EVERY_MS. */
   tradesReadAt?: string;
+  /**
+   * IBKR Flex token: the Trade Confirmation query read for today's fills,
+   * which the Activity statement only has after the day is processed.
+   */
+  confirmQueryId?: string;
 }
 
 export type SyncOutcome =
@@ -147,6 +162,7 @@ export async function applyReport(
   const notes: string[] = [];
   const skipped: SkippedItem[] = [...report.skipped];
   const family = linkFamily(connection);
+  const previousDetails = (connection.details ?? {}) as ConnectionDetails;
 
   if (!report.sections.positions) {
     notes.push("The report has no Open Positions section, so holdings were not updated.");
@@ -160,6 +176,52 @@ export async function applyReport(
   }
 
   const result = await getDb().transaction(async (tx) => {
+    // Fills confirmed before the statement had them give way to the
+    // statement's copies once it covers their day; a journal trade one of
+    // them opened is re-pointed at the statement's copy. See confirmations.ts.
+    if (report.sections.trades && report.toDate) {
+      const covered = await tx
+        .select()
+        .from(brokerExecutions)
+        .where(
+          and(
+            eq(brokerExecutions.connectionId, connection.id),
+            like(brokerExecutions.externalId, `${CONFIRMATION_PREFIX}%`),
+            lte(brokerExecutions.tradeDate, report.toDate),
+          ),
+        );
+      for (const { provisionalId, statementId } of matchProvisional(covered, report.executions)) {
+        const fill = covered.find((c) => c.externalId === provisionalId)!;
+        if (statementId) {
+          const [taken] = await tx
+            .select({ id: brokerTradeLinks.id })
+            .from(brokerTradeLinks)
+            .where(
+              and(
+                eq(brokerTradeLinks.userId, connection.userId),
+                eq(brokerTradeLinks.broker, family),
+                eq(brokerTradeLinks.accountId, fill.accountId),
+                eq(brokerTradeLinks.openingExternalId, statementId),
+              ),
+            );
+          if (!taken) {
+            await tx
+              .update(brokerTradeLinks)
+              .set({ openingExternalId: statementId })
+              .where(
+                and(
+                  eq(brokerTradeLinks.userId, connection.userId),
+                  eq(brokerTradeLinks.broker, family),
+                  eq(brokerTradeLinks.accountId, fill.accountId),
+                  eq(brokerTradeLinks.openingExternalId, provisionalId),
+                ),
+              );
+          }
+        }
+        await tx.delete(brokerExecutions).where(eq(brokerExecutions.id, fill.id));
+      }
+    }
+
     for (const batch of chunks(report.executions, INSERT_CHUNK)) {
       await tx
         .insert(brokerExecutions)
@@ -202,7 +264,7 @@ export async function applyReport(
         .select()
         .from(brokerExecutions)
         .where(eq(brokerExecutions.connectionId, connection.id));
-      const roundTrips = pairRoundTrips(fills, report.reportedQuantities);
+      const roundTrips = pairRoundTrips(fills, holdingsAfterLaterFills(report.reportedQuantities, fills, report.toDate));
 
       const linkRows = await tx
         .select({
@@ -294,6 +356,8 @@ export async function applyReport(
             institution: report.positions.find((p) => p.accountId === id)?.label ?? BROKERS["ibkr-flex"].label,
             description: maskAccount(id),
           })),
+          // A setting the reader chose, kept across syncs.
+          ...(previousDetails.confirmQueryId ? { confirmQueryId: previousDetails.confirmQueryId } : {}),
         },
         lastSyncedAt: new Date(),
         syncStartedAt: null,
@@ -380,6 +444,32 @@ export async function fetchSnapTrade(
   };
 }
 
+/**
+ * A Flex statement with today's fills from the Trade Confirmation query added.
+ *
+ * The statement stands on its own: a confirmation report that cannot be read
+ * leaves it as it was, with a note, rather than failing the sync.
+ */
+export async function readConfirmations(
+  token: string,
+  confirmQueryId: string,
+  report: BrokerReport,
+  deps?: FlexDeps,
+): Promise<{ report: BrokerReport; note: string | null }> {
+  try {
+    const xml = await downloadFlexReport(token, confirmQueryId, deps);
+    const confirms = parseTradeConfirms(xml, { after: report.toDate, symbols: symbolsByConid(report) });
+    return { report: withConfirmations(report, confirms), note: null };
+  } catch (err) {
+    const category = err instanceof FlexError ? err.category : "UNAVAILABLE";
+    const why =
+      category === "QUERY"
+        ? "Check that the confirmation query is a Trade Confirmation Flex Query in XML format."
+        : FLEX_ERROR_WORDS[category];
+    return { report, note: `Today's trades could not be read. ${why} Holdings and earlier trades were updated.` };
+  }
+}
+
 export interface SyncDeps {
   flex?: FlexDeps;
   snaptrade?: SnapTradeDeps;
@@ -413,6 +503,7 @@ export async function syncConnection(connectionId: number, deps: SyncDeps = {}):
 
   let report: BrokerReport;
   let details: ConnectionDetails | undefined;
+  const extraNotes: string[] = [];
 
   if (connection.broker === SNAPTRADE) {
     const user = snapTradeUserFor(connection);
@@ -450,10 +541,17 @@ export async function syncConnection(connectionId: number, deps: SyncDeps = {}):
       );
       return { ok: false, message: FLEX_ERROR_WORDS[failure.category] };
     }
+    const confirmQueryId = ((connection.details ?? {}) as ConnectionDetails).confirmQueryId;
+    if (confirmQueryId) {
+      const confirmed = await readConfirmations(token, confirmQueryId, report, deps.flex);
+      report = confirmed.report;
+      if (confirmed.note) extraNotes.push(confirmed.note);
+    }
   }
 
   try {
-    return await applyReport(connection, report, details);
+    const outcome = await applyReport(connection, report, details);
+    return outcome.ok ? { ...outcome, notes: [...extraNotes, ...outcome.notes] } : outcome;
   } catch (err) {
     // The database's own message can name tables and values; only its class is logged.
     console.error("[brokers] applying a report failed:", err instanceof Error ? err.name : "unknown");
@@ -486,6 +584,12 @@ export async function connectionsDue(limit: number): Promise<{ id: number; userI
           and(
             ne(brokerConnections.broker, SNAPTRADE),
             lt(brokerConnections.lastSyncedAt, sql`now() - interval '20 hours'`),
+          ),
+          // Reading today's fills: every few hours, the most IBKR suggests for these reports.
+          and(
+            eq(brokerConnections.broker, IBKR_FLEX),
+            sql`${brokerConnections.details} ->> 'confirmQueryId' is not null`,
+            lt(brokerConnections.lastSyncedAt, sql`now() - interval '3 hours'`),
           ),
           and(
             eq(brokerConnections.broker, SNAPTRADE),
