@@ -14,8 +14,8 @@ import {
   CONFIRMATION_PREFIX,
   downloadFlexReport,
   isProvisional,
-  FLEX_ERROR_WORDS,
   FlexError,
+  flexErrorWords,
   parseFlexReport,
   parseTradeConfirms,
   symbolsByConid,
@@ -467,8 +467,8 @@ export async function readConfirmations(
     const failure = err instanceof FlexError ? (err.code ?? err.category) : "UNAVAILABLE";
     const why =
       category === "QUERY"
-        ? "Check that the confirmation query is a Trade Confirmation Flex Query in XML format."
-        : FLEX_ERROR_WORDS[category];
+        ? `Check that the confirmation query is a Trade Confirmation Flex Query in XML format.${failure !== "QUERY" ? ` (IBKR code ${failure})` : ""}`
+        : flexErrorWords(err);
     return {
       report,
       note: `Today's trades could not be read. ${why} Holdings and earlier trades were updated.`,
@@ -546,7 +546,7 @@ export async function syncConnection(connectionId: number, deps: SyncDeps = {}):
         failure.needsAttention ? "needs-attention" : "error",
         failure.code ?? failure.category,
       );
-      return { ok: false, message: FLEX_ERROR_WORDS[failure.category] };
+      return { ok: false, message: flexErrorWords(failure) };
     }
     const confirmQueryId = ((connection.details ?? {}) as ConnectionDetails).confirmQueryId;
     if (confirmQueryId) {

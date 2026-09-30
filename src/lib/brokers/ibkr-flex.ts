@@ -80,6 +80,13 @@ export const FLEX_ERROR_WORDS: Record<FlexErrorCategory, string> = {
   INVALID_RESPONSE: "IBKR sent back something that was not a Flex report.",
 };
 
+/** What to tell the reader about a Flex failure, with IBKR's own code when it gave one, so it can be looked up. */
+export function flexErrorWords(err: unknown): string {
+  const category = err instanceof FlexError ? err.category : "UNAVAILABLE";
+  const code = err instanceof FlexError ? err.code : null;
+  return code ? `${FLEX_ERROR_WORDS[category]} (IBKR code ${code})` : FLEX_ERROR_WORDS[category];
+}
+
 export class FlexError extends Error {
   constructor(
     readonly category: FlexErrorCategory,
