@@ -6,6 +6,7 @@ vi.mock("@/lib/brokers/actions", () => ({
   connectIbkr: vi.fn(),
   disconnectBroker: vi.fn(),
   removeSnapTradeBrokerage: vi.fn(),
+  setIbkrConfirmQuery: vi.fn(),
   startSnapTradeConnect: vi.fn(),
   syncBrokerNow: vi.fn(),
 }));
@@ -101,6 +102,8 @@ describe("the connected-broker card", () => {
       <BrokerConnections unavailable={false} connections={[flex]} snaptradeAvailable showFlexToken returned={null} />,
     );
     expect(html).toContain("confirmation query 222");
+    // Changed right there, without pasting the token again.
+    expect(html).toMatch(/id="ibkr-confirm-set"[^>]*value="222"|value="222"[^>]*id="ibkr-confirm-set"/);
     const without = renderToStaticMarkup(
       <BrokerConnections
         unavailable={false}

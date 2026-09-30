@@ -54,3 +54,42 @@ export function appSymbol(listing: IbkrListing): MappedSymbol {
   if (!market || !currencyFits(market, listing.currency)) return { ok: false, reason: OUTSIDE_COVERAGE };
   return formatTicker(listing.symbol, market);
 }
+
+/**
+ * Where IBKR executes trades in US-listed shares: the exchanges above plus the
+ * other US venues and IBKR's own ATS. A Trade Confirmation row names only
+ * where a fill happened, not where the security lists; a USD fill on one of
+ * these can only be a US listing.
+ */
+const US_EXECUTION_VENUES = new Set([
+  ...US_VENUES,
+  "ISLAND",
+  "BYX",
+  "BEX",
+  "EDGX",
+  "EDGEA",
+  "DRCTEDGE",
+  "PSX",
+  "MEMX",
+  "PEARL",
+  "LTSE",
+  "CHX",
+  "IBKRATS",
+  "IBEOS",
+  "OVERNIGHT",
+  "DARK",
+]);
+
+/**
+ * A listing named from where a fill was executed, for rows that give no
+ * listing exchange. Only the venues that settle the market do: any US venue
+ * in USD, and in CAD only Toronto's and the Venture's own exchanges — the
+ * Canadian alternative venues trade both, so they settle nothing.
+ */
+export function appSymbolFromExecution(fill: { symbol: string; exchange: string | undefined; currency: string | undefined }): MappedSymbol {
+  const venue = fill.exchange?.trim().toUpperCase() ?? "";
+  const market: Market | null = US_EXECUTION_VENUES.has(venue) ? "US" : (CANADIAN_VENUES[venue] ?? null);
+  if (!market || !currencyFits(market, fill.currency)) return { ok: false, reason: OUTSIDE_COVERAGE };
+  return formatTicker(fill.symbol, market);
+}
+

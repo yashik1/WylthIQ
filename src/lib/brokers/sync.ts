@@ -13,6 +13,7 @@ import { holdingsAfterLaterFills, matchProvisional, withConfirmations } from "./
 import {
   CONFIRMATION_PREFIX,
   downloadFlexReport,
+  isProvisional,
   FLEX_ERROR_WORDS,
   FlexError,
   parseFlexReport,
@@ -373,6 +374,7 @@ export async function applyReport(
 
 /** Records a failure without keeping any of the broker's own wording. */
 async function recordFailure(connectionId: number, status: "needs-attention" | "error", code: string) {
+  console.warn(`[brokers] sync of #${connectionId} failed: ${code}`);
   await getDb()
     .update(brokerConnections)
     .set({ status, lastErrorCode: code, syncStartedAt: null, updatedAt: new Date() })
@@ -455,18 +457,23 @@ export async function readConfirmations(
   confirmQueryId: string,
   report: BrokerReport,
   deps?: FlexDeps,
-): Promise<{ report: BrokerReport; note: string | null }> {
+): Promise<{ report: BrokerReport; note: string | null; failure?: string }> {
   try {
     const xml = await downloadFlexReport(token, confirmQueryId, deps);
     const confirms = parseTradeConfirms(xml, { after: report.toDate, symbols: symbolsByConid(report) });
     return { report: withConfirmations(report, confirms), note: null };
   } catch (err) {
     const category = err instanceof FlexError ? err.category : "UNAVAILABLE";
+    const failure = err instanceof FlexError ? (err.code ?? err.category) : "UNAVAILABLE";
     const why =
       category === "QUERY"
         ? "Check that the confirmation query is a Trade Confirmation Flex Query in XML format."
         : FLEX_ERROR_WORDS[category];
-    return { report, note: `Today's trades could not be read. ${why} Holdings and earlier trades were updated.` };
+    return {
+      report,
+      note: `Today's trades could not be read. ${why} Holdings and earlier trades were updated.`,
+      failure,
+    };
   }
 }
 
@@ -546,11 +553,22 @@ export async function syncConnection(connectionId: number, deps: SyncDeps = {}):
       const confirmed = await readConfirmations(token, confirmQueryId, report, deps.flex);
       report = confirmed.report;
       if (confirmed.note) extraNotes.push(confirmed.note);
+      if (confirmed.failure) console.warn(`[brokers] confirmations for #${connection.id} not read: ${confirmed.failure}`);
     }
   }
 
   try {
     const outcome = await applyReport(connection, report, details);
+    if (outcome.ok) {
+      // Counts only: what came in and what changed, never an amount or a name.
+      const confirmed = report.executions.filter((e) => isProvisional(e.externalId)).length;
+      console.info(
+        `[brokers] synced ${connection.broker} #${connection.id}: statement to ${report.toDate ?? "?"}, ` +
+          `${report.executions.length} fills read (${confirmed} from today's confirmations), ` +
+          `${outcome.positions} holdings, ${outcome.tradesAdded} trades added, ${outcome.tradesUpdated} updated, ` +
+          `${report.skipped.length} not shown, ${extraNotes.length + outcome.notes.length} notes`,
+      );
+    }
     return outcome.ok ? { ...outcome, notes: [...extraNotes, ...outcome.notes] } : outcome;
   } catch (err) {
     // The database's own message can name tables and values; only its class is logged.
