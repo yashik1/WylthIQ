@@ -262,6 +262,15 @@ Positions** at Summary level, **Trades** at Execution level, every field, format
 and uploads the XML on `/account`. A statement older than the one already loaded is
 refused, so an old file never puts back holdings since sold.
 
+**How fresh the trades are.** Every route above reads IBKR's daily Activity statement,
+which has a day's trades only a few hours after the close; through SnapTrade, IBKR's
+trades arrive the day after they happen. The **Flex token** route can also read a
+**Trade Confirmation Flex Query** (Executions, every field, XML, period Last 7 Calendar
+Days or Today), which IBKR fills within minutes of each execution. Those fills are added
+to the journal at once, stored as provisional; when a later statement covers their day,
+the statement's copy takes their place and any journal trade they opened stays linked
+to it. A token with a confirmation query is synced every three hours instead of daily.
+
 **It cannot trade or move money.**
 
 - SnapTrade connections are only ever requested read-only (`connectionType: "read"`),

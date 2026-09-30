@@ -8,6 +8,7 @@ import {
   type BrokerReport,
   type ReportExecution,
   type ReportPosition,
+  type SkippedItem,
 } from "./report";
 
 /**
@@ -441,4 +442,111 @@ export function parseFlexReport(xml: string): BrokerReport {
     reportedQuantities,
     sections: { positions: hasPositions, trades: hasTrades },
   };
+}
+
+/* ------------------------------------------------------ trade confirmations */
+
+/**
+ * Marks a fill read from a Trade Confirmation report. Such a fill is
+ * provisional: the Activity statement is the record, and once a statement
+ * covers the fill's day the provisional copy gives way to the statement's.
+ */
+export const CONFIRMATION_PREFIX = "tc:";
+
+export function isProvisional(externalId: string): boolean {
+  return externalId.startsWith(CONFIRMATION_PREFIX);
+}
+
+/** The app's symbol for every IBKR contract a statement names, held or traded. */
+export function symbolsByConid(report: BrokerReport): Map<string, string> {
+  const symbols = new Map<string, string>();
+  for (const p of report.positions) symbols.set(p.conid, p.symbol);
+  for (const e of report.executions) symbols.set(e.conid, e.symbol);
+  return symbols;
+}
+
+/**
+ * The fills from a Trade Confirmation Flex report that the Activity statement
+ * does not have yet: those after its last day.
+ *
+ * IBKR adds a day's trades to the Activity statement a few hours after the
+ * close; a Trade Confirmation report has them within minutes of execution.
+ * Its rows name no listing exchange, so a contract is named from the
+ * statement where it appears there; one the statement has never seen is
+ * named only if the row carries its listing exchange after all, and is
+ * otherwise left for the statement to bring in, rather than guessed at.
+ */
+export function parseTradeConfirms(
+  xml: string,
+  { after, symbols }: { after: string | null; symbols: Map<string, string> },
+): { executions: ReportExecution[]; skipped: SkippedItem[] } {
+  if (!xml.includes("<FlexQueryResponse")) throw new FlexError("INVALID_RESPONSE");
+  const blocks = statementBlocks(xml);
+  if (!blocks.some((block) => hasSection(block.body, "TradeConfirms"))) throw new FlexError("QUERY");
+
+  const skipped = skipList();
+  const skip = skipped.add;
+  const executions: ReportExecution[] = [];
+
+  for (const block of blocks) {
+    const accountId = block.attributes.accountId?.trim();
+    if (!accountId) continue;
+
+    for (const row of pickLevel(elementAttributes(block.body, "TradeConfirm"), ["EXECUTION", "ORDER"])) {
+      const tradeDate = flexDate(row.tradeDate) ?? flexDate(row.dateTime);
+      // The statement's own days are the statement's to report.
+      if (!tradeDate || (after && tradeDate <= after)) continue;
+      if (row.assetCategory?.toUpperCase() !== "STK") {
+        skip(row.symbol, "not a stock or fund, so not added to the journal");
+        continue;
+      }
+
+      const id = row.ibExecID?.trim() || row.execID?.trim() || row.tradeID?.trim();
+      const conid = row.conid?.trim();
+      const price = number(row.tradePrice) ?? number(row.price);
+      let quantity = number(row.quantity);
+      if (!id || !conid || price === null || price <= 0 || !quantity || !row.currency?.trim()) {
+        skip(row.symbol, "a fill the report did not fully describe");
+        continue;
+      }
+      const side = row.buySell?.trim().toUpperCase();
+      if (side === "SELL" && quantity > 0) quantity = -quantity;
+      if (side === "BUY" && quantity < 0) quantity = -quantity;
+
+      let symbol = symbols.get(conid) ?? null;
+      if (!symbol && row.listingExchange && row.symbol) {
+        const mapped = appSymbol({ symbol: row.symbol, listingExchange: row.listingExchange, currency: row.currency });
+        if (!mapped.ok) {
+          skip(row.symbol, mapped.reason);
+          continue;
+        }
+        symbol = mapped.symbol;
+      }
+      if (!symbol) {
+        skip(row.symbol, "new today; it joins the journal once IBKR's daily statement lists it");
+        continue;
+      }
+
+      executions.push({
+        accountId,
+        conid,
+        externalId: `${CONFIRMATION_PREFIX}${id}`,
+        symbol,
+        quantity,
+        price,
+        commission: Math.abs(number(row.ibCommission) ?? number(row.commission) ?? 0),
+        commissionCurrency:
+          (row.ibCommissionCurrency ?? row.commissionCurrency)?.trim().toUpperCase() || null,
+        currency: row.currency.trim().toUpperCase(),
+        tradeDate,
+        executedAt: flexDateTime(
+          row.dateTime ?? (row.tradeTime ? `${row.tradeDate};${row.tradeTime}` : undefined),
+          tradeDate,
+        ),
+        label: INSTITUTION,
+      });
+    }
+  }
+
+  return { executions, skipped: skipped.list() };
 }

@@ -30,7 +30,7 @@ import {
   snaptradeConfigured,
   type SnapTradeUser,
 } from "./snaptrade";
-import { applyReport, IBKR_FLEX, SNAPTRADE, snapTradeUserFor, syncConnection } from "./sync";
+import { applyReport, IBKR_FLEX, readConfirmations, SNAPTRADE, snapTradeUserFor, syncConnection } from "./sync";
 
 /**
  * Connecting, refreshing and disconnecting a reader's broker.
@@ -199,12 +199,19 @@ async function connectIbkrUnguarded(
 
   const token = String(form.get("token") ?? "").trim();
   const queryId = String(form.get("queryId") ?? "").trim();
+  const confirmQueryId = String(form.get("confirmQueryId") ?? "").trim();
 
   if (!/^[A-Za-z0-9]{10,64}$/.test(token)) {
     return { ok: false, message: "That does not look like a Flex Web Service token. Copy the whole “Current Token”." };
   }
   if (!/^\d{1,12}$/.test(queryId)) {
     return { ok: false, message: "The query ID is the number shown next to your Flex query." };
+  }
+  if (confirmQueryId && (!/^\d{1,12}$/.test(confirmQueryId) || confirmQueryId === queryId)) {
+    return {
+      ok: false,
+      message: "The confirmation query ID is the number shown next to a separate Trade Confirmation Flex Query.",
+    };
   }
 
   // Checked against IBKR before anything is stored, so a mistyped token is
@@ -226,6 +233,11 @@ async function connectIbkrUnguarded(
   const notes: string[] = [];
   const warning = await duplicateWarning(gate.userId);
   if (warning) notes.push(warning);
+  if (confirmQueryId) {
+    const confirmed = await readConfirmations(token, confirmQueryId, report);
+    report = confirmed.report;
+    if (confirmed.note) notes.push(confirmed.note);
+  }
 
   const now = new Date();
   const values = {
@@ -237,6 +249,7 @@ async function connectIbkrUnguarded(
     status: "ok",
     lastErrorCode: null,
     journalSince: journalSinceFrom(form),
+    details: confirmQueryId ? { confirmQueryId } : {},
     lastAttemptAt: now,
     syncStartedAt: null,
     updatedAt: now,

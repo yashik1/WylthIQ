@@ -74,6 +74,45 @@ describe("the connected-broker card", () => {
     expect(html).toContain("next daily sync");
   });
 
+  it("offers your own Flex token a Trade Confirmation query for today's trades", () => {
+    const html = renderToStaticMarkup(
+      <BrokerConnections unavailable={false} connections={[]} snaptradeAvailable showFlexToken returned={null} />,
+    );
+    expect(html).toContain('name="confirmQueryId"');
+    expect(html).toContain("Trade Confirmation Flex Query");
+  });
+
+  it("says where today's trades come from once a confirmation query is set", () => {
+    const flex = {
+      broker: "ibkr-flex" as const,
+      status: "ok" as const,
+      lastErrorCode: null,
+      statementToDate: "2026-09-29",
+      lastSyncedAt: null,
+      positions: 1,
+      linkedTrades: 0,
+      journalSince: "2026-01-01",
+      tokenHint: "1234",
+      queryId: "111",
+      skipped: [],
+      details: { confirmQueryId: "222" },
+    };
+    const html = renderToStaticMarkup(
+      <BrokerConnections unavailable={false} connections={[flex]} snaptradeAvailable showFlexToken returned={null} />,
+    );
+    expect(html).toContain("confirmation query 222");
+    const without = renderToStaticMarkup(
+      <BrokerConnections
+        unavailable={false}
+        connections={[{ ...flex, details: {} }]}
+        snaptradeAvailable
+        showFlexToken
+        returned={null}
+      />,
+    );
+    expect(without).toContain("Add a Trade Confirmation query");
+  });
+
   it("explains a return from SnapTrade that could not be completed", () => {
     const html = renderToStaticMarkup(
       <BrokerConnections unavailable={false} connections={[]} snaptradeAvailable showFlexToken={false} returned="unavailable" />,
