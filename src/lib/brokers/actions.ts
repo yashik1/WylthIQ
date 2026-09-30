@@ -17,7 +17,7 @@ import {
   summarise,
   type BrokerResult,
 } from "./gate";
-import { downloadFlexReport, FLEX_ERROR_WORDS, FlexError, parseFlexReport } from "./ibkr-flex";
+import { downloadFlexReport, FlexError, flexErrorWords, parseFlexReport } from "./ibkr-flex";
 import { BROKERS, isBrokerKind, type BrokerReport } from "./report";
 import {
   connectionPortalUrl,
@@ -228,8 +228,11 @@ async function connectIbkrUnguarded(
   try {
     report = parseFlexReport(await downloadFlexReport(token, queryId));
   } catch (err) {
-    const category = err instanceof FlexError ? err.category : "UNAVAILABLE";
-    return { ok: false, message: FLEX_ERROR_WORDS[category] };
+    // IBKR's code or the category only: never the token or IBKR's own wording.
+    console.warn(
+      `[brokers] connecting a Flex token failed: ${err instanceof FlexError ? (err.code ?? err.category) : "UNAVAILABLE"}`,
+    );
+    return { ok: false, message: flexErrorWords(err) };
   }
   if (!report.sections.positions && !report.sections.trades) {
     return {
@@ -272,6 +275,11 @@ async function connectIbkrUnguarded(
     const outcome = await applyReport(connection, report);
     refresh();
     if (!outcome.ok) return outcome;
+    console.info(
+      `[brokers] connected ibkr-flex #${connection.id}: statement to ${report.toDate ?? "?"}, ` +
+        `${report.executions.length} fills read, ${outcome.positions} holdings, ${outcome.tradesAdded} trades added` +
+        (confirmQueryId ? `, confirmations ${notes.some((n) => n.startsWith("Today's trades could not")) ? "not read" : "read"}` : ""),
+    );
     return {
       ok: true,
       message: `Connected. ${summarise(outcome.positions, outcome.tradesAdded, outcome.tradesUpdated)}.`,
