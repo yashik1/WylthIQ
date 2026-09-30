@@ -31,6 +31,9 @@ there accounting red flags — and links every figure back to the filing it came
 - **Connect a broker, read-only.** Readers link their own brokerage account through
   SnapTrade, or upload an IBKR statement — never giving this site a key for it. Holdings
   appear on `/portfolio` and trades in the journal. See [Connecting a broker](#connecting-a-broker).
+- **Portfolio charts** on `/portfolio` — an allocation ring that groups holdings by
+  company, sector, broker or currency, and a map of every company sized by its value and
+  shaded by its gain or loss on cost.
 - **Crypto, commodities and futures** at `/markets` — Bitcoin, gold, oil, wheat and the
   index contracts. None of them file accounts, so none of them get a health score; they
   get the chart, the comparison and the backtest, and the page says plainly why the rest
