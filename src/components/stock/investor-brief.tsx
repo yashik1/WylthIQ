@@ -55,7 +55,7 @@ export function InvestorBriefCard({
       </div>
 
       <div className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-2">
-        <div className="space-y-5 p-5">
+        <div className="space-y-3.5 p-4 sm:p-5">
           {brief.business && (
             <Block title="Business">
               <p className="text-[0.9375rem] leading-relaxed">{brief.business}</p>
@@ -67,17 +67,9 @@ export function InvestorBriefCard({
           </Block>
         </div>
 
-        <div className="border-t border-border p-5 lg:border-l lg:border-t-0">
-          <Block title="Research path">
-            <p className="text-sm leading-relaxed text-muted-strong">
-              Use the sections below for the evidence: risks, health scoring, what changed,
-              price and expectations, five questions, key figures and financial statements.
-            </p>
-          </Block>
-        </div>
       </div>
 
-      <p className="border-t border-border px-5 py-3 text-xs leading-relaxed text-faint">
+      <p className="border-t border-border px-4 py-2.5 text-xs leading-relaxed text-faint">
         A conclusion from the filings, not a recommendation. Detailed figures and supporting
         evidence appear in their dedicated sections below.
       </p>

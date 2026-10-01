@@ -40,9 +40,9 @@ export function AskAboutFigures({
     <Card>
       <CardHeader
         title="Ask about these figures"
-        subtitle={`Explanations of ${companyName}'s figures, written by an AI model from this page only, with each statement cited`}
+        subtitle="Grounded explanations using this page's figures and cited sources"
       />
-      <div className="space-y-4 p-5">
+      <div className="space-y-3 p-4">
         {signedIn ? (
           <div className="flex flex-wrap gap-2" role="group" aria-label="Questions">
             {questions.map((question) => (

@@ -58,10 +58,10 @@ export function KeyFiguresPanel({
     <Card>
       <CardHeader
         title="The standard figures"
-        subtitle="Reference metrics, with valuation calculated from the same underlying data when a provider is missing a ratio"
+        subtitle="Core operating and valuation reference metrics"
       />
 
-      <dl className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,160px),1fr))] gap-4 p-5">
+      <dl className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,150px),1fr))] gap-2.5 p-4">
         <Metric
           label="Trailing P/E"
           value={multipleValue(valuation.trailingPE)}

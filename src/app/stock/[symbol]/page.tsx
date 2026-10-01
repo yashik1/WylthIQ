@@ -75,6 +75,7 @@ import { buildKeyFigures } from "@/lib/scoring/key-figures";
 import { buildChangeReport } from "@/lib/scoring/changes";
 import { buildInvestorBrief } from "@/lib/scoring/investor-brief";
 import { InvestorBriefCard } from "@/components/stock/investor-brief";
+import { SinceLastFiling } from "@/components/stock/since-last-filing";
 import { LocalTime } from "@/components/local-time";
 import { describeQuoteTime } from "@/lib/quote-time";
 import { MarketExpects, hasMarketExpectations } from "@/components/stock/market-expects";
@@ -927,12 +928,20 @@ async function StockBody({
             report={report}
             companyName={profile?.name ?? unsupported?.name ?? upper}
           />
+          {changes && <SinceLastFiling report={changes} />}
           {breakdown && <HealthBreakdownCard breakdown={breakdown} />}
           {healthHistory && <HealthHistoryCard history={healthHistory} />}
-          {/* The working behind the headline, directly under it. The three
-              model figures in the card above are the summary; this is what
-              they are made of. */}
-          <Scorecard report={report} />
+          <details className="group rounded-xl border border-border bg-surface">
+            <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+              <span className="inline-flex items-center gap-2">
+                <span className="text-faint transition-transform group-open:rotate-90">›</span>
+                See how the health score is calculated
+              </span>
+            </summary>
+            <div className="border-t border-border">
+              <Scorecard report={report} />
+            </div>
+          </details>
         </div>
       ) : data.assetClass === "crypto" ||
         data.assetClass === "commodity" ||
@@ -1078,7 +1087,7 @@ async function StockBody({
           />
           {/* No "at a glance" summary beside the cards: each card carries its
               own rating, and the health section above already lists all five. */}
-          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-2 md:grid-cols-2 xl:grid-cols-3">
             {report.questions.map((q) => (
               <QuestionCard key={q.key} question={q} />
             ))}
