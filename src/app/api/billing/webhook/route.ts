@@ -61,36 +61,35 @@ export async function POST(request: Request) {
   }
 
   /*
-    Claim the event before acting on it.
-
-    Signature verification proved this came from Stripe; it did not prove this
-    is the first delivery. Stripe retries until it gets a 2xx, so a timeout on
-    our side after the work was done produces a second identical, correctly
-    signed delivery — and a captured payload can be replayed on purpose. Either
-    way the effect of processing twice is a subscription granted twice.
-
-    The insert is the check: the event id is the primary key, so a conflict
-    means somebody already handled it and there is nothing to do. Doing this
-    first also means a crash mid-apply does not leave the event unclaimed and
-    replayable, at the cost of a genuinely failed apply not being retried —
-    the right way round, because a duplicate grant is silent and a missing one
-    shows up in support.
+    Record the event as processing before applying it. A processing row is
+    deliberately retryable: if the process dies or the database fails midway,
+    Stripe can deliver the same event again and this handler will resume it.
+    A completed row remains idempotent and is safely ignored on replay.
   */
   try {
-    const claimed = await getDb()
-      .insert(stripeEvents)
-      .values({ id: event.id, type: event.type })
-      .onConflictDoNothing({ target: stripeEvents.id })
-      .returning({ id: stripeEvents.id });
+    const existing = await getDb()
+      .select({ status: stripeEvents.status })
+      .from(stripeEvents)
+      .where(eq(stripeEvents.id, event.id))
+      .limit(1);
 
-    if (claimed.length === 0) {
+    if (existing[0]?.status === "processed") {
       return NextResponse.json({ received: true, duplicate: event.id });
     }
+
+    if (existing.length === 0) {
+      await getDb()
+        .insert(stripeEvents)
+        .values({ id: event.id, type: event.type, status: "processing" });
+    } else {
+      await getDb()
+        .update(stripeEvents)
+        .set({ status: "processing", lastError: null, updatedAt: new Date() })
+        .where(eq(stripeEvents.id, event.id));
+    }
   } catch (err) {
-    // Could not record it, so do not act on it — acting without a record is
-    // exactly the state this table exists to prevent.
     console.error(
-      "[billing] could not claim event",
+      "[billing] could not record event",
       event.id,
       err instanceof Error ? err.message : err,
     );
@@ -99,15 +98,23 @@ export async function POST(request: Request) {
 
   try {
     await applyEvent(event);
+
+    await getDb()
+      .update(stripeEvents)
+      .set({ status: "processed", processedAt: new Date(), lastError: null, updatedAt: new Date() })
+      .where(eq(stripeEvents.id, event.id));
   } catch (err) {
-    // A 500 makes Stripe retry, which is what we want for a transient database
-    // failure — the alternative is silently losing somebody's subscription.
-    console.error(
-      "[billing] failed to apply",
-      event.type,
-      err instanceof Error ? err.message : err,
-    );
-    return NextResponse.json({ error: "Could not record the event." }, { status: 500 });
+    const message = err instanceof Error ? err.message.slice(0, 500) : "unknown error";
+    try {
+      await getDb()
+        .update(stripeEvents)
+        .set({ status: "failed", lastError: message, updatedAt: new Date() })
+        .where(eq(stripeEvents.id, event.id));
+    } catch (recordErr) {
+      console.error("[billing] could not record failed state", event.id, recordErr);
+    }
+    console.error("[billing] failed to apply", event.type, err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: "Could not apply the event." }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });
