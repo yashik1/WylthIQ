@@ -46,6 +46,7 @@ const chart = (values: [string, number][], extra: Partial<PortfolioChart> = {}):
     name: `${symbol} Inc.`,
     sector: null,
     broker: HAND_ENTERED,
+    accountType: "Type not set",
     currency: "USD",
     value,
     cost: value,
@@ -92,19 +93,19 @@ describe("putting every holding in one currency", () => {
     expect(result.leftOut).toBe(2);
   });
 
-  it("names where each holding came from, and its sector", () => {
+  it("names where each holding came from, its kind of account, and its sector", () => {
     const result = chartHoldings(
       [
-        holding({ symbol: "AAPL" }),
+        holding({ symbol: "AAPL", accountType: "TFSA" }),
         holding({ symbol: "MSFT", key: "s1", source: "synced", sourceLabel: "Interactive Brokers" }),
       ],
       new Map([["USD", 1]]),
       { AAPL: "Technology" },
       "USD",
     );
-    expect(result.holdings.map((h) => [h.broker, h.sector])).toEqual([
-      [HAND_ENTERED, "Technology"],
-      ["Interactive Brokers", null],
+    expect(result.holdings.map((h) => [h.broker, h.accountType, h.sector])).toEqual([
+      [HAND_ENTERED, "TFSA", "Technology"],
+      ["Interactive Brokers", "Type not set", null],
     ]);
   });
 });
@@ -145,6 +146,19 @@ describe("the allocation ring", () => {
     base.holdings[1].broker = "Interactive Brokers";
     base.holdings[1].currency = "CAD";
     expect(usefulSlicings(base)).toEqual(["company", "broker", "currency"]);
+    base.holdings[0].accountType = "TFSA";
+    expect(usefulSlicings(base)).toEqual(["company", "account", "broker", "currency"]);
+  });
+
+  it("groups by kind of account, one ETF in two accounts counted in each", () => {
+    const base = chart([["XEQT.TO", 300], ["XEQT.TO", 200], ["AAPL", 100]]);
+    base.holdings[0].accountType = "TFSA";
+    base.holdings[1].accountType = "RRSP";
+    expect(slices(base, "account").map((s) => [s.label, s.value])).toEqual([
+      ["TFSA", 300],
+      ["RRSP", 200],
+      ["Type not set", 100],
+    ]);
   });
 });
 

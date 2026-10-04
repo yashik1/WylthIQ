@@ -149,6 +149,45 @@ describe("parsing a Flex statement", () => {
     const noTrades = STATEMENT.replace(/<Trades>[\s\S]*?<\/Trades>/g, "");
     expect(parseFlexReport(noTrades).sections).toEqual({ positions: true, trades: false });
   });
+
+  describe("the kind of each account", () => {
+    const withInfo = (first: string, second: string) =>
+      STATEMENT.replace(/(<FlexStatement accountId="U0000001"[^>]*>)/, `$1${first}`).replace(
+        /(<FlexStatement accountId="U0000002"[^>]*>)/,
+        `$1${second}`,
+      );
+
+    it("reads it from Account Information when IBKR names it", () => {
+      const report = parseFlexReport(
+        withInfo(
+          '<AccountInformation accountId="U0000001" accountType="Individual TFSA" acctAlias="" name="A Reader" />',
+          '<AccountInformation accountId="U0000002" accountType="Individual" acctAlias="My RRSP" name="A Reader" />',
+        ),
+      );
+      expect(report.accountTypes).toEqual({ U0000001: "TFSA", U0000002: "RRSP" });
+    });
+
+    it("leaves an account IBKR only calls Individual unknown, rather than calling it taxable", () => {
+      const report = parseFlexReport(
+        withInfo(
+          '<AccountInformation accountId="U0000001" accountType="Individual" accountCapabilities="Cash" />',
+          '<AccountInformation accountId="U0000002" accountType="Joint" accountCapabilities="Margin" />',
+        ),
+      );
+      expect(report.accountTypes).toEqual({});
+    });
+
+    it("says nothing when the query has no Account Information section", () => {
+      expect(parseFlexReport(STATEMENT).accountTypes).toEqual({});
+    });
+
+    it("does not read the holder's name as a type", () => {
+      const report = parseFlexReport(
+        withInfo('<AccountInformation accountType="Individual" name="Tfsa Resp" />', ""),
+      );
+      expect(report.accountTypes).toEqual({});
+    });
+  });
 });
 
 describe("only ever talking to IBKR's report service", () => {

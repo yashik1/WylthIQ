@@ -849,10 +849,13 @@ export const portfolioHoldings = pgTable(
     averageCost: doublePrecision("average_cost").notNull(),
     /** ISO date. Optional: many readers will not remember it. */
     purchaseDate: text("purchase_date"),
+    /** The kind of account it sits in: TFSA, RRSP… (see portfolio/account-types.ts). Null when not set. */
+    accountType: text("account_type"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("portfolio_holdings_user_symbol_idx").on(t.userId, t.symbol)],
+  // One row per company and kind of account; no kind set counts as a kind. See 0020_account_types.sql.
+  (t) => [uniqueIndex("portfolio_holdings_user_symbol_idx").on(t.userId, t.symbol, sql`(coalesce(${t.accountType}, ''))`)],
 );
 
 /* ------------------------------------------------------------ brokerage sync

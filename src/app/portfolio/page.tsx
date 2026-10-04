@@ -9,11 +9,12 @@ import { Badge, Card, CardHeader, EmptyState, MeterBar, PageHeader, RatingBadge 
 import { canAccess, getEntitlement } from "@/lib/billing/entitlement";
 import { listBrokerHoldings } from "@/lib/brokers/queries";
 import { calendarDate, percent, price as fmtPrice } from "@/lib/format";
+import { accountTypeLabel } from "@/lib/portfolio/account-types";
 import { listHoldings } from "@/lib/portfolio/actions";
 import { mapCompanies, type PortfolioChart } from "@/lib/portfolio/charts";
 import type { PortfolioIntelligence } from "@/lib/portfolio/intelligence";
 import { loadPortfolio } from "@/lib/portfolio/load";
-import type { CurrencyTotal } from "@/lib/portfolio/math";
+import type { CurrencyTotal, ValuedHolding } from "@/lib/portfolio/math";
 import { toPortfolioInputs } from "@/lib/portfolio/sources";
 import { healthRating } from "@/lib/scoring/ratings";
 import { listTheses } from "@/lib/thesis/actions";
@@ -217,6 +218,7 @@ export default async function PortfolioPage() {
                           ) : (
                             <span className="text-xs text-muted">Entered by hand</span>
                           )}
+                          <HeldIn holding={holding} />
                         </td>
                         <td className="tnum px-3 py-3 text-right">
                           {holding.quantity.toLocaleString("en-US", { maximumFractionDigits: 4 })}
@@ -275,8 +277,15 @@ export default async function PortfolioPage() {
                           )}
                         </td>
                         <td className="px-3 py-3">
-                          {holding.source === "manual" ? (
-                            <RemoveHoldingButton symbol={holding.symbol} />
+                          {holding.source === "manual" && holding.holdingId != null ? (
+                            <RemoveHoldingButton
+                              id={holding.holdingId}
+                              label={
+                                holding.accountType
+                                  ? `${holding.symbol} (${accountTypeLabel(holding.accountType)})`
+                                  : holding.symbol
+                              }
+                            />
                           ) : (
                             <span className="text-xs text-faint" title="Changes when your broker's report does">
                               Synced
@@ -310,6 +319,28 @@ export default async function PortfolioPage() {
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * The account a holding sits in, under where it is held: its kind, and for a
+ * synced holding the broker's own description of the account. A synced
+ * account with no kind known says so, and where to set it.
+ */
+function HeldIn({ holding }: { holding: ValuedHolding }) {
+  const synced = holding.source === "synced";
+  if (!holding.accountType && !synced) return null;
+  return (
+    <span className="mt-1 block text-xs">
+      {holding.accountType ? (
+        <span className="font-medium">{accountTypeLabel(holding.accountType)}</span>
+      ) : (
+        <Link href="/account#connected-broker" className="text-faint underline underline-offset-2 hover:text-accent">
+          Set account type
+        </Link>
+      )}
+      {synced && holding.account && <span className="block text-[11px] text-faint">{holding.account}</span>}
+    </span>
   );
 }
 

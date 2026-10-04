@@ -8,6 +8,7 @@ import {
   trades,
   type BrokerConnection,
 } from "../db/schema";
+import { isAccountType, type AccountType } from "../portfolio/account-types";
 import { decryptToken } from "./crypto";
 import { holdingsAfterLaterFills, matchProvisional, withConfirmations } from "./confirmations";
 import {
@@ -72,8 +73,11 @@ const INSERT_CHUNK = 500;
 export interface ConnectionDetails {
   /** SnapTrade: each brokerage connected, and whether it needs reconnecting at the broker. */
   brokerages?: { id: string; institution: string; disabled: boolean }[];
-  /** Every account, described without its full number. */
-  accounts?: { id: string; institution: string; description: string }[];
+  /**
+   * Every account, described without its full number, with the kind of
+   * account the broker says it is (TFSA, RRSP…) when it says.
+   */
+  accounts?: { id: string; institution: string; description: string; type?: AccountType }[];
   /** Institutions whose connection could trade, and was therefore removed rather than used. */
   refused?: string[];
   /** SnapTrade: when its trades were last read, as an ISO time. See SNAPTRADE_TRADES_EVERY_MS. */
@@ -83,6 +87,44 @@ export interface ConnectionDetails {
    * which the Activity statement only has after the day is processed.
    */
   confirmQueryId?: string;
+  /**
+   * The kind of each account as the reader set it, by account id. It wins
+   * over what the broker says, and a sync never changes it.
+   */
+  accountTypes?: Record<string, AccountType>;
+}
+
+/**
+ * The settings in `details` that the reader chose rather than the broker
+ * reported. A sync writes everything else afresh and carries these over from
+ * the row as it stands when the sync is saved — not as it was when the sync
+ * began — so a setting changed while a sync runs is kept.
+ */
+const READER_SETTINGS = ["confirmQueryId", "accountTypes"] as const satisfies readonly (keyof ConnectionDetails)[];
+
+/** `details` as a sync leaves it: what the broker reported, plus the reader's own settings from the row. */
+export function detailsWithReaderSettings(reported: ConnectionDetails) {
+  const fresh: ConnectionDetails = { ...reported };
+  for (const key of READER_SETTINGS) delete fresh[key];
+  const kept = sql.join(
+    READER_SETTINGS.map((key) => sql`${key}::text, ${brokerConnections.details} -> ${key}::text`),
+    sql`, `,
+  );
+  return sql`${JSON.stringify(fresh)}::jsonb || jsonb_strip_nulls(jsonb_build_object(${kept}))`;
+}
+
+/** An account's type: the reader's choice, else what the broker said, else not known. */
+export function accountTypeOf(details: ConnectionDetails, accountId: string): AccountType | null {
+  const chosen = details.accountTypes?.[accountId];
+  if (isAccountType(chosen)) return chosen;
+  const reported = details.accounts?.find((a) => a.id === accountId)?.type;
+  return isAccountType(reported) ? reported : null;
+}
+
+/** The detected type of each account, as `details.accounts` stores it. */
+function typed(id: string, report: BrokerReport): { type?: AccountType } {
+  const type = report.accountTypes?.[id];
+  return type ? { type } : {};
 }
 
 export type SyncOutcome =
@@ -163,7 +205,6 @@ export async function applyReport(
   const notes: string[] = [];
   const skipped: SkippedItem[] = [...report.skipped];
   const family = linkFamily(connection);
-  const previousDetails = (connection.details ?? {}) as ConnectionDetails;
 
   if (!report.sections.positions) {
     notes.push("The report has no Open Positions section, so holdings were not updated.");
@@ -351,15 +392,16 @@ export async function applyReport(
         lastErrorCode: null,
         statementToDate: report.toDate,
         skipped,
-        details: details ?? {
-          accounts: report.accounts.map((id) => ({
-            id,
-            institution: report.positions.find((p) => p.accountId === id)?.label ?? BROKERS["ibkr-flex"].label,
-            description: maskAccount(id),
-          })),
-          // A setting the reader chose, kept across syncs.
-          ...(previousDetails.confirmQueryId ? { confirmQueryId: previousDetails.confirmQueryId } : {}),
-        },
+        details: detailsWithReaderSettings(
+          details ?? {
+            accounts: report.accounts.map((id) => ({
+              id,
+              institution: report.positions.find((p) => p.accountId === id)?.label ?? BROKERS["ibkr-flex"].label,
+              description: maskAccount(id),
+              ...typed(id, report),
+            })),
+          },
+        ),
         lastSyncedAt: new Date(),
         syncStartedAt: null,
         updatedAt: new Date(),
@@ -437,7 +479,12 @@ export async function fetchSnapTrade(
     report: { ...report, sections: { ...report.sections, trades: readTrades } },
     details: {
       brokerages: kept.map((a) => ({ id: a.id, institution: a.institution, disabled: a.disabled })),
-      accounts: accounts.map((a) => ({ id: a.id, institution: a.institution, description: describeAccount(a) })),
+      accounts: accounts.map((a) => ({
+        id: a.id,
+        institution: a.institution,
+        description: describeAccount(a),
+        ...typed(a.id, report),
+      })),
       refused,
       // Only a read that covered an account counts; with none connected yet,
       // the first one connected is read straight away.

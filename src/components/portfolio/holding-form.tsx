@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
+import { ACCOUNT_TYPE_LABELS, ACCOUNT_TYPES } from "@/lib/portfolio/account-types";
 import { deleteHolding, saveHolding } from "@/lib/portfolio/actions";
 import { parseHoldingInput } from "@/lib/portfolio/input";
 import { cn } from "@/lib/utils";
 
-const EMPTY = { symbol: "", quantity: "", averageCost: "", purchaseDate: "" };
+const EMPTY = { symbol: "", quantity: "", averageCost: "", accountType: "", purchaseDate: "" };
 
 const inputClass =
   "mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm placeholder:text-muted/60";
@@ -15,7 +16,8 @@ const inputClass =
  *
  * Checked in the browser first, with the same rules the server action applies,
  * so a mistyped number is caught before anything is sent. Entering a ticker
- * already held replaces that holding's quantity and cost.
+ * already held in the same kind of account replaces that holding's quantity
+ * and cost; in another kind of account, it is a second holding.
  */
 export function HoldingForm() {
   const [values, setValues] = useState(EMPTY);
@@ -36,16 +38,35 @@ export function HoldingForm() {
     startTransition(async () => {
       const result = await saveHolding(values);
       setMessage({ ok: result.ok, text: result.message });
-      if (result.ok) setValues(EMPTY);
+      // The account stays chosen: holdings are usually entered one account at a time.
+      if (result.ok) setValues({ ...EMPTY, accountType: values.accountType });
     });
   }
 
   return (
     <form onSubmit={onSubmit} className="space-y-3 p-5">
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Field id="holding-symbol" label="Ticker" value={values.symbol} onChange={set("symbol")} placeholder="AAPL or RY.TO" autoCapitalize="characters" />
         <Field id="holding-quantity" label="Shares held" value={values.quantity} onChange={set("quantity")} placeholder="e.g. 25" inputMode="decimal" />
         <Field id="holding-cost" label="Average cost per share" value={values.averageCost} onChange={set("averageCost")} placeholder="e.g. 182.40" inputMode="decimal" />
+        <div>
+          <label htmlFor="holding-account" className="text-xs text-muted">
+            Account (optional)
+          </label>
+          <select
+            id="holding-account"
+            value={values.accountType}
+            onChange={(e) => set("accountType")(e.target.value)}
+            className={inputClass}
+          >
+            <option value="">Not set</option>
+            {ACCOUNT_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {ACCOUNT_TYPE_LABELS[type]}
+              </option>
+            ))}
+          </select>
+        </div>
         <div>
           <label htmlFor="holding-date" className="text-xs text-muted">
             Purchase date (optional)
@@ -68,8 +89,8 @@ export function HoldingForm() {
           {pending ? "Saving…" : "Save holding"}
         </button>
         <p className="text-xs text-muted">
-          Entering a ticker you already hold replaces its quantity and cost. Enter the cost in the
-          currency the shares trade in.
+          Entering a ticker you already hold in the same account replaces its quantity and cost. Enter
+          the cost in the currency the shares trade in.
         </p>
       </div>
       {message && (
@@ -118,8 +139,8 @@ function Field({
   );
 }
 
-/** Removes one holding, after a second click. */
-export function RemoveHoldingButton({ symbol }: { symbol: string }) {
+/** Removes one holding, after a second click. `label` names it: "XEQT.TO", or "XEQT.TO (TFSA)". */
+export function RemoveHoldingButton({ id, label }: { id: number; label: string }) {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -131,7 +152,7 @@ export function RemoveHoldingButton({ symbol }: { symbol: string }) {
         onClick={() => setConfirming(true)}
         className="rounded-md px-2 py-1 text-xs text-muted transition-colors hover:bg-surface-2 hover:text-poor"
       >
-        Remove<span className="sr-only"> {symbol}</span>
+        Remove<span className="sr-only"> {label}</span>
       </button>
     );
   }
@@ -143,13 +164,13 @@ export function RemoveHoldingButton({ symbol }: { symbol: string }) {
         disabled={pending}
         onClick={() =>
           startTransition(async () => {
-            const result = await deleteHolding(symbol);
+            const result = await deleteHolding(id);
             if (!result.ok) setError(result.message);
           })
         }
         className="rounded-md bg-poor px-2 py-1 text-xs font-medium text-poor-fg disabled:opacity-60"
       >
-        Remove {symbol}
+        Remove {label}
       </button>
       <button
         type="button"

@@ -1,9 +1,10 @@
 "use server";
 
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb } from "../db";
 import { brokerConnections, brokerTradeLinks, trades } from "../db/schema";
+import { accountTypeLabel, isAccountType } from "../portfolio/account-types";
 import { actionRateLimited, userRateLimited } from "../security/guard";
 import { siteUrl } from "../site-url";
 import { flexTokenAllowed } from "./access";
@@ -268,7 +269,14 @@ async function connectIbkrUnguarded(
   const [connection] = await getDb()
     .insert(brokerConnections)
     .values(values)
-    .onConflictDoUpdate({ target: [brokerConnections.userId, brokerConnections.broker], set: values })
+    .onConflictDoUpdate({
+      target: [brokerConnections.userId, brokerConnections.broker],
+      // A replaced token keeps the account types the reader set; the accounts are the same ones.
+      set: {
+        ...values,
+        details: sql`${JSON.stringify(values.details)}::jsonb || jsonb_strip_nulls(jsonb_build_object('accountTypes', ${brokerConnections.details} -> 'accountTypes'))`,
+      },
+    })
     .returning();
 
   try {
@@ -360,6 +368,54 @@ async function setIbkrConfirmQueryUnguarded(
     ok: true,
     message: `Saved and synced. ${summarise(outcome.positions, outcome.tradesAdded, outcome.tradesUpdated)}.`,
     notes: outcome.notes,
+  };
+}
+
+/**
+ * Sets the kind of one account (TFSA, RRSP…), or clears the reader's choice so
+ * the broker's own word is used again. The account must be one this reader's
+ * connection reports; the choice is written into the row in one statement, so
+ * a sync saved at the same moment keeps it. See READER_SETTINGS in sync.ts.
+ */
+async function setAccountTypeUnguarded(
+  _prev: BrokerActionResult | null,
+  form: FormData,
+): Promise<BrokerActionResult> {
+  const gate = await brokerReader(true);
+  if (denied(gate)) return gate;
+  const wait = (await actionRateLimited("brokerSettings")) ?? userRateLimited("brokerSettings", gate.userId);
+  if (wait) return { ok: false, message: `Too many changes. Try again in ${Math.ceil(wait / 60)} minutes.` };
+
+  const connection = await ownConnection(gate.userId, form);
+  if (!connection) return { ok: false, message: "That broker is not connected." };
+
+  const accountId = String(form.get("account") ?? "");
+  const account = ((connection.details ?? {}) as ConnectionDetails).accounts?.find((a) => a.id === accountId);
+  if (!account) return { ok: false, message: "That account is not part of this connection. Reload the page." };
+
+  const type = String(form.get("type") ?? "");
+  if (type !== "" && !isAccountType(type)) return { ok: false, message: "Choose one of the listed account types." };
+
+  const chosen = sql`coalesce(${brokerConnections.details} -> 'accountTypes', '{}'::jsonb)`;
+  await getDb()
+    .update(brokerConnections)
+    .set({
+      details: sql`jsonb_set(${brokerConnections.details}, '{accountTypes}', ${
+        type ? sql`${chosen} || jsonb_build_object(${accountId}::text, ${type}::text)` : sql`${chosen} - ${accountId}::text`
+      })`,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(brokerConnections.id, connection.id), eq(brokerConnections.userId, gate.userId)));
+
+  refresh();
+  const effective = isAccountType(type) ? type : (account.type ?? null);
+  return {
+    ok: true,
+    message: type
+      ? `${account.description} is now shown as ${accountTypeLabel(effective)}.`
+      : effective
+        ? `${account.description} is shown as ${accountTypeLabel(effective)}, as your broker reports.`
+        : `${account.description} is shown with no type.`,
   };
 }
 
@@ -500,6 +556,10 @@ export async function setIbkrConfirmQuery(
   form: FormData,
 ): Promise<BrokerActionResult> {
   return failsafe("setting the confirmation query", () => setIbkrConfirmQueryUnguarded(prev, form));
+}
+
+export async function setAccountType(prev: BrokerActionResult | null, form: FormData): Promise<BrokerActionResult> {
+  return failsafe("setting an account's type", () => setAccountTypeUnguarded(prev, form));
 }
 
 export async function syncBrokerNow(prev: BrokerActionResult | null, form: FormData): Promise<BrokerActionResult> {

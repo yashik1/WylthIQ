@@ -6,6 +6,8 @@
  * things regardless of what reached it.
  */
 
+import { isAccountType, type AccountType } from "./account-types";
+
 export const MAX_HOLDINGS = 100;
 
 export interface HoldingInput {
@@ -15,6 +17,8 @@ export interface HoldingInput {
   averageCost: number;
   /** ISO date, or null when not given. */
   purchaseDate: string | null;
+  /** The kind of account it sits in, or null when not given. */
+  accountType: AccountType | null;
 }
 
 export type ParsedHolding = { ok: true; holding: HoldingInput } | { ok: false; message: string };
@@ -29,7 +33,7 @@ function toNumber(raw: unknown): number | null {
 }
 
 export function parseHoldingInput(
-  raw: { symbol?: unknown; quantity?: unknown; averageCost?: unknown; purchaseDate?: unknown },
+  raw: { symbol?: unknown; quantity?: unknown; averageCost?: unknown; purchaseDate?: unknown; accountType?: unknown },
   today: Date = new Date(),
 ): ParsedHolding {
   const symbol = typeof raw.symbol === "string" ? raw.symbol.trim().toUpperCase() : "";
@@ -58,5 +62,11 @@ export function parseHoldingInput(
     purchaseDate = text;
   }
 
-  return { ok: true, holding: { symbol, quantity, averageCost, purchaseDate } };
+  let accountType: AccountType | null = null;
+  if (raw.accountType != null && raw.accountType !== "") {
+    if (!isAccountType(raw.accountType)) return { ok: false, message: "Choose one of the listed account types." };
+    accountType = raw.accountType;
+  }
+
+  return { ok: true, holding: { symbol, quantity, averageCost, purchaseDate, accountType } };
 }

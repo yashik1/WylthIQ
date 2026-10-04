@@ -20,8 +20,18 @@ import { Ring } from "./ring";
 const LABELS: Record<SliceBy, string> = {
   company: "Company",
   sector: "Sector",
+  account: "Account",
   broker: "Broker",
   currency: "Currency",
+};
+
+/** The grouping in a sentence: "Allocation by account type". */
+const CAPTIONS: Record<SliceBy, string> = {
+  company: "company",
+  sector: "sector",
+  account: "account type",
+  broker: "broker",
+  currency: "currency",
 };
 
 function colourOf(slice: Slice, index: number): string {
@@ -60,7 +70,7 @@ export function AllocationChart({ chart }: { chart: PortfolioChart }) {
         </div>
       )}
 
-      <div className="grid items-center gap-6 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-6 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
         <Ring
           segments={segments.map((slice, index) => ({
             key: slice.key,
@@ -70,7 +80,7 @@ export function AllocationChart({ chart }: { chart: PortfolioChart }) {
             color: colourOf(slice, index),
           }))}
           currency={chart.currency}
-          ariaLabel={`Allocation by ${LABELS[by].toLowerCase()}`}
+          ariaLabel={`Allocation by ${CAPTIONS[by]}`}
           active={active}
           onActive={setActive}
           idle={
@@ -82,7 +92,7 @@ export function AllocationChart({ chart }: { chart: PortfolioChart }) {
         />
 
         <table className="w-full text-sm">
-          <caption className="sr-only">Allocation by {LABELS[by].toLowerCase()}</caption>
+          <caption className="sr-only">Allocation by {CAPTIONS[by]}</caption>
           <thead className="sr-only">
             <tr>
               <th scope="col">{LABELS[by]}</th>
