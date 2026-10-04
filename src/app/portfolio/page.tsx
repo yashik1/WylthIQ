@@ -94,6 +94,8 @@ export default async function PortfolioPage() {
         <HoldingForm />
       </Card>
 
+      {view.holdings.length > 0 && view.intelligence && <PortfolioPulse intelligence={view.intelligence} holdings={view.holdings.length} />}
+
       {view.holdings.length === 0 ? (
         <Card>
           <EmptyState
@@ -486,5 +488,52 @@ function IntelligenceCard({
           ` Holdings in ${unconverted.join(", ")} are left out of these measures because no exchange rate was available.`}
       </p>
     </Card>
+  );
+}
+
+function PortfolioPulse({
+  intelligence,
+  holdings,
+}: {
+  intelligence: PortfolioIntelligence;
+  holdings: number;
+}) {
+  const reviewFlags = intelligence.flags.length;
+  const largest = intelligence.largestHolding;
+  return (
+    <Card>
+      <CardHeader
+        title="Portfolio pulse"
+        subtitle="The fastest read on quality, concentration and what deserves a closer look."
+        action={<Link href="/alerts" className="text-xs text-accent underline underline-offset-2">Review alerts →</Link>}
+      />
+      <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-4 sm:divide-y-0">
+        <PulseMetric label="Health" value={intelligence.averageHealth != null ? intelligence.averageHealth.toFixed(1) + "/10" : "—"} />
+        <PulseMetric label="Largest holding" value={largest ? largest.symbol + " · " + percent(largest.share) : "—"} />
+        <PulseMetric label="Review flags" value={reviewFlags.toString()} tone={reviewFlags > 0 ? "text-poor" : undefined} />
+        <PulseMetric label="Thesis coverage" value={intelligence.theses.withThesis + "/" + holdings} />
+      </div>
+      {intelligence.flags.length > 0 && (
+        <div className="border-t border-border px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">Worth reviewing</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {intelligence.flags.slice(0, 6).map((flag) => (
+              <Link key={flag.symbol + "-" + flag.label} href={"/stock/" + encodeURIComponent(flag.symbol)} className="rounded-md bg-surface-2 px-2 py-1 text-xs font-medium hover:text-accent">
+                {flag.symbol} · {flag.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function PulseMetric({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="px-4 py-3">
+      <p className="text-xs text-muted">{label}</p>
+      <p className={cn("tnum mt-0.5 truncate text-lg font-semibold", tone)}>{value}</p>
+    </div>
   );
 }

@@ -160,6 +160,7 @@ try {
 const NAV = [
   { href: "/", label: "Dashboard" },
   { href: "/research", label: "Research" },
+  { href: "/alerts", label: "Alerts" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/portfolio", label: "Portfolio" },
   { href: "/screen", label: "Screener" },
