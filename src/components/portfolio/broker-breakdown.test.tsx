@@ -26,37 +26,50 @@ const summary = (name: string, symbols: string[], extra: Partial<BrokerSummary> 
   ...extra,
 });
 
+const two = [summary("Interactive Brokers", ["AAPL", "MSFT"]), summary("Wealthsimple", ["KO"])];
+
 describe("the portfolio by broker", () => {
-  it("says what each broker holds and how much it is worth", () => {
-    const html = renderToStaticMarkup(
-      <BrokerBreakdown
-        currency="USD"
-        brokers={[summary("Interactive Brokers", ["AAPL", "MSFT"]), summary("Wealthsimple", ["KO"])]}
-      />,
-    );
+  it("shows the connected brokers, with what each is worth, and no holdings until one is selected", () => {
+    const html = renderToStaticMarkup(<BrokerBreakdown currency="USD" brokers={two} />);
     expect(html).toContain("Interactive Brokers");
     expect(html).toContain("Wealthsimple");
-    expect(html).toContain("2 holdings");
+    expect(html).toContain("Connected · 2 holdings");
     expect(html).toContain("$200.00");
     expect(html).toContain("50.0%");
-    expect(html).toContain("Sep 30, 2026");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain('href="/stock/AAPL"');
+  });
+
+  it("opens one broker's holdings when selected", () => {
+    const html = renderToStaticMarkup(<BrokerBreakdown currency="USD" brokers={two} defaultOpen="Interactive Brokers" />);
+    expect(html).toContain("Held at Interactive Brokers");
     expect(html).toContain('href="/stock/AAPL"');
+    expect(html).toContain('href="/stock/MSFT"');
+    expect(html).not.toContain('href="/stock/KO"');
+    expect(html.match(/aria-expanded="true"/g)).toHaveLength(1);
   });
 
-  it("folds a long list away after the first eight", () => {
+  it("folds a long list after the first eight", () => {
     const many = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
-    const html = renderToStaticMarkup(<BrokerBreakdown currency="USD" brokers={[summary("Interactive Brokers", many)]} />);
+    const html = renderToStaticMarkup(
+      <BrokerBreakdown currency="USD" brokers={[summary("Interactive Brokers", many)]} defaultOpen="Interactive Brokers" />,
+    );
     expect(html).toContain("Show 2 more");
+    expect(html).not.toContain('href="/stock/J"');
   });
 
-  it("warns when a broker is connected twice", () => {
+  it("flags a broker connected twice on its tile, and says why when opened", () => {
+    const twice = [summary("Interactive Brokers", ["AAPL"], { connectedTwice: ["a Flex token", "SnapTrade"] })];
+    expect(renderToStaticMarkup(<BrokerBreakdown currency="USD" brokers={twice} />)).toContain("Connected twice");
+    expect(
+      renderToStaticMarkup(<BrokerBreakdown currency="USD" brokers={twice} defaultOpen="Interactive Brokers" />),
+    ).toContain("a Flex token and SnapTrade");
+  });
+
+  it("marks what was typed in by hand as such, not as connected", () => {
     const html = renderToStaticMarkup(
-      <BrokerBreakdown
-        currency="USD"
-        brokers={[summary("Interactive Brokers", ["AAPL"], { connectedTwice: ["a Flex token", "SnapTrade"] })]}
-      />,
+      <BrokerBreakdown currency="USD" brokers={[summary("Entered by hand", ["F"], { synced: false })]} />,
     );
-    expect(html).toContain("Connected twice");
-    expect(html).toContain("a Flex token and SnapTrade");
+    expect(html).toContain("Typed in by you · 1 holding");
   });
 });

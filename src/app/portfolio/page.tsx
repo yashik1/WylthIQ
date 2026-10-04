@@ -130,9 +130,9 @@ export default async function PortfolioPage() {
             <Card>
               <CardHeader
                 title="By broker"
-                subtitle={`What you hold at each broker and how much it is worth, in ${view.chart.currency}${
+                subtitle={`Your connected brokers and what each holds, in ${view.chart.currency}${
                   view.chart.converted ? ", other currencies converted at the latest rate" : ""
-                }`}
+                }. Select one to see its holdings.`}
               />
               <BrokerBreakdown brokers={view.brokers} currency={view.chart.currency} />
             </Card>
