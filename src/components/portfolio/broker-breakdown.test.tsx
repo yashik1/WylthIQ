@@ -40,6 +40,14 @@ describe("the portfolio by broker", () => {
     expect(html).not.toContain('href="/stock/AAPL"');
   });
 
+  it("draws the brokers as a ring whose slices can be chosen", () => {
+    const html = renderToStaticMarkup(<BrokerBreakdown currency="USD" brokers={two} />);
+    expect(html).toContain('aria-label="Value by broker"');
+    expect(html.match(/<path [^>]*role="button"/g)).toHaveLength(2);
+    expect(html).toContain('aria-label="Interactive Brokers: ');
+    expect(html).toContain("2 brokers connected");
+  });
+
   it("opens one broker's holdings when selected", () => {
     const html = renderToStaticMarkup(<BrokerBreakdown currency="USD" brokers={two} defaultOpen="Interactive Brokers" />);
     expect(html).toContain("Held at Interactive Brokers");
@@ -47,6 +55,9 @@ describe("the portfolio by broker", () => {
     expect(html).toContain('href="/stock/MSFT"');
     expect(html).not.toContain('href="/stock/KO"');
     expect(html.match(/aria-expanded="true"/g)).toHaveLength(1);
+    // A second ring, of what the chosen broker holds, company by company.
+    expect(html).toContain('aria-label="What Interactive Brokers holds"');
+    expect(html).toContain('aria-label="AAPL: ');
   });
 
   it("folds a long list after the first eight", () => {
@@ -60,7 +71,7 @@ describe("the portfolio by broker", () => {
 
   it("flags a broker connected twice on its tile, and says why when opened", () => {
     const twice = [summary("Interactive Brokers", ["AAPL"], { connectedTwice: ["a Flex token", "SnapTrade"] })];
-    expect(renderToStaticMarkup(<BrokerBreakdown currency="USD" brokers={twice} />)).toContain("Connected twice");
+    expect(renderToStaticMarkup(<BrokerBreakdown currency="USD" brokers={twice} />)).toMatch(/connected twice/i);
     expect(
       renderToStaticMarkup(<BrokerBreakdown currency="USD" brokers={twice} defaultOpen="Interactive Brokers" />),
     ).toContain("a Flex token and SnapTrade");
