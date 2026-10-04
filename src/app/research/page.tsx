@@ -101,6 +101,8 @@ export default async function ResearchPage() {
       {header}
       <WatchlistSync signedIn />
 
+      <ResearchPulse rows={rows} theses={theses} />
+
       <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-2">
         <Card>
           <CardHeader
@@ -453,5 +455,35 @@ async function NewFilings({ companies }: { companies: SavedCompany[] }) {
         </ul>
       )}
     </Card>
+  );
+}
+
+function ResearchPulse({ rows, theses }: { rows: Awaited<ReturnType<typeof loadWatchlist>>; theses: Awaited<ReturnType<typeof listTheses>> }) {
+  const changed = rows.filter((row) => row.alerts.length > 0 || row.topChange).length;
+  const thesisRisk = theses.filter((thesis) => thesis.status === "at-risk" || thesis.status === "invalidated").length;
+  const filings = rows.filter((row) => row.lastFiling != null).length;
+  return (
+    <Card>
+      <CardHeader
+        title="Research command center"
+        subtitle="Start with what changed, then drill into the company, thesis or filing."
+        action={<Link href="/alerts" className={linkClass}>Open alerts →</Link>}
+      />
+      <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-4 sm:divide-y-0">
+        <PulseStat label="Needs review" value={changed} href="/alerts" />
+        <PulseStat label="Theses at risk" value={thesisRisk} href="/alerts" />
+        <PulseStat label="Saved companies" value={rows.length} href="/watchlist" />
+        <PulseStat label="With filings" value={filings} href="/research#new-filings" />
+      </div>
+    </Card>
+  );
+}
+
+function PulseStat({ label, value, href }: { label: string; value: number; href: string }) {
+  return (
+    <Link href={href} className="px-4 py-3 transition-colors hover:bg-surface-2">
+      <p className="text-xs text-muted">{label}</p>
+      <p className="tnum mt-0.5 text-xl font-semibold">{value}</p>
+    </Link>
   );
 }
