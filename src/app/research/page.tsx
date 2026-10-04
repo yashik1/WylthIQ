@@ -473,7 +473,7 @@ function ResearchPulse({ rows, theses }: { rows: Awaited<ReturnType<typeof loadW
         <PulseStat label="Needs review" value={changed} href="/alerts" />
         <PulseStat label="Theses at risk" value={thesisRisk} href="/alerts" />
         <PulseStat label="Saved companies" value={rows.length} href="/watchlist" />
-        <PulseStat label="With filings" value={filings} href="/research#new-filings" />
+        <PulseStat label="With filings" value={filings} href="/research" />
       </div>
     </Card>
   );
