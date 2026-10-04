@@ -1,3 +1,4 @@
+import { accountTypeFrom, type AccountType } from "../portfolio/account-types";
 import { tagText } from "../signals/xml-extract";
 import { elementAttributes, hasSection, statementBlocks, type Attributes } from "./flex-xml";
 import { readCappedText } from "./http";
@@ -316,6 +317,19 @@ function pickLevel(rows: Attributes[], preferred: string[]): Attributes[] {
   return rows.filter((r) => !r.levelOfDetail);
 }
 
+/**
+ * The kind of account a statement's Account Information section names, if
+ * the query includes that section and the account's type or the alias the
+ * reader gave it says so: "Individual TFSA", "RRSP". IBKR describes every
+ * other account as "Individual" or "Joint", which says nothing about tax, so
+ * nothing else is guessed. Only these two fields are read; the section also
+ * carries the holder's name and address, which are never kept.
+ */
+function flexAccountType(body: string): AccountType | null {
+  const info = elementAttributes(body, "AccountInformation")[0];
+  return info ? accountTypeFrom([info.accountType, info.acctAlias]) : null;
+}
+
 /** Parses a Flex report into positions and fills in this app's terms. */
 export function parseFlexReport(xml: string): BrokerReport {
   if (!xml.includes("<FlexQueryResponse")) throw new FlexError("INVALID_RESPONSE");
@@ -330,6 +344,7 @@ export function parseFlexReport(xml: string): BrokerReport {
   const reportedQuantities: Record<string, number> = {};
   const positions: ReportPosition[] = [];
   const executions: ReportExecution[] = [];
+  const accountTypes: Record<string, AccountType> = {};
   let toDate: string | null = null;
   let hasPositions = false;
   let hasTrades = false;
@@ -338,6 +353,9 @@ export function parseFlexReport(xml: string): BrokerReport {
     const accountId = block.attributes.accountId?.trim();
     if (!accountId) continue;
     accounts.push(accountId);
+
+    const type = flexAccountType(block.body);
+    if (type) accountTypes[accountId] = type;
 
     const blockTo = flexDate(block.attributes.toDate);
     if (blockTo && (!toDate || blockTo > toDate)) toDate = blockTo;
@@ -448,6 +466,7 @@ export function parseFlexReport(xml: string): BrokerReport {
     skipped: skipped.list(),
     reportedQuantities,
     sections: { positions: hasPositions, trades: hasTrades },
+    accountTypes,
   };
 }
 

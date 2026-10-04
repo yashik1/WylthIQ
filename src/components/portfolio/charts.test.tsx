@@ -13,6 +13,7 @@ const chart = (entries: [string, number, string][]): PortfolioChart => ({
     name: `${symbol} Inc.`,
     sector: null,
     broker,
+    accountType: "Type not set",
     currency: "USD",
     value,
     cost: value * 0.9,

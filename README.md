@@ -209,6 +209,8 @@ Everything runs on **Railway** — the app and Postgres as two services in one p
 
    `db:migrate` is safe to re-run: every statement tolerates "already exists",
    so a schema that is half-applied catches up rather than needing a reset.
+   Set it as the service's pre-deploy command (`npm run db:migrate`) and every
+   deploy brings the schema up to date before the new code serves a page.
 
 **What needs an account.** Four things: the screener backtest, the trade journal, the
 trading strategies, and the moving-average overlays on a backtest chart. These are
@@ -298,7 +300,8 @@ to it. A token with a confirmation query is synced every three hours instead of 
   [Developer Terms](https://snaptrade.com/developer-terms-of-use) require telling
   SnapTrade within 24 hours of any breach of this app's systems.
 - Optionally list your own address in `BROKER_FLEX_TOKEN_EMAILS` to use a Flex token.
-- Run `npm run db:migrate` for the `broker_*` tables (migrations 0018 and 0019).
+- Run `npm run db:migrate` for the `broker_*` tables (migrations 0018 and 0019), or let
+  the pre-deploy command do it.
 - Add a Railway cron service that calls the sync every hour. Each call refreshes the
   few connections that have gone longest without a sync; uploads are left to the
   reader. SnapTrade asks partners to read an account's trades no more than once a
@@ -315,7 +318,19 @@ on the account page as "not shown", with the reason. Holdings are valued with th
 app's own quotes, not the broker's. A trade opened before the record begins is left
 out of the journal rather than guessed at, and a trade the reader deletes from the
 journal is never added back. Two connections to the same broker are shown as separate
-rows and flagged, never silently added together. Connecting a broker is part of the
+rows and flagged, never silently added together.
+
+**Account types.** Each account is shown as the kind it is — TFSA, RRSP, FHSA, RRIF,
+RESP, locked-in, non-registered — so the same ETF in a TFSA and an RRSP is two holdings,
+and the portfolio can be split by account type. SnapTrade passes on the brokerage's own
+name for the account (`raw_type`); a Flex statement names it when the query includes
+the Account Information section and IBKR, or the alias the reader gave the account,
+says so. Plain words such as "Margin" count as non-registered only from brokerages that
+name their registered accounts separately: IBKR calls its TFSAs and RRSPs "Individual"
+cash accounts too, so from IBKR they say nothing. Whatever is not named is left unset,
+never guessed; the reader sets it once on the account page, and that choice is kept
+through every sync. Hand-entered holdings take an account type as well (migration 0020).
+Connecting a broker is part of the
 Pro+ plan in `tiers.ts`, which, like every paid feature, is open to anyone signed in
 while `ACCESS_MODE` is `sign-in`.
 

@@ -1,18 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { startTransition, useActionState, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { LocalTime } from "@/components/local-time";
 import {
   connectIbkr,
   disconnectBroker,
   removeSnapTradeBrokerage,
+  setAccountType,
   setIbkrConfirmQuery,
   startSnapTradeConnect,
   syncBrokerNow,
   type BrokerActionResult,
 } from "@/lib/brokers/actions";
 import { calendarDate } from "@/lib/format";
+import { ACCOUNT_TYPE_LABELS, ACCOUNT_TYPES, accountTypeLabel, type AccountType } from "@/lib/portfolio/account-types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,9 +42,10 @@ export interface ConnectionView {
   skipped: { symbol: string; reason: string }[];
   details: {
     brokerages?: { id: string; institution: string; disabled: boolean }[];
-    accounts?: { id: string; institution: string; description: string }[];
+    accounts?: { id: string; institution: string; description: string; type?: AccountType }[];
     refused?: string[];
     confirmQueryId?: string;
+    accountTypes?: Record<string, AccountType>;
   };
 }
 
@@ -138,6 +141,85 @@ function Status({ connection }: { connection: ConnectionView }) {
           </ul>
         </details>
       )}
+    </div>
+  );
+}
+
+type Account = NonNullable<ConnectionView["details"]["accounts"]>[number];
+
+/**
+ * One account's type: what its broker reports, unless the reader chose
+ * otherwise. Saved as soon as it is picked — sent without a form submission,
+ * since a submitted form is reset afterwards and would show the old choice.
+ */
+function AccountTypeRow({ broker, account, chosen }: { broker: Kind; account: Account; chosen: AccountType | undefined }) {
+  const [state, action, pending] = useActionState(setAccountType, null);
+  const [value, setValue] = useState<string>(chosen ?? "");
+  const id = `account-type-${broker}-${account.id}`;
+
+  function save(type: string) {
+    setValue(type);
+    const form = new FormData();
+    form.set("broker", broker);
+    form.set("account", account.id);
+    form.set("type", type);
+    startTransition(() => action(form));
+  }
+
+  return (
+    <li>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        <label htmlFor={id} className="min-w-0">
+          <span className="font-medium">{account.description}</span>
+          <span className="text-muted"> · {account.institution}</span>
+        </label>
+        <select
+          id={id}
+          value={value}
+          onChange={(event) => save(event.target.value)}
+          className="rounded-lg border border-border bg-surface px-2 py-1 text-sm outline-none transition-colors focus:border-accent"
+        >
+          <option value="">
+            {account.type ? `${accountTypeLabel(account.type)} (as ${account.institution} reports)` : "Not set"}
+          </option>
+          {ACCOUNT_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {ACCOUNT_TYPE_LABELS[type]}
+            </option>
+          ))}
+        </select>
+        <span role="status" className={cn("text-xs", state && !state.ok ? "text-poor" : "text-muted")}>
+          {pending ? "Saving…" : state ? (state.ok ? "Saved" : state.message) : null}
+        </span>
+      </div>
+    </li>
+  );
+}
+
+/** The type of each account a connection reports, which groups holdings on the portfolio page. */
+function AccountTypes({ connection }: { connection: ConnectionView }) {
+  const accounts = connection.details.accounts ?? [];
+  if (accounts.length === 0) return null;
+  const unset = accounts.filter((a) => !connection.details.accountTypes?.[a.id] && !a.type).length;
+  return (
+    <div className="space-y-2">
+      <h4 className="text-xs font-medium text-muted">Account types</h4>
+      <p className="text-xs leading-relaxed text-muted">
+        TFSA, RRSP and the rest group your holdings on the portfolio page.
+        {unset > 0 &&
+          ` ${unset === 1 ? "One account's" : `${unset} accounts'`} type wasn't reported by the broker — set ${unset === 1 ? "it" : "them"} here.`}{" "}
+        Your choice is kept through every sync.
+      </p>
+      <ul className="space-y-2">
+        {accounts.map((account) => (
+          <AccountTypeRow
+            key={account.id}
+            broker={connection.broker}
+            account={account}
+            chosen={connection.details.accountTypes?.[account.id]}
+          />
+        ))}
+      </ul>
     </div>
   );
 }
@@ -305,17 +387,12 @@ function SnapTradeSection({
                   <span className="font-medium">{brokerage.institution}</span>
                   <span className="rounded-full bg-good-soft px-2 py-0.5 text-[11px] font-medium text-good-fg">Read-only</span>
                   {brokerage.disabled && <ReconnectBrokerage id={brokerage.id} institution={brokerage.institution} />}
-                  <span className="text-xs text-muted">
-                    {(connection.details.accounts ?? [])
-                      .filter((a) => a.institution === brokerage.institution)
-                      .map((a) => a.description)
-                      .join(", ")}
-                  </span>
                   <RemoveBrokerage id={brokerage.id} institution={brokerage.institution} />
                 </li>
               ))}
             </ul>
           )}
+          <AccountTypes connection={connection} />
           <Status connection={connection} />
           <div className="flex flex-wrap items-start gap-4">
             <StartSnapTrade again />
@@ -358,12 +435,15 @@ function UploadSection({ connection }: { connection: ConnectionView | undefined 
       <ol className="list-decimal space-y-1.5 pl-5 text-sm leading-relaxed text-muted">
         <li>
           In IBKR&apos;s Client Portal, open <strong>Performance &amp; Reports → Flex Queries</strong> and create an{" "}
-          <strong>Activity Flex Query</strong> with <strong>Open Positions</strong> (Summary level) and{" "}
-          <strong>Trades</strong> (Execution level), every field selected, format <strong>XML</strong>, period{" "}
-          <strong>Last 365 Calendar Days</strong>, date format left as <strong>yyyyMMdd</strong>.
+          <strong>Activity Flex Query</strong> with <strong>Account Information</strong>,{" "}
+          <strong>Open Positions</strong> (Summary level) and <strong>Trades</strong> (Execution level), every field
+          selected, format <strong>XML</strong>, period <strong>Last 365 Calendar Days</strong>, date format left as{" "}
+          <strong>yyyyMMdd</strong>. Account Information tells WylthIQ which account is a TFSA or an RRSP when IBKR
+          names it.
         </li>
         <li>Run it, download the XML file, and upload it below. Upload a newer one whenever you want to refresh.</li>
       </ol>
+      {connection && <AccountTypes connection={connection} />}
       {connection && <Status connection={connection} />}
       <form onSubmit={upload} className="space-y-3">
         <input
@@ -461,9 +541,11 @@ function FlexTokenSection({ connection }: { connection: ConnectionView | undefin
       <ol className="list-decimal space-y-1.5 pl-5 text-sm leading-relaxed text-muted">
         <li>
           In IBKR&apos;s Client Portal, open <strong>Performance &amp; Reports → Flex Queries</strong> and create an{" "}
-          <strong>Activity Flex Query</strong> with <strong>Open Positions</strong> (Summary level) and{" "}
-          <strong>Trades</strong> (Execution level), every field selected, format <strong>XML</strong>, period{" "}
-          <strong>Last 365 Calendar Days</strong>, date format left as <strong>yyyyMMdd</strong>.
+          <strong>Activity Flex Query</strong> with <strong>Account Information</strong>,{" "}
+          <strong>Open Positions</strong> (Summary level) and <strong>Trades</strong> (Execution level), every field
+          selected, format <strong>XML</strong>, period <strong>Last 365 Calendar Days</strong>, date format left as{" "}
+          <strong>yyyyMMdd</strong>. Account Information tells WylthIQ which account is a TFSA or an RRSP when IBKR
+          names it.
         </li>
         <li>
           For today&apos;s trades, also create a <strong>Trade Confirmation Flex Query</strong> with{" "}
@@ -489,6 +571,7 @@ function FlexTokenSection({ connection }: { connection: ConnectionView | undefin
               : "Trades appear once IBKR's daily statement has them. Add a Trade Confirmation query to see today's."}
           </p>
           <ConfirmQueryForm current={connection.details.confirmQueryId} />
+          <AccountTypes connection={connection} />
           <Status connection={connection} />
           <div className="flex flex-wrap items-start gap-4">
             <SyncButton broker="ibkr-flex" />

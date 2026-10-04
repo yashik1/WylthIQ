@@ -10,6 +10,8 @@
  * at zero or at cost — either would be a figure the data does not support.
  */
 
+import type { AccountType } from "./account-types";
+
 export interface PricedHolding {
   /**
    * Unique per row. Not the symbol: the same company can be held twice, once
@@ -25,6 +27,13 @@ export interface PricedHolding {
   connection?: string | null;
   /** For a synced holding, the date the broker's figures are as of. */
   reportedAt: string | null;
+  /** For a hand-entered holding, its row, so it can be removed. */
+  holdingId?: number | null;
+  /** For a synced holding, the broker's account it sits in, and that account described: "TFSA ···1234". */
+  accountId?: string | null;
+  account?: string | null;
+  /** The kind of account it sits in — TFSA, RRSP… — or null when not known. */
+  accountType?: AccountType | null;
   symbol: string;
   name: string | null;
   quantity: number;

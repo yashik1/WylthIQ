@@ -9,8 +9,10 @@ import {
   registerUser,
   signRequest,
   snapSymbol,
+  snapAccountType,
   SnapTradeError,
   toBrokerReport,
+  type SnapAccount,
   type SnapAccountData,
 } from "./snaptrade";
 
@@ -235,7 +237,7 @@ describe("SnapTrade listings in this app's notation", () => {
 describe("SnapTrade data in the shared report shape", () => {
   const data: SnapAccountData[] = [
     {
-      account: { id: "acc-1", authorizationId: "auth-1", institution: "Interactive Brokers", name: "Margin", number: "U0000001" },
+      account: { id: "acc-1", authorizationId: "auth-1", institution: "Interactive Brokers", name: "Margin", number: "U0000001", rawType: null },
       asOf: "2025-09-30T20:00:00Z",
       positions: [
         { kind: "stock", ticker: "AAPL", currency: "USD", exchange: "XNAS", units: 15, costBasis: 180.25 },
@@ -299,5 +301,45 @@ describe("SnapTrade data in the shared report shape", () => {
 
   it("describes an account without its full number", () => {
     expect(describeAccount(data[0].account)).toBe("Margin ···0001");
+  });
+
+  it("names no kind for an account whose broker does not say", () => {
+    expect(report.accountTypes).toEqual({});
+  });
+});
+
+describe("the kind of account a brokerage says it is", () => {
+  const account = (institution: string, rawType: string | null, name: string | null = null): SnapAccount => ({
+    id: "acc",
+    authorizationId: "auth",
+    institution,
+    name,
+    number: "0000",
+    rawType,
+  });
+
+  it("reads registered accounts however the brokerage writes them", () => {
+    expect(snapAccountType(account("Wealthsimple", "ca_tfsa"))).toBe("TFSA");
+    expect(snapAccountType(account("Questrade", "RRSP"))).toBe("RRSP");
+    expect(snapAccountType(account("Questrade", "FHSA"))).toBe("FHSA");
+    expect(snapAccountType(account("Wealthsimple", null, "Wealthsimple TFSA"))).toBe("TFSA");
+  });
+
+  it("calls a margin or cash account non-registered where the brokerage names its registered ones", () => {
+    expect(snapAccountType(account("Questrade", "Margin"))).toBe("NON_REGISTERED");
+    expect(snapAccountType(account("Wealthsimple", "ca_non_registered"))).toBe("NON_REGISTERED");
+  });
+
+  it("does not take Interactive Brokers' plain words as a type: its TFSAs are cash accounts too", () => {
+    expect(snapAccountType(account("Interactive Brokers", "Individual", "Margin"))).toBeNull();
+    expect(snapAccountType(account("Interactive Brokers", "Individual TFSA"))).toBe("TFSA");
+  });
+
+  it("puts it in the report by account", () => {
+    const report = toBrokerReport(
+      [{ account: account("Questrade", "TFSA"), positions: [], asOf: null, activities: [] }],
+      "2025-10-01",
+    );
+    expect(report.accountTypes).toEqual({ acc: "TFSA" });
   });
 });

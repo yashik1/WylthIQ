@@ -7,6 +7,8 @@
  * works on this shape alone, so it cannot tell which one it was given.
  */
 
+import type { AccountType } from "../portfolio/account-types";
+
 export interface ReportPosition {
   accountId: string;
   /** The source's own instrument id, which survives a ticker change. */
@@ -63,6 +65,11 @@ export interface BrokerReport {
   reportedQuantities: Record<string, number>;
   /** Whether the report carries each kind of data this app reads. */
   sections: { positions: boolean; trades: boolean };
+  /**
+   * The kind of account each one is (TFSA, RRSP…), where the source names it.
+   * An account the source does not name is missing, not guessed.
+   */
+  accountTypes?: Record<string, AccountType>;
 }
 
 /** How a holding is keyed across accounts: the source's instrument id within one account. */

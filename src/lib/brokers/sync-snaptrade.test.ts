@@ -33,7 +33,7 @@ describe("reading a reader's SnapTrade connections", () => {
     ],
     "DELETE /authorizations/auth-trade": {},
     "GET /accounts": [
-      { id: "acc-ib", brokerage_authorization: "auth-read", institution_name: "Interactive Brokers", name: "Margin", number: "U0000001" },
+      { id: "acc-ib", brokerage_authorization: "auth-read", institution_name: "Interactive Brokers", name: "Margin", number: "U0000001", raw_type: "Individual TFSA" },
       { id: "acc-ws", brokerage_authorization: "auth-trade", institution_name: "Wealthsimple", name: "TFSA", number: "WS0000002" },
     ],
     "GET /accounts/acc-ib/positions/all": {
@@ -67,7 +67,9 @@ describe("reading a reader's SnapTrade connections", () => {
 
     expect(report.positions).toMatchObject([{ symbol: "AAPL", quantity: 15, averageCost: 180.25, label: "Interactive Brokers" }]);
     expect(report.executions).toMatchObject([{ externalId: "act-1", symbol: "AAPL", quantity: 15 }]);
-    expect(details.accounts).toEqual([{ id: "acc-ib", institution: "Interactive Brokers", description: "Margin ···0001" }]);
+    expect(details.accounts).toEqual([
+      { id: "acc-ib", institution: "Interactive Brokers", description: "Margin ···0001", type: "TFSA" },
+    ]);
   });
 
   describe("reading trades no more than once a day, as SnapTrade asks", () => {

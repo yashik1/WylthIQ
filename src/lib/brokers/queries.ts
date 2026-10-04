@@ -3,7 +3,8 @@ import { getDb, isDatabaseConfigured } from "../db";
 import { brokerConnections, brokerExecutions, brokerPositions, brokerTradeLinks } from "../db/schema";
 import { logBrokerFailure } from "./failsafe";
 import { badgeFor, BROKERS, isBrokerKind, type BrokerKind, type SkippedItem } from "./report";
-import type { ConnectionDetails } from "./sync";
+import type { AccountType } from "../portfolio/account-types";
+import { accountTypeOf, type ConnectionDetails } from "./sync";
 
 /**
  * Reads for the pages, each scoped to one reader in the query itself.
@@ -85,6 +86,10 @@ export async function listBrokerConnections(userId: string): Promise<BrokerConne
 export interface BrokerHolding {
   /** The connection's source, so two connections to one broker stay apart. */
   source: string;
+  /** The broker's account, described without its full number, and its type. */
+  accountId: string;
+  account: string | null;
+  accountType: AccountType | null;
   symbol: string;
   quantity: number;
   averageCost: number;
@@ -98,19 +103,37 @@ export interface BrokerHolding {
 export async function listBrokerHoldings(userId: string): Promise<BrokerHolding[]> {
   if (!isDatabaseConfigured()) return [];
   try {
-    return await getDb()
-      .select({
-        source: brokerConnections.broker,
-        symbol: brokerPositions.symbol,
-        quantity: brokerPositions.quantity,
-        averageCost: brokerPositions.averageCost,
-        currency: brokerPositions.currency,
-        reportDate: brokerPositions.reportDate,
-        label: brokerPositions.label,
-      })
-      .from(brokerPositions)
-      .innerJoin(brokerConnections, eq(brokerConnections.id, brokerPositions.connectionId))
-      .where(eq(brokerPositions.userId, userId));
+    const db = getDb();
+    const [rows, connections] = await Promise.all([
+      db
+        .select({
+          connectionId: brokerPositions.connectionId,
+          source: brokerConnections.broker,
+          accountId: brokerPositions.accountId,
+          symbol: brokerPositions.symbol,
+          quantity: brokerPositions.quantity,
+          averageCost: brokerPositions.averageCost,
+          currency: brokerPositions.currency,
+          reportDate: brokerPositions.reportDate,
+          label: brokerPositions.label,
+        })
+        .from(brokerPositions)
+        .innerJoin(brokerConnections, eq(brokerConnections.id, brokerPositions.connectionId))
+        .where(eq(brokerPositions.userId, userId)),
+      db
+        .select({ id: brokerConnections.id, details: brokerConnections.details })
+        .from(brokerConnections)
+        .where(eq(brokerConnections.userId, userId)),
+    ]);
+    const detailsOf = new Map(connections.map((c) => [c.id, (c.details ?? {}) as ConnectionDetails]));
+    return rows.map(({ connectionId, ...row }) => {
+      const details = detailsOf.get(connectionId) ?? {};
+      return {
+        ...row,
+        account: details.accounts?.find((a) => a.id === row.accountId)?.description ?? null,
+        accountType: accountTypeOf(details, row.accountId),
+      };
+    });
   } catch {
     return [];
   }

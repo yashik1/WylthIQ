@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { accountTypeFrom, type AccountType } from "../portfolio/account-types";
 import { readCappedText } from "./http";
 import { currencyFits, formatTicker, OUTSIDE_COVERAGE, type Market, type MappedSymbol } from "./listing";
 import { positionKey, skipList, type BrokerReport, type ReportExecution, type ReportPosition } from "./report";
@@ -283,6 +284,8 @@ export interface SnapAccount {
   institution: string;
   name: string | null;
   number: string;
+  /** The account type in the brokerage's own words: "TFSA", "ca_rrsp", "Margin". */
+  rawType: string | null;
 }
 
 export async function listAccounts(user: SnapTradeUser, deps?: SnapTradeDeps): Promise<SnapAccount[]> {
@@ -297,7 +300,34 @@ export async function listAccounts(user: SnapTradeUser, deps?: SnapTradeDeps): P
       institution: String(row.institution_name ?? "Broker"),
       name: typeof row.name === "string" ? row.name : null,
       number: String(row.number ?? ""),
+      rawType: rawAccountType(row),
     }));
+}
+
+/** `raw_type`, or the older `meta.type` some brokerages still fill instead. */
+function rawAccountType(row: Record<string, unknown>): string | null {
+  if (typeof row.raw_type === "string" && row.raw_type.trim()) return row.raw_type.trim().slice(0, 60);
+  const meta = row.meta;
+  if (typeof meta === "object" && meta !== null) {
+    const type = (meta as Record<string, unknown>).type;
+    if (typeof type === "string" && type.trim()) return type.trim().slice(0, 60);
+  }
+  return null;
+}
+
+/**
+ * The kind of account SnapTrade's brokerage says this is.
+ *
+ * The brokerage's own type comes first and the account's name second. Plain
+ * words such as "Margin" or "Cash" mean an ordinary taxable account at
+ * brokerages that name registered accounts separately; Interactive Brokers
+ * calls its TFSAs and RRSPs "Individual" cash accounts too, so from it those
+ * words say nothing and the reader sets the type.
+ */
+export function snapAccountType(account: SnapAccount): AccountType | null {
+  return accountTypeFrom([account.rawType, account.name], {
+    plainMeansTaxable: !/interactive brokers/i.test(account.institution),
+  });
 }
 
 export interface SnapPosition {
@@ -444,9 +474,12 @@ export function toBrokerReport(data: SnapAccountData[], today = new Date().toISO
   const positions: ReportPosition[] = [];
   const executions: ReportExecution[] = [];
   const reportedQuantities: Record<string, number> = {};
+  const accountTypes: Record<string, AccountType> = {};
   let toDate: string | null = null;
 
   for (const { account, positions: held, asOf, activities } of data) {
+    const type = snapAccountType(account);
+    if (type) accountTypes[account.id] = type;
     const reportDate = isoDay(asOf) ?? today;
     if (!toDate || reportDate > toDate) toDate = reportDate;
 
@@ -530,6 +563,7 @@ export function toBrokerReport(data: SnapAccountData[], today = new Date().toISO
     skipped: skipped.list(),
     reportedQuantities,
     sections: { positions: true, trades: true },
+    accountTypes,
   };
 }
 

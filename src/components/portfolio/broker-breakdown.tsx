@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { calendarDate, money, percent } from "@/lib/format";
-import type { BrokerHoldingRow, BrokerSummary } from "@/lib/portfolio/brokers";
+import type { BrokerAccount, BrokerHoldingRow, BrokerSummary } from "@/lib/portfolio/brokers";
 import { cn } from "@/lib/utils";
 import { Ring, type RingSegment } from "./ring";
 
@@ -14,7 +14,10 @@ import { Ring, type RingSegment } from "./ring";
  * beside it saying which are connected and what each is worth. Choosing a
  * broker, in the ring or the list, opens a second ring of what that broker
  * holds, company by company, with the holdings beside it. Choosing it again
- * closes it. Amounts are in one currency, the same as the other charts.
+ * closes it. A broker with more than one account — a TFSA and an RRSP, say —
+ * lists them above its holdings, and choosing one narrows the ring and the
+ * table to that account. Amounts are in one currency, the same as the other
+ * charts.
  *
  * Six segments at most per ring, each in its own colour in the palette's
  * fixed order, the rest folded into a grey "Other" — the same rule as the
@@ -81,6 +84,7 @@ function HoldingsTable({
   colours,
   active,
   onActive,
+  accountOf,
 }: {
   rows: BrokerHoldingRow[];
   currency: string;
@@ -88,6 +92,8 @@ function HoldingsTable({
   colours: RingSegment[];
   active: string | null;
   onActive: (key: string | null) => void;
+  /** The account a row sits in, in words, when the table spans more than one. */
+  accountOf?: (row: BrokerHoldingRow) => string | null;
 }) {
   return (
     <table className="w-full table-fixed text-sm">
@@ -127,6 +133,7 @@ function HoldingsTable({
                     {row.symbol}
                   </Link>
                   {row.name && <span className="block truncate text-xs text-muted">{row.name}</span>}
+                  {accountOf?.(row) && <span className="block truncate text-[11px] font-medium text-muted-strong">{accountOf(row)}</span>}
                 </span>
               </span>
             </th>
@@ -153,16 +160,77 @@ function HoldingsTable({
   );
 }
 
+/** A broker's accounts, each with its kind and value; choosing one narrows the holdings to it. */
+function AccountChoice({
+  broker,
+  currency,
+  chosen,
+  onChoose,
+}: {
+  broker: BrokerSummary;
+  currency: string;
+  chosen: string | null;
+  onChoose: (key: string | null) => void;
+}) {
+  const option = (key: string | null, label: string, detail: string | null, value: number, share: number | null) => (
+    <button
+      key={key ?? "all"}
+      type="button"
+      aria-pressed={chosen === key}
+      onClick={() => onChoose(key)}
+      className={cn(
+        "rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors",
+        chosen === key ? "border-accent bg-accent-soft/40" : "border-border hover:bg-surface-2/70",
+      )}
+    >
+      <span className="block font-medium">
+        {label}
+        {detail && <span className="font-normal text-faint"> · {detail}</span>}
+      </span>
+      <span className="tnum block text-muted">
+        {money(value, currency)}
+        {share != null && ` · ${percent(share, 0)}`}
+      </span>
+    </button>
+  );
+  return (
+    <div role="group" aria-label={`Accounts at ${broker.name}`} className="mt-3 flex flex-wrap gap-2">
+      {option(null, "All accounts", null, broker.value, null)}
+      {broker.accounts.map((account) => option(account.key, account.label, account.description, account.value, account.share))}
+    </div>
+  );
+}
+
 /** One broker opened: a ring of what it holds, and the holdings beside it. */
 function Holdings({ broker, currency }: { broker: BrokerSummary; currency: string }) {
   const [expanded, setExpanded] = useState(false);
   const [active, setActive] = useState<string | null>(null);
-  const rows = expanded ? broker.holdings : broker.holdings.slice(0, SHOWN);
-  const hidden = broker.holdings.length - rows.length;
+  const [accountKey, setAccountKey] = useState<string | null>(null);
+
+  const several = broker.accounts.length > 1;
+  const account: BrokerAccount | null = broker.accounts.find((a) => a.key === accountKey) ?? null;
+  // The one account a broker has is named in the heading; several are offered to choose from.
+  const only = !several ? (broker.accounts[0] ?? null) : null;
+  const inView = account
+    ? broker.holdings
+        .filter((h) => h.account === account.key)
+        .map((h) => ({ ...h, share: h.value != null && account.value > 0 ? h.value / account.value : null }))
+    : broker.holdings;
+  const value = account ? account.value : broker.value;
+  const where = account ? `${broker.name}, ${account.label}` : broker.name;
+  const labelOf = new Map(broker.accounts.map((a) => [a.key, a.label]));
+
+  const rows = expanded ? inView : inView.slice(0, SHOWN);
+  const hidden = inView.length - rows.length;
   const segments = segmentsOf(
-    broker.holdings.map((h) => ({ key: h.key, label: h.symbol, value: h.value ?? 0 })),
+    inView.map((h) => ({ key: h.key, label: h.symbol, value: h.value ?? 0 })),
     "Other holdings",
   );
+  const choose = (key: string | null) => {
+    setAccountKey(key);
+    setExpanded(false);
+    setActive(null);
+  };
 
   return (
     <section
@@ -171,7 +239,10 @@ function Holdings({ broker, currency }: { broker: BrokerSummary; currency: strin
       className="rounded-lg border border-border px-4 py-4"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold">Held at {broker.name}</h3>
+        <h3 className="text-sm font-semibold">
+          Held at {broker.name}
+          {only?.type && <span className="font-normal text-muted"> · {only.label}</span>}
+        </h3>
         <p
           className={cn(
             "tnum text-xs",
@@ -191,19 +262,23 @@ function Holdings({ broker, currency }: { broker: BrokerSummary; currency: strin
         </p>
       )}
 
-      <div className="mt-3 grid items-center gap-5 md:grid-cols-[minmax(0,190px)_minmax(0,1fr)]">
+      {several && <AccountChoice broker={broker} currency={currency} chosen={accountKey} onChoose={choose} />}
+
+      <div className="mt-3 grid grid-cols-[minmax(0,1fr)] items-center gap-5 md:grid-cols-[minmax(0,190px)_minmax(0,1fr)]">
         {segments.length > 0 ? (
           <Ring
             segments={segments}
             currency={currency}
-            ariaLabel={`What ${broker.name} holds`}
+            ariaLabel={`What ${where} holds`}
             active={active}
             onActive={setActive}
             className="max-w-[190px]"
             idle={
               <>
-                <span className="text-xl font-semibold tracking-tight">{money(broker.value, currency)}</span>
-                <span className="mt-0.5 max-w-full truncate text-xs text-muted">at {broker.name}</span>
+                <span className="text-xl font-semibold tracking-tight">{money(value, currency)}</span>
+                <span className="mt-0.5 max-w-full truncate text-xs text-muted">
+                  {account ? `in ${account.label}` : `at ${broker.name}`}
+                </span>
               </>
             }
           />
@@ -215,12 +290,13 @@ function Holdings({ broker, currency }: { broker: BrokerSummary; currency: strin
           <HoldingsTable
             rows={rows}
             currency={currency}
-            caption={`Held at ${broker.name}`}
+            caption={`Held at ${where}`}
             colours={segments}
             active={active}
             onActive={setActive}
+            accountOf={several && !account ? (row) => labelOf.get(row.account) ?? null : undefined}
           />
-          {broker.holdings.length > SHOWN && (
+          {inView.length > SHOWN && (
             <button type="button" onClick={() => setExpanded(!expanded)} className="py-1.5 text-xs font-medium text-accent">
               {expanded ? "Show fewer" : `Show ${hidden} more`}
             </button>
@@ -261,7 +337,8 @@ export function BrokerBreakdown({
 
   return (
     <div className="space-y-4 p-5">
-      <div className="grid items-center gap-6 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+      {/* One column that may shrink on a phone: a long line in the list must truncate, not widen the card. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-6 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
         <Ring
           segments={segments}
           currency={currency}
@@ -318,6 +395,7 @@ export function BrokerBreakdown({
                       ) : (
                         "Typed in by you"
                       )}
+                      {broker.accounts.length > 1 && ` · ${broker.accounts.length} accounts`}
                       {` · ${count} holding${count === 1 ? "" : "s"}`}
                       {broker.synced &&
                         broker.reportedAt &&

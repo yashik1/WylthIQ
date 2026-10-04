@@ -1,3 +1,4 @@
+import { accountTypeLabel } from "./account-types";
 import type { ValuedHolding } from "./math";
 
 /**
@@ -11,7 +12,7 @@ import type { ValuedHolding } from "./math";
  * counted rather than charted at cost or at an invented rate.
  */
 
-export type SliceBy = "company" | "sector" | "broker" | "currency";
+export type SliceBy = "company" | "sector" | "account" | "broker" | "currency";
 
 export interface ChartHolding {
   symbol: string;
@@ -20,6 +21,8 @@ export interface ChartHolding {
   sector: string | null;
   /** "Entered by hand", or the institution a synced holding came from. */
   broker: string;
+  /** The kind of account it sits in, in words: "TFSA", "Type not set". */
+  accountType: string;
   /** The currency the holding trades in, before any conversion. */
   currency: string;
   /** Value and cost in the chart's currency. */
@@ -89,6 +92,7 @@ export function chartHoldings(
       name: holding.name,
       sector: sectors[holding.symbol] ?? null,
       broker: brokerOf(holding),
+      accountType: accountTypeLabel(holding.accountType),
       currency: holding.currency,
       value: holding.value! * rate,
       cost: holding.cost * rate,
@@ -118,6 +122,7 @@ export interface Slice {
 const NOUNS: Record<SliceBy, [string, string]> = {
   company: ["company", "companies"],
   sector: ["sector", "sectors"],
+  account: ["account type", "account types"],
   broker: ["source", "sources"],
   currency: ["currency", "currencies"],
 };
@@ -125,6 +130,7 @@ const NOUNS: Record<SliceBy, [string, string]> = {
 function groupOf(holding: ChartHolding, by: SliceBy): string {
   if (by === "company") return holding.symbol;
   if (by === "sector") return holding.sector ?? UNCLASSIFIED;
+  if (by === "account") return holding.accountType;
   if (by === "broker") return holding.broker;
   return holding.currency;
 }
@@ -169,7 +175,7 @@ export function slices(chart: PortfolioChart, by: SliceBy): Slice[] {
 
 /** The ways of slicing that say something: at least two groups. Company is always offered. */
 export function usefulSlicings(chart: PortfolioChart): SliceBy[] {
-  const all: SliceBy[] = ["company", "sector", "broker", "currency"];
+  const all: SliceBy[] = ["company", "sector", "account", "broker", "currency"];
   return all.filter((by) => by === "company" || new Set(chart.holdings.map((h) => groupOf(h, by))).size > 1);
 }
 

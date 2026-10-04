@@ -46,6 +46,8 @@ export const RULES = {
   brokerConnect: { limit: 5, windowSeconds: 3600 },
   /** Uploading a broker statement: a large body to parse, so bounded per address and account. */
   brokerUpload: { limit: 10, windowSeconds: 3600 },
+  /** Settings on a connected broker, such as an account's type: a small write, but still a write. */
+  brokerSettings: { limit: 60, windowSeconds: 3600 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type RuleName = keyof typeof RULES;
