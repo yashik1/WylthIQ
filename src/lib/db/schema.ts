@@ -749,7 +749,10 @@ export const newsletterSubscribers = pgTable("newsletter_subscribers", {
 export const stripeEvents = pgTable("stripe_events", {
   id: text("id").primaryKey(),
   type: text("type").notNull(),
-  processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+  status: text("status").notNull().default("processing"),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 /**
