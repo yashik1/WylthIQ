@@ -14,6 +14,8 @@ export interface PortfolioInput {
   source: "manual" | "synced";
   /** For a synced holding, the institution: "Interactive Brokers", "Wealthsimple". */
   sourceLabel: string | null;
+  /** For a synced holding, the connection it came through: "snaptrade", "ibkr-flex", "ibkr-upload". */
+  connection: string | null;
   symbol: string;
   quantity: number;
   /** Per share. */
@@ -82,6 +84,7 @@ export function toPortfolioInputs(
       key,
       source: "synced",
       sourceLabel: row.label,
+      connection: row.source,
       symbol: row.symbol,
       quantity: row.quantity,
       averageCost: row.averageCost,
@@ -95,6 +98,7 @@ export function toPortfolioInputs(
     key: `manual:${row.symbol}`,
     source: "manual",
     sourceLabel: null,
+    connection: null,
     symbol: row.symbol,
     quantity: row.quantity,
     averageCost: row.averageCost,

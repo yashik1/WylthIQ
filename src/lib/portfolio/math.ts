@@ -21,6 +21,8 @@ export interface PricedHolding {
   source: "manual" | "synced";
   /** For a synced holding, the institution: "Interactive Brokers", "Wealthsimple". */
   sourceLabel: string | null;
+  /** For a synced holding, the connection it came through: "snaptrade", "ibkr-flex", "ibkr-upload". */
+  connection?: string | null;
   /** For a synced holding, the date the broker's figures are as of. */
   reportedAt: string | null;
   symbol: string;

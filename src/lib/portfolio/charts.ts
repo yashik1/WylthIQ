@@ -42,6 +42,34 @@ export const UNCLASSIFIED = "Unclassified";
 /** One ring keeps six segments at most; past that, the smallest fold into "Other". */
 export const MAX_SLICES = 6;
 
+/**
+ * The one currency every holding is shown in when they are added together:
+ * the portfolio's own when it has one, otherwise the base currency, with each
+ * holding's rate into it — null where no rate was available.
+ */
+export function commonCurrency(
+  holdings: ValuedHolding[],
+  /** Each currency's rate into `base`, or null where none was available. */
+  rates: Map<string, number | null>,
+  base: string,
+): { currency: string; single: boolean; rateFor: (currency: string) => number | null } {
+  const currencies = new Set(holdings.filter((h) => h.value != null && h.value > 0).map((h) => h.currency));
+  const single = currencies.size <= 1;
+  return {
+    currency: single ? ([...currencies][0] ?? base) : base,
+    single,
+    rateFor: (currency) => {
+      const rate = single ? 1 : (rates.get(currency) ?? null);
+      return rate != null && rate > 0 ? rate : null;
+    },
+  };
+}
+
+/** Where a holding is held, in words: its institution, or "Entered by hand". */
+export function brokerOf(holding: Pick<ValuedHolding, "source" | "sourceLabel">): string {
+  return holding.source === "manual" ? HAND_ENTERED : (holding.sourceLabel ?? "Your broker");
+}
+
 export function chartHoldings(
   holdings: ValuedHolding[],
   /** Each currency's rate into `base`, or null where none was available. */
@@ -50,19 +78,17 @@ export function chartHoldings(
   base: string,
 ): PortfolioChart {
   const priced = holdings.filter((h) => h.value != null && h.value > 0);
-  const currencies = new Set(priced.map((h) => h.currency));
-  const single = currencies.size <= 1;
-  const currency = single ? ([...currencies][0] ?? base) : base;
+  const { currency, single, rateFor } = commonCurrency(holdings, rates, base);
 
   const charted: ChartHolding[] = [];
   for (const holding of priced) {
-    const rate = single ? 1 : (rates.get(holding.currency) ?? null);
-    if (rate == null || !(rate > 0)) continue;
+    const rate = rateFor(holding.currency);
+    if (rate == null) continue;
     charted.push({
       symbol: holding.symbol,
       name: holding.name,
       sector: sectors[holding.symbol] ?? null,
-      broker: holding.source === "manual" ? HAND_ENTERED : (holding.sourceLabel ?? "Your broker"),
+      broker: brokerOf(holding),
       currency: holding.currency,
       value: holding.value! * rate,
       cost: holding.cost * rate,

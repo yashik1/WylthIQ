@@ -4,7 +4,8 @@ import { companies, financials, scores } from "../db/schema";
 import { getRate } from "../fx";
 import { getProvider } from "../providers";
 import { freeCashFlowOf } from "../scoring/returns";
-import { chartHoldings, type PortfolioChart } from "./charts";
+import { brokerSummaries, type BrokerSummary } from "./brokers";
+import { chartHoldings, commonCurrency, type PortfolioChart } from "./charts";
 import { buildIntelligence, type HoldingProfile, type PortfolioIntelligence } from "./intelligence";
 import { valueHoldings, type CurrencyTotal, type PricedHolding, type ValuedHolding } from "./math";
 import type { PortfolioInput } from "./sources";
@@ -33,6 +34,8 @@ export interface PortfolioView {
   scored: Record<string, { healthScore: number | null; displaySector: string | null }>;
   /** Every priced holding in one currency, for the allocation and map charts. */
   chart: PortfolioChart;
+  /** What is held at each broker, in the charts' currency. */
+  brokers: BrokerSummary[];
 }
 
 const BASE_CURRENCY = "USD";
@@ -169,6 +172,7 @@ export async function loadPortfolio(
       key: holding.key,
       source: holding.source,
       sourceLabel: holding.sourceLabel,
+      connection: holding.connection,
       reportedAt: holding.reportedAt,
       symbol: holding.symbol,
       name: row?.name ?? null,
@@ -232,6 +236,7 @@ export async function loadPortfolio(
     holdings,
     totals,
     chart: chartHoldings(holdings, rates, sectors, BASE_CURRENCY),
+    brokers: brokerSummaries(holdings, commonCurrency(holdings, rates, BASE_CURRENCY).rateFor),
     intelligence: buildIntelligence(profiles),
     baseCurrency: BASE_CURRENCY,
     unconverted: [...rates].filter(([, rate]) => rate == null).map(([currency]) => currency),

@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AllocationChart } from "@/components/portfolio/allocation-chart";
+import { BrokerBreakdown } from "@/components/portfolio/broker-breakdown";
 import { HoldingForm, RemoveHoldingButton } from "@/components/portfolio/holding-form";
 import { HoldingsMap } from "@/components/portfolio/holdings-map";
 import { LocalTime } from "@/components/local-time";
 import { Badge, Card, CardHeader, EmptyState, MeterBar, PageHeader, RatingBadge } from "@/components/ui";
 import { canAccess, getEntitlement } from "@/lib/billing/entitlement";
 import { listBrokerHoldings } from "@/lib/brokers/queries";
-import { badgeFor } from "@/lib/brokers/report";
 import { calendarDate, percent, price as fmtPrice } from "@/lib/format";
 import { listHoldings } from "@/lib/portfolio/actions";
 import { mapCompanies, type PortfolioChart } from "@/lib/portfolio/charts";
@@ -126,6 +126,18 @@ export default async function PortfolioPage() {
             ))}
           </div>
 
+          {view.brokers.some((broker) => broker.synced) && (
+            <Card>
+              <CardHeader
+                title="By broker"
+                subtitle={`What you hold at each broker and how much it is worth, in ${view.chart.currency}${
+                  view.chart.converted ? ", other currencies converted at the latest rate" : ""
+                }`}
+              />
+              <BrokerBreakdown brokers={view.brokers} currency={view.chart.currency} />
+            </Card>
+          )}
+
           {mapCompanies(view.chart).length >= 2 && (
             <div className="grid grid-cols-[minmax(0,1fr)] gap-3 xl:grid-cols-2">
               <Card>
@@ -154,11 +166,12 @@ export default async function PortfolioPage() {
               }
             />
             <div className="scroll-x">
-              <table className="w-full min-w-[60rem] text-sm">
+              <table className="w-full min-w-[66rem] text-sm">
                 <caption className="sr-only">Your holdings</caption>
                 <thead>
                   <tr className="border-b border-border bg-surface-2/50 text-left text-xs text-muted">
                     <th scope="col" className="px-5 py-2.5 font-medium">Company</th>
+                    <th scope="col" className="px-3 py-2 font-medium">Held at</th>
                     <th scope="col" className="px-3 py-2 text-right font-medium">Shares</th>
                     <th scope="col" className="px-3 py-2 text-right font-medium">Average cost</th>
                     <th scope="col" className="px-3 py-2 text-right font-medium">Price</th>
@@ -181,14 +194,6 @@ export default async function PortfolioPage() {
                           >
                             {holding.symbol}
                           </Link>
-                          {holding.source === "synced" && (
-                            <>
-                              {" "}
-                              <Badge tone="accent" title={`Synced read-only from ${holding.sourceLabel ?? "your broker"}`}>
-                                {badgeFor(holding.sourceLabel)}
-                              </Badge>
-                            </>
-                          )}
                           {holding.name && (
                             <span className="block max-w-[14rem] truncate text-xs text-muted">{holding.name}</span>
                           )}
@@ -204,6 +209,15 @@ export default async function PortfolioPage() {
                             )
                           )}
                         </th>
+                        <td className="px-3 py-3">
+                          {holding.source === "synced" ? (
+                            <Badge tone="accent" title={`Synced read-only from ${holding.sourceLabel ?? "your broker"}`}>
+                              {holding.sourceLabel ?? "Your broker"}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted">Entered by hand</span>
+                          )}
+                        </td>
                         <td className="tnum px-3 py-3 text-right">
                           {holding.quantity.toLocaleString("en-US", { maximumFractionDigits: 4 })}
                         </td>
