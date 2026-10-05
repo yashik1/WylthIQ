@@ -13,12 +13,14 @@ import { buildGrounding, buildUserMessage, screenAnswer, SYSTEM_PROMPT, type Gro
 import { isAiQuestion } from "./questions";
 
 /**
- * A grounded explanation of one company's figures, for a signed-in reader.
+ * A grounded explanation of one company's figures.
  *
- * The answer is built only from the figures the company page shows, cites
- * them, and is withheld if it reads as advice. It is cached per company,
- * question and filing, so the same question about the same annual report is
- * paid for once, and limited per address and per account.
+ * Free for everyone — no sign-in and no plan required. The answer is built
+ * only from the figures the company page shows, cites them, and is withheld
+ * if it reads as advice. It is cached per company, question and filing so the
+ * same question about the same annual report is paid for once. Rate limits
+ * (per address, and a higher daily allowance when signed in) keep the model
+ * bill under control.
  */
 
 export interface AskResult {
@@ -48,13 +50,26 @@ export async function askAboutCompany(symbol: string, question: string): Promise
   const clean = typeof symbol === "string" ? symbol.trim().toUpperCase() : "";
   if (!/^[A-Z0-9.\-]{1,20}$/.test(clean)) return { ok: false, message: "That is not a symbol." };
 
+  // Free for everyone. Sign-in is optional and only improves the daily limit.
   const entitlement = await getEntitlement();
-  if (!entitlement.userId) return { ok: false, message: "Sign in to ask about a company's figures." };
 
   const wait = await actionRateLimited("ai");
   if (wait != null) return { ok: false, message: `Wait ${wait}s and try again.` };
-  const daily = limit(`ai-user:${entitlement.userId}`, RULES.aiDaily);
-  if (!daily.ok) return { ok: false, message: "You have asked for many explanations today. Try again tomorrow." };
+
+  // Signed-in readers share a higher per-account daily ceiling; everyone else
+  // is limited per address so anonymous use cannot run up the model bill.
+  const dailyKey = entitlement.userId
+    ? `ai-user:${entitlement.userId}`
+    : `ai-anon:${await anonymousKey()}`;
+  const daily = limit(dailyKey, RULES.aiDaily);
+  if (!daily.ok) {
+    return {
+      ok: false,
+      message: entitlement.userId
+        ? "You have asked for many explanations today. Try again tomorrow."
+        : "This address has asked for many explanations today. Sign in for a higher limit, or try again tomorrow.",
+    };
+  }
 
   const data = await getStockPageData(clean);
   const { fundamentals, report } = data;
@@ -108,4 +123,16 @@ export async function askAboutCompany(symbol: string, question: string): Promise
     cache.delete(oldest);
   }
   return result;
+}
+
+/** Stable key for an anonymous caller (IP). Same precedence as the rate-limit helper. */
+async function anonymousKey(): Promise<string> {
+  const { headers } = await import("next/headers");
+  const headerList = await headers();
+  return (
+    headerList.get("cf-connecting-ip")?.trim() ||
+    headerList.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    headerList.get("x-real-ip")?.trim() ||
+    "unknown"
+  );
 }

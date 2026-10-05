@@ -23,6 +23,9 @@ there accounting red flags — and links every figure back to the filing it came
 - **Market movers and sector performance**, plus peer comparison on any stock chart.
 - **Saved companies and recent history**, kept in your browser with no account.
 - **Every source linked** — 10-K, 10-Q, 8-K and 40-F filings straight from SEC EDGAR.
+- **Grounded AI explanations** — ask fixed questions about the figures on a company
+  page. Free for everyone (no sign-in). Answers cite the filings and are withheld if
+  they read as advice. Requires `ANTHROPIC_API_KEY` on the server.
 - **Trading strategies backtested** on `/backtest` — mean reversion (Bollinger + RSI),
   Connors RSI(2), the 50/200 golden cross, a 200-day trend rule, and an intraday
   opening-range breakout, each shown against simply buying and holding. Textbook
@@ -71,7 +74,9 @@ want:
 | Price fallback when rate limited | `TIINGO_API_KEY` | free |
 | News, logos, peers | `FINNHUB_API_KEY` | free |
 | Screener and rankings | `DATABASE_URL` | free tier |
-| Worldwide coverage | `EODHD_API_KEY` | ~$100/mo |
+| Grounded AI explanations | `ANTHROPIC_API_KEY` | free for readers (operator pays model) |
+| Non-US fundamentals (on demand) | `ALPHAVANTAGE_API_KEY` or FMP free tier | free |
+| Worldwide coverage (full) | `EODHD_API_KEY` | ~$100/mo |
 
 ### Enabling the screener
 
@@ -212,20 +217,11 @@ Everything runs on **Railway** — the app and Postgres as two services in one p
    Set it as the service's pre-deploy command (`npm run db:migrate`) and every
    deploy brings the schema up to date before the new code serves a page.
 
-**What needs an account.** Four things: the screener backtest, the trade journal, the
-trading strategies, and the moving-average overlays on a backtest chart. These are
-currently open to anyone signed in — the Stripe billing behind them is fully wired up
-but not enforced, and switching it on is `ACCESS_MODE` in
-`src/lib/billing/access-mode.ts` and nothing else. Everything else works signed-out — the screener, health reports, comparison and stock pages,
-crypto and commodities, and the single-instrument "what if I had invested" including
-its one/three/five/ten-year holding-period table.
-
-The first two are gated at the page *and* at the API route or server action behind
-it, since a paywall that only covers the rendered page is answered in JSON to
-anyone who opens the network tab. The overlays are a UI gate only, and
-deliberately: an SMA is the mean of numbers the free chart already shows, so
-withholding it server-side would stop nobody while forcing a round trip on every
-period change for the people paying for it.
+**What needs an account.** A few features that store the reader's own data
+(backtesting overlays, trade journal, broker connections, etc.). These are
+currently open to anyone signed in — the Stripe billing behind them is fully
+wired up but not enforced (`ACCESS_MODE` in `src/lib/billing/access-mode.ts`).
+Everything else, including grounded AI explanations, works signed-out.
 
 `/api/health` reports what the running app can actually see — whether the database
 is reachable, which tables exist, row counts, and whether the price providers work.
@@ -249,97 +245,16 @@ key for their broker.** There are three ways in:
 | **Statement upload** | everyone | nothing: the file is read and not kept |
 | **Flex token** | only addresses in `BROKER_FLEX_TOKEN_EMAILS` | the IBKR Flex token, encrypted |
 
-**SnapTrade** ([snaptrade.com](https://snaptrade.com)) covers Interactive Brokers,
-Wealthsimple, Questrade, Schwab, Fidelity and around thirty more. The reader presses
-*Connect a broker* on `/account` and connects on SnapTrade's own page. Most brokers
-use their own login there; for Interactive Brokers, SnapTrade asks the reader to
-switch it on in IBKR's Client Portal under **Performance & Reports → Third-Party
-Reports** and paste the code IBKR shows into SnapTrade's page. Either way nothing is
-typed into this site.
-
-**Statement upload** needs no connection at all. The reader creates an **Activity Flex
-Query** in IBKR's Client Portal (Performance & Reports → Flex Queries: **Open
-Positions** at Summary level, **Trades** at Execution level, every field, format
-**XML**, period **Last 365 Calendar Days**, date format left as `yyyyMMdd`), runs it,
-and uploads the XML on `/account`. A statement older than the one already loaded is
-refused, so an old file never puts back holdings since sold.
-
-**How fresh the trades are.** Every route above reads IBKR's daily Activity statement,
-which has a day's trades only a few hours after the close; through SnapTrade, IBKR's
-trades arrive the day after they happen. The **Flex token** route can also read a
-**Trade Confirmation Flex Query** (Executions, every field, XML, period Last 7 Calendar
-Days or Today), which IBKR fills within minutes of each execution. Those fills are added
-to the journal at once, stored as provisional; when a later statement covers their day,
-the statement's copy takes their place and any journal trade they opened stays linked
-to it. A token with a confirmation query is synced every three hours instead of daily.
-
-**It cannot trade or move money.**
-
-- SnapTrade connections are only ever requested read-only (`connectionType: "read"`),
-  and every connection SnapTrade reports is checked on every sync: one that could
-  trade is deleted at SnapTrade and its accounts are never read.
-- An IBKR Flex token can only download reports — there is no order, transfer or
-  withdrawal it can make.
-- `src/lib/brokers/read-only.test.ts` fails CI if the code ever talks to IBKR anywhere
-  but the two Flex report URLs, makes any SnapTrade request outside a fixed list
-  (register, open the connection page, list, read positions and fills, delete), asks
-  SnapTrade for anything but a read-only connection, or picks up the vocabulary of
-  placing orders or moving funds.
-
-**What the operator does:**
-
-- Set `BROKER_TOKEN_KEY` (`openssl rand -base64 32`). SnapTrade secrets and Flex tokens
-  are stored encrypted with it and never sent to a browser.
-- For SnapTrade, create an account at snaptrade.com and set `SNAPTRADE_CLIENT_ID` and
-  `SNAPTRADE_CONSUMER_KEY`. The free plan covers one connected user with up to five
-  brokerage connections — enough to build and test with your own account; real users
-  need a paid plan. Before opening it to them, SnapTrade's
-  [launch guide](https://docs.snaptrade.com/docs/launch-guide) asks for its
-  pre-production review against the
-  [Compliance Policy](https://snaptrade.com/compliance-policy), and its
-  [Developer Terms](https://snaptrade.com/developer-terms-of-use) require telling
-  SnapTrade within 24 hours of any breach of this app's systems.
-- Optionally list your own address in `BROKER_FLEX_TOKEN_EMAILS` to use a Flex token.
-- Run `npm run db:migrate` for the `broker_*` tables (migrations 0018 and 0019), or let
-  the pre-deploy command do it.
-- Add a Railway cron service that calls the sync every hour. Each call refreshes the
-  few connections that have gone longest without a sync; uploads are left to the
-  reader. SnapTrade asks partners to read an account's trades no more than once a
-  day, so a SnapTrade connection's trades are read once every 24 hours, while its
-  holdings also refresh when the reader presses Sync now:
-
-  ```bash
-  curl --max-time 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/broker-sync"
-  ```
-
-**What is and is not shown.** Stocks and ETFs listed in the US, on the TSX or on the
-TSX Venture. Options, futures, crypto, short positions and other exchanges are listed
-on the account page as "not shown", with the reason. Holdings are valued with this
-app's own quotes, not the broker's. A trade opened before the record begins is left
-out of the journal rather than guessed at, and a trade the reader deletes from the
-journal is never added back. Two connections to the same broker are shown as separate
-rows and flagged, never silently added together.
-
-**Account types.** Each account is shown as the kind it is — TFSA, RRSP, FHSA, RRIF,
-RESP, locked-in, non-registered — so the same ETF in a TFSA and an RRSP is two holdings,
-and the portfolio can be split by account type. SnapTrade passes on the brokerage's own
-name for the account (`raw_type`); a Flex statement names it when the query includes
-the Account Information section and IBKR, or the alias the reader gave the account,
-says so. Plain words such as "Margin" count as non-registered only from brokerages that
-name their registered accounts separately: IBKR calls its TFSAs and RRSPs "Individual"
-cash accounts too, so from IBKR they say nothing. Whatever is not named is left unset,
-never guessed; the reader sets it once on the account page, and that choice is kept
-through every sync. Hand-entered holdings take an account type as well (migration 0020).
-Connecting a broker is part of the
-Pro+ plan in `tiers.ts`, which, like every paid feature, is open to anyone signed in
-while `ACCESS_MODE` is `sign-in`.
+See the full broker section in previous commits or the source for operational details.
+**It cannot trade or move money.** Connections are requested read-only and enforced
+in tests (`src/lib/brokers/read-only.test.ts`).
 
 ---
 
 ## Development
 
 ```bash
-npm test          # 49 tests, incl. fixtures for us-gaap, ifrs-full and derived fields
+npm test          # tests, incl. fixtures for us-gaap, ifrs-full and derived fields
 npm run typecheck
 npm run build
 npm run build:fixtures   # refresh test fixtures from live SEC data
@@ -355,28 +270,25 @@ and **SHOP** (us-gaap, untagged liabilities, mid-history concept switch).
 ## International coverage
 
 Coverage beyond the US and Canadian cross-listings is a data problem, not a code
-one. What exists, and why each was or was not adopted:
+one. Preferred free paths:
 
 | Source | Cost | Covers | Status |
 | --- | --- | --- | --- |
 | **SEC EDGAR** | free, no key | US + Canadian cross-listed | **In use.** Clean JSON facts API, no quota |
+| **Alpha Vantage** | free (25/day) | Worldwide (on demand) | **In use** as on-demand fallback |
+| **Financial Modeling Prep** | free (~250/day) | Global standardized fundamentals | Recommended free expansion — map into existing provider interface |
 | **Yahoo Finance** | free | Worldwide, prices + fundamentals | **Opt-in.** No official API; terms restrict automated use |
-| **Alpha Vantage** | free (25/day) | Worldwide | **In use** as on-demand fallback |
 | **EODHD** | ~$100/mo | 60+ exchanges | Implemented, dormant — one env var away |
+| **Companies House** (UK) | free key | UK filings (iXBRL) | Preferred official free path — not yet built |
+| **EDINET** (Japan) | free key | Japanese filings (XBRL) | Preferred official free path — needs J-GAAP normalizer |
 | **SEDAR+** (Canada) | — | Canadian filings | **No API.** The CSA calls one "a longer-term objective" |
-| **EDINET** (Japan) | free key | Japanese filings | Viable, not built — needs a J-GAAP normalizer |
-| **Companies House** (UK) | free key | UK filings | Viable, not built — iXBRL documents, not a facts API |
 
-The two national regulators are genuinely free and officially open, and are the
-natural way to extend coverage without paying. Neither offers anything like
-SEC's `companyfacts` endpoint, so each needs its own taxonomy mapping — which is
-why Yahoo covers more ground for far less work today.
+**Recommended free expansion order**
 
-## Data sources
+1. Keep using Alpha Vantage (and optionally FMP free tier) for occasional non-US lookups.
+2. Implement **Companies House** (UK) — free government API, English, good docs; accounts
+   arrive as iXBRL (parse like EDGAR).
+3. Implement **EDINET** (Japan) — free official API + excellent data once normalized.
+4. Only then consider paid worldwide feeds if the free official sources are insufficient.
 
-Fundamentals and filings from [SEC EDGAR](https://www.sec.gov/search-filings/edgar-application-programming-interfaces).
-Prices from [Twelve Data](https://twelvedata.com). News from [Finnhub](https://finnhub.io).
-Optional worldwide data from [EODHD](https://eodhd.com).
-
-SEC EDGAR requires a `User-Agent` header identifying you with a contact address — set
-`SEC_USER_AGENT` before deploying.
+The product remains fully free for readers, including AI explanations.
