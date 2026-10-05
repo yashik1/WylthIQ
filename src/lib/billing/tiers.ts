@@ -95,6 +95,11 @@ export const FEATURES: Readonly<Record<Feature, FeaturePolicy>> = {
   BASIC_STOCK_RESEARCH: { kind: "sellable", requires: "anyone" },
   BASIC_SCREENER: { kind: "sellable", requires: "anyone" },
 
+  // Grounded explanations are free for everyone. The model call still costs
+  // the operator, so rate limits (per address and, when signed in, per account)
+  // stay in place. No account or plan is required.
+  AI_EXPLANATIONS: { kind: "sellable", requires: "anyone" },
+
   // --- free, but need somewhere to put the reader's own data ---------------
   BACKTESTING: { kind: "personal-use-data", requires: "account", why: PERSONAL_USE },
   ADVANCED_CHARTS: { kind: "personal-use-data", requires: "account", why: PERSONAL_USE },
@@ -122,11 +127,6 @@ export const FEATURES: Readonly<Record<Feature, FeaturePolicy>> = {
   // on the same quote path as everything else rather than on a price feed
   // this app would be reselling.
   BROKER_SYNC: { kind: "sellable", requires: "pro-plus" },
-
-  // Available to everyone with an account and metered by tier instead of
-  // being locked — see `src/lib/billing/quota.ts`. A hard gate here would
-  // make the cheapest tier's allowance unreachable.
-  AI_EXPLANATIONS: { kind: "sellable", requires: "account" },
 };
 
 /** The level a subscription tier grants. */
