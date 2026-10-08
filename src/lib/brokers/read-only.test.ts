@@ -73,7 +73,7 @@ const SNAPTRADE_ROUTES = [
   'POST /^\\/snapTrade\\/login$/',
   'DELETE /^\\/snapTrade\\/deleteUser$/',
   'GET /^\\/authorizations$/',
-  'DELETE /^\\/authorizations\\/[A-Za-z0-9-]+$/',
+  'DELETE /^\\/connection\\/[A-Za-z0-9-]+$/',
   'GET /^\\/accounts$/',
   'GET /^\\/accounts\\/[A-Za-z0-9-]+\\/positions\\/all$/',
   'GET /^\\/accounts\\/[A-Za-z0-9-]+\\/activities$/',

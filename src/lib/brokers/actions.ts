@@ -3,13 +3,13 @@
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb } from "../db";
-import { brokerConnections, brokerTradeLinks, trades } from "../db/schema";
+import { brokerConnections, brokerExecutions, brokerPositions, brokerTradeLinks, trades } from "../db/schema";
 import { accountTypeLabel, isAccountType } from "../portfolio/account-types";
 import { actionRateLimited, userRateLimited } from "../security/guard";
 import { siteUrl } from "../site-url";
 import { flexTokenAllowed } from "./access";
 import { brokerTokensEnabled, encryptToken, tokenHint } from "./crypto";
-import { failsafe } from "./failsafe";
+import { failsafe, logBrokerFailure } from "./failsafe";
 import {
   brokerReader,
   denied,
@@ -22,8 +22,9 @@ import { downloadFlexReport, FlexError, flexErrorWords, parseFlexReport } from "
 import { BROKERS, isBrokerKind, type BrokerReport } from "./report";
 import {
   connectionPortalUrl,
-  deleteAuthorization,
+  deleteConnection,
   deleteUser,
+  listAccounts,
   listAuthorizations,
   registerUser,
   SNAPTRADE_ERROR_WORDS,
@@ -63,6 +64,15 @@ function refresh() {
   revalidatePath("/account");
   revalidatePath("/portfolio");
   revalidatePath("/journal");
+}
+
+/** Logs a failed SnapTrade call by category and HTTP status: never SnapTrade's own words, nor the URL, which carries a secret. */
+function logSnapTradeFailure(where: string, err: unknown): void {
+  if (err instanceof SnapTradeError) {
+    console.warn(`[brokers] SnapTrade ${where} failed: ${err.category}${err.status ? ` (HTTP ${err.status})` : ""}`);
+  } else {
+    logBrokerFailure(`SnapTrade ${where}`, err);
+  }
 }
 
 async function rateLimited(userId: string): Promise<BrokerActionResult | null> {
@@ -155,6 +165,7 @@ async function removeSnapTradeBrokerageUnguarded(
   const gate = await brokerReader(false);
   if (denied(gate)) return gate;
   const authorizationId = String(form.get("authorizationId") ?? "");
+  const removeTrades = form.get("removeTrades") === "on";
 
   const [connection] = await getDb()
     .select()
@@ -164,24 +175,82 @@ async function removeSnapTradeBrokerageUnguarded(
   const user = connection ? snapTradeUserFor(connection) : null;
   if (!connection || !user) return { ok: false, message: "No broker is connected through SnapTrade." };
 
+  let institution: string;
+  let listed: Set<string>;
+  let accountIds: string[];
   try {
     // Only an id SnapTrade lists for this reader, so a forged form cannot
     // name anybody else's connection.
     const theirs = await listAuthorizations(user);
-    if (!theirs.some((a) => a.id === authorizationId)) {
-      return { ok: false, message: "That connection is not one of yours." };
-    }
-    await deleteAuthorization(user, authorizationId);
+    const target = theirs.find((a) => a.id === authorizationId);
+    if (!target) return { ok: false, message: "That connection is not one of yours." };
+    institution = target.institution;
+    listed = new Set(theirs.map((a) => a.id));
+    accountIds = (await listAccounts(user)).filter((a) => a.authorizationId === authorizationId).map((a) => a.id);
+    await deleteConnection(user, authorizationId);
   } catch (err) {
+    logSnapTradeFailure("removing a brokerage", err);
     const category = err instanceof SnapTradeError ? err.category : "UNAVAILABLE";
     return { ok: false, message: SNAPTRADE_ERROR_WORDS[category] };
   }
 
+  // SnapTrade finishes deleting in the background, so the connection is
+  // marked removed here and every sync skips it until SnapTrade stops listing
+  // it. Ids SnapTrade no longer lists are dropped from the mark as it goes.
+  const previous = ((connection.details ?? {}) as ConnectionDetails).removed ?? [];
+  const removed = [...new Set([...previous.filter((id) => listed.has(id)), authorizationId])];
+  let tradesRemoved = 0;
+  await getDb().transaction(async (tx) => {
+    await tx
+      .update(brokerConnections)
+      .set({
+        details: sql`jsonb_set(${brokerConnections.details}, '{removed}', ${JSON.stringify(removed)}::jsonb)`,
+        updatedAt: new Date(),
+      })
+      .where(eq(brokerConnections.id, connection.id));
+    if (accountIds.length === 0) return;
+
+    // Its holdings and fills go now, rather than when SnapTrade is done.
+    await tx
+      .delete(brokerPositions)
+      .where(and(eq(brokerPositions.connectionId, connection.id), inArray(brokerPositions.accountId, accountIds)));
+    await tx
+      .delete(brokerExecutions)
+      .where(and(eq(brokerExecutions.connectionId, connection.id), inArray(brokerExecutions.accountId, accountIds)));
+
+    if (!removeTrades) return;
+    const family = BROKERS.snaptrade.linkFamily;
+    const ofThisBroker = and(
+      eq(brokerTradeLinks.userId, gate.userId),
+      eq(brokerTradeLinks.broker, family),
+      inArray(brokerTradeLinks.accountId, accountIds),
+    );
+    const linked = await tx
+      .select({ tradeId: brokerTradeLinks.tradeId })
+      .from(brokerTradeLinks)
+      .where(and(ofThisBroker, isNotNull(brokerTradeLinks.tradeId)));
+    const ids = linked.map((l) => l.tradeId!);
+    if (ids.length > 0) {
+      const deleted = await tx
+        .delete(trades)
+        .where(and(eq(trades.userId, gate.userId), inArray(trades.id, ids)))
+        .returning({ id: trades.id });
+      tradesRemoved = deleted.length;
+    }
+    // Forgotten too, as when disconnecting, so connecting again adds them back.
+    await tx.delete(brokerTradeLinks).where(ofThisBroker);
+  });
+
   const outcome = await syncConnection(connection.id);
   refresh();
-  return outcome.ok
-    ? { ok: true, message: `Removed. ${summarise(outcome.positions, outcome.tradesAdded, outcome.tradesUpdated)} remain.` }
-    : { ok: true, message: "Removed. The rest will refresh on the next sync." };
+  const parts = [`${institution} removed.`];
+  if (tradesRemoved > 0) parts.push(`${tradesRemoved} trade${tradesRemoved === 1 ? "" : "s"} removed from the journal.`);
+  parts.push(
+    outcome.ok
+      ? `Your other brokers: ${summarise(outcome.positions, outcome.tradesAdded, outcome.tradesUpdated)}.`
+      : "Your other brokers will refresh on the next sync.",
+  );
+  return { ok: true, message: parts.join(" ") };
 }
 
 /* ------------------------------------------------------ Flex token (owner) */

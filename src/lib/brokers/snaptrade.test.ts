@@ -4,6 +4,7 @@ import {
   accountActivities,
   assertSnapTradeRoute,
   connectionPortalUrl,
+  deleteConnection,
   describeAccount,
   listAuthorizations,
   registerUser,
@@ -73,7 +74,7 @@ describe("the requests this client may make", () => {
       ["POST", "/snapTrade/login"],
       ["DELETE", "/snapTrade/deleteUser"],
       ["GET", "/authorizations"],
-      ["DELETE", "/authorizations/8b5f262d-4bb9-365d-888a-202bd3b15fa1"],
+      ["DELETE", "/connection/8b5f262d-4bb9-365d-888a-202bd3b15fa1"],
       ["GET", "/accounts"],
       ["GET", "/accounts/917c8734/positions/all"],
       ["GET", "/accounts/917c8734/activities"],
@@ -94,6 +95,9 @@ describe("the requests this client may make", () => {
       ["GET", "/authorizations/x/../../trade/place"],
       ["POST", "/accounts"],
       ["GET", "/snapTrade/deleteUser"],
+      // SnapTrade's old address for deleting a connection, which it no longer serves.
+      ["DELETE", "/authorizations/8b5f262d-4bb9-365d-888a-202bd3b15fa1"],
+      ["DELETE", "/connection/x/../../accounts"],
     ]) {
       expect(() => assertSnapTradeRoute(method, path), `${method} ${path}`).toThrow(SnapTradeError);
     }
@@ -131,6 +135,26 @@ describe("talking to SnapTrade", () => {
     expect(init?.redirect).toBe("error");
     expect((init?.headers as Record<string, string>).Signature).toMatch(/^[A-Za-z0-9+/]+=*$/);
     expect(url.toString()).not.toContain("consumer-key");
+  });
+
+  it("deletes a connection at SnapTrade's current address, and takes one already gone as done", async () => {
+    const { fetchImpl, calls } = answering(
+      { detail: "Connection queued for deletion", connection_id: "8b5f262d-4bb9-365d-888a-202bd3b15fa1" },
+      new Response("not found", { status: 404 }),
+    );
+    await deleteConnection(USER, "8b5f262d-4bb9-365d-888a-202bd3b15fa1", { fetch: fetchImpl });
+    await deleteConnection(USER, "8b5f262d-4bb9-365d-888a-202bd3b15fa1", { fetch: fetchImpl });
+    expect(calls.map((c) => `${c.init?.method} ${c.url.pathname}`)).toEqual([
+      "DELETE /connection/8b5f262d-4bb9-365d-888a-202bd3b15fa1",
+      "DELETE /connection/8b5f262d-4bb9-365d-888a-202bd3b15fa1",
+    ]);
+  });
+
+  it("reports a connection SnapTrade will not delete, by status and never in its words", async () => {
+    const { fetchImpl } = answering(new Response("internal error at /connection/x?userSecret=secret-abc", { status: 500 }));
+    const failure = await deleteConnection(USER, "auth-1", { fetch: fetchImpl }).catch((err: unknown) => err);
+    expect(failure).toMatchObject({ category: "UNAVAILABLE", status: 500 });
+    expect(String((failure as Error).message)).not.toContain("secret");
   });
 
   it("registers a reader and keeps the secret SnapTrade hands back", async () => {

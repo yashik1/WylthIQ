@@ -33,7 +33,7 @@ const ROUTES: readonly { method: "GET" | "POST" | "DELETE"; path: RegExp }[] = [
   { method: "POST", path: /^\/snapTrade\/login$/ },
   { method: "DELETE", path: /^\/snapTrade\/deleteUser$/ },
   { method: "GET", path: /^\/authorizations$/ },
-  { method: "DELETE", path: /^\/authorizations\/[A-Za-z0-9-]+$/ },
+  { method: "DELETE", path: /^\/connection\/[A-Za-z0-9-]+$/ },
   { method: "GET", path: /^\/accounts$/ },
   { method: "GET", path: /^\/accounts\/[A-Za-z0-9-]+\/positions\/all$/ },
   { method: "GET", path: /^\/accounts\/[A-Za-z0-9-]+\/activities$/ },
@@ -273,9 +273,21 @@ export async function listAuthorizations(user: SnapTradeUser, deps?: SnapTradeDe
     });
 }
 
-/** Removes one brokerage connection at SnapTrade. */
-export async function deleteAuthorization(user: SnapTradeUser, id: string, deps?: SnapTradeDeps): Promise<void> {
-  await snaptradeRequest("DELETE", `/authorizations/${encodeURIComponent(id)}`, { user }, deps);
+/**
+ * Deletes one brokerage connection at SnapTrade, with its accounts and data.
+ *
+ * SnapTrade deletes in the background: the answer means the deletion is
+ * queued, and the connection can go on being listed for a while. Callers
+ * stop reading it themselves rather than wait (see `removed` in sync.ts).
+ * One SnapTrade no longer has is already what was asked for.
+ */
+export async function deleteConnection(user: SnapTradeUser, id: string, deps?: SnapTradeDeps): Promise<void> {
+  try {
+    await snaptradeRequest("DELETE", `/connection/${encodeURIComponent(id)}`, { user }, deps);
+  } catch (err) {
+    if (err instanceof SnapTradeError && err.category === "NOT_FOUND") return;
+    throw err;
+  }
 }
 
 export interface SnapAccount {

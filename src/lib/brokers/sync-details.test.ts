@@ -11,13 +11,20 @@ describe("what a sync writes to a connection's details", () => {
     expect(JSON.parse(params[0] as string)).toEqual({
       accounts: [{ id: "acc", institution: "Questrade", description: "TFSA ···1234", type: "TFSA" }],
     });
-    expect(params.slice(1)).toEqual(["confirmQueryId", "confirmQueryId", "accountTypes", "accountTypes"]);
+    expect(params.slice(1)).toEqual([
+      "confirmQueryId",
+      "confirmQueryId",
+      "accountTypes",
+      "accountTypes",
+      "removed",
+      "removed",
+    ]);
     expect(sql).toContain('"broker_connections"."details" ->');
     expect(sql).toMatch(/^\$1::jsonb \|\| jsonb_strip_nulls\(jsonb_build_object\(/);
   });
 
   it("never lets a report overwrite a setting the reader chose", () => {
-    const { params } = render({ confirmQueryId: "999", accountTypes: { acc: "RRSP" }, accounts: [] });
+    const { params } = render({ confirmQueryId: "999", accountTypes: { acc: "RRSP" }, removed: ["auth-1"], accounts: [] });
     expect(JSON.parse(params[0] as string)).toEqual({ accounts: [] });
   });
 });
