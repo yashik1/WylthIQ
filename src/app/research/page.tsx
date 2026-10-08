@@ -85,10 +85,11 @@ export default async function ResearchPage() {
     );
   }
 
-  const [saved, screens, notes] = await Promise.all([
+  const [saved, screens, notes, theses] = await Promise.all([
     listWatchlist(),
     listSavedScreens(),
     hasAccess(entitlement) ? listEntries() : Promise.resolve([] as Awaited<ReturnType<typeof listEntries>>),
+    listTheses(),
   ]);
   const rows = await loadWatchlist(saved);
   const changed = sortWatchlist(

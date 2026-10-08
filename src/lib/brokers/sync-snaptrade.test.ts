@@ -31,7 +31,7 @@ describe("reading a reader's SnapTrade connections", () => {
       { id: "auth-read", type: "read", disabled: false, brokerage: { display_name: "Interactive Brokers" } },
       { id: "auth-trade", type: "trade", disabled: false, brokerage: { display_name: "Wealthsimple" } },
     ],
-    "DELETE /authorizations/auth-trade": {},
+    "DELETE /connection/auth-trade": { detail: "Connection queued for deletion", connection_id: "auth-trade" },
     "GET /accounts": [
       { id: "acc-ib", brokerage_authorization: "auth-read", institution_name: "Interactive Brokers", name: "Margin", number: "U0000001", raw_type: "Individual TFSA" },
       { id: "acc-ws", brokerage_authorization: "auth-trade", institution_name: "Wealthsimple", name: "TFSA", number: "WS0000002" },
@@ -54,7 +54,7 @@ describe("reading a reader's SnapTrade connections", () => {
     const { fetchImpl, calls } = fakeSnapTrade(routes);
     const { report, details } = await fetchSnapTrade(USER, { fetch: fetchImpl });
 
-    expect(calls).toContain("DELETE /authorizations/auth-trade");
+    expect(calls).toContain("DELETE /connection/auth-trade");
     expect(calls.some((c) => c.includes("acc-ws"))).toBe(false);
     expect(details.refused).toEqual(["Wealthsimple"]);
     expect(details.brokerages).toEqual([{ id: "auth-read", institution: "Interactive Brokers", disabled: false }]);
@@ -70,6 +70,16 @@ describe("reading a reader's SnapTrade connections", () => {
     expect(details.accounts).toEqual([
       { id: "acc-ib", institution: "Interactive Brokers", description: "Margin ···0001", type: "TFSA" },
     ]);
+  });
+
+  it("neither shows nor reads a connection the reader removed while SnapTrade is still deleting it", async () => {
+    const { fetchImpl, calls } = fakeSnapTrade(routes);
+    const { report, details } = await fetchSnapTrade(USER, { fetch: fetchImpl }, { removed: ["auth-read"] });
+    expect(calls.some((c) => c.includes("acc-ib"))).toBe(false);
+    expect(calls).not.toContain("DELETE /connection/auth-read");
+    expect(details.brokerages).toEqual([]);
+    expect(details.accounts).toEqual([]);
+    expect(report.positions).toEqual([]);
   });
 
   describe("reading trades no more than once a day, as SnapTrade asks", () => {

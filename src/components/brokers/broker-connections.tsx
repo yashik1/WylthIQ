@@ -46,6 +46,7 @@ export interface ConnectionView {
     refused?: string[];
     confirmQueryId?: string;
     accountTypes?: Record<string, AccountType>;
+    removed?: string[];
   };
 }
 
@@ -300,20 +301,63 @@ function ReconnectBrokerage({ id, institution }: { id: string; institution: stri
   );
 }
 
-function RemoveBrokerage({ id, institution }: { id: string; institution: string }) {
-  const [state, action, pending] = useActionState(removeSnapTradeBrokerage, null);
-  return (
-    <form action={action} className="inline">
-      <input type="hidden" name="authorizationId" value={id} />
+/**
+ * Removes one brokerage, after asking: its holdings go from WylthIQ and the
+ * connection is deleted at SnapTrade; the trades it added to the journal go
+ * too only if the reader ticks the box. The result is shown by the section,
+ * since the brokerage's own row is gone once it succeeds.
+ */
+function RemoveBrokerage({
+  id,
+  institution,
+  action,
+  pending,
+}: {
+  id: string;
+  institution: string;
+  action: (form: FormData) => void;
+  pending: boolean;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
       <button
-        type="submit"
-        disabled={pending}
+        type="button"
+        onClick={() => setConfirming(true)}
         className="text-xs text-muted underline underline-offset-2 hover:text-poor"
         aria-label={`Remove ${institution}`}
       >
-        {pending ? "Removing…" : "Remove"}
+        Remove
       </button>
-      {state && !state.ok && <span className="ml-2 text-xs text-poor">{state.message}</span>}
+    );
+  }
+  return (
+    <form
+      action={action}
+      className="mt-1.5 flex basis-full flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border px-3 py-2"
+    >
+      <input type="hidden" name="authorizationId" value={id} />
+      <span className="text-xs">Remove {institution} and its holdings from WylthIQ?</span>
+      <label className="flex items-center gap-1.5 text-xs text-muted">
+        <input type="checkbox" name="removeTrades" />
+        also remove the trades it added to the journal
+      </label>
+      <span className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={pending}
+          className="rounded-md border border-poor/40 bg-poor-soft px-2 py-1 text-xs font-medium text-poor-fg disabled:opacity-60"
+        >
+          {pending ? "Removing…" : `Remove ${institution}`}
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirming(false)}
+          className="rounded-md px-2 py-1 text-xs text-muted hover:bg-surface-2"
+        >
+          Keep
+        </button>
+      </span>
     </form>
   );
 }
@@ -327,6 +371,9 @@ function SnapTradeSection({
   available: boolean;
   returned: string | null;
 }) {
+  const [removal, remove, removing] = useActionState(removeSnapTradeBrokerage, null);
+  // A removed brokerage can be listed a while longer, until SnapTrade has finished deleting it.
+  const brokerages = (connection?.details.brokerages ?? []).filter((b) => !connection?.details.removed?.includes(b.id));
   return (
     <Section id="connected-broker" title="Connect a broker">
       <p className="text-sm leading-relaxed text-muted">
@@ -378,20 +425,26 @@ function SnapTradeSection({
               Connect it again and choose read-only access.
             </p>
           )}
-          {(connection.details.brokerages ?? []).length === 0 ? (
+          {brokerages.length === 0 ? (
             <p className="text-sm text-muted">No broker is connected yet.</p>
           ) : (
             <ul className="space-y-2 text-sm">
-              {connection.details.brokerages!.map((brokerage) => (
+              {brokerages.map((brokerage) => (
                 <li key={brokerage.id} className="flex flex-wrap items-baseline gap-x-2">
                   <span className="font-medium">{brokerage.institution}</span>
                   <span className="rounded-full bg-good-soft px-2 py-0.5 text-[11px] font-medium text-good-fg">Read-only</span>
                   {brokerage.disabled && <ReconnectBrokerage id={brokerage.id} institution={brokerage.institution} />}
-                  <RemoveBrokerage id={brokerage.id} institution={brokerage.institution} />
+                  <RemoveBrokerage
+                    id={brokerage.id}
+                    institution={brokerage.institution}
+                    action={remove}
+                    pending={removing}
+                  />
                 </li>
               ))}
             </ul>
           )}
+          <Result state={removal} />
           <AccountTypes connection={connection} />
           <Status connection={connection} />
           <div className="flex flex-wrap items-start gap-4">

@@ -28,7 +28,7 @@ import { pairRoundTrips } from "./round-trips";
 import {
   accountActivities,
   accountPositions,
-  deleteAuthorization,
+  deleteConnection,
   describeAccount,
   listAccounts,
   listAuthorizations,
@@ -92,6 +92,12 @@ export interface ConnectionDetails {
    * over what the broker says, and a sync never changes it.
    */
   accountTypes?: Record<string, AccountType>;
+  /**
+   * SnapTrade: connections the reader removed. SnapTrade deletes a connection
+   * in the background and can go on listing it for a while; until it stops,
+   * it is neither shown nor read, so what was removed stays removed.
+   */
+  removed?: string[];
 }
 
 /**
@@ -100,7 +106,7 @@ export interface ConnectionDetails {
  * the row as it stands when the sync is saved — not as it was when the sync
  * began — so a setting changed while a sync runs is kept.
  */
-const READER_SETTINGS = ["confirmQueryId", "accountTypes"] as const satisfies readonly (keyof ConnectionDetails)[];
+const READER_SETTINGS = ["confirmQueryId", "accountTypes", "removed"] as const satisfies readonly (keyof ConnectionDetails)[];
 
 /** `details` as a sync leaves it: what the broker reported, plus the reader's own settings from the row. */
 export function detailsWithReaderSettings(reported: ConnectionDetails) {
@@ -445,7 +451,9 @@ export async function fetchSnapTrade(
   previous: ConnectionDetails = {},
   now = new Date(),
 ): Promise<{ report: BrokerReport; details: ConnectionDetails }> {
-  const authorizations = await listAuthorizations(user, deps);
+  // One the reader removed is on its way out at SnapTrade: not read, not shown, not deleted again.
+  const removed = new Set(previous.removed ?? []);
+  const authorizations = (await listAuthorizations(user, deps)).filter((a) => !removed.has(a.id));
 
   const refused: string[] = [];
   const kept = [];
@@ -454,7 +462,7 @@ export async function fetchSnapTrade(
       kept.push(authorization);
       continue;
     }
-    await deleteAuthorization(user, authorization.id, deps);
+    await deleteConnection(user, authorization.id, deps);
     refused.push(authorization.institution);
   }
 
