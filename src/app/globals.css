@@ -43,7 +43,7 @@
   --foreground: #0f172a;
   --muted-strong: #334155;
   --muted: #55637a;
-  --faint: #78849a;
+  --faint: #677288;
 
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
@@ -84,7 +84,6 @@
   /* Structural, not thematic: these hold across every palette. */
   --radius-sm: 8px;
   --radius: 16px;
-  --radius-lg: 20px;
 }
 
 /*
@@ -114,7 +113,7 @@
     --foreground: #f3f4f6;
     --muted-strong: #d1d5db;
     --muted: #9ca3af;
-    --faint: #6f7787;
+    --faint: #7c8392;
 
     --accent: #3b82f6;
     --accent-hover: #60a5fa;
@@ -172,7 +171,7 @@
   --foreground: #0f172a;
   --muted-strong: #334155;
   --muted: #55637a;
-  --faint: #78849a;
+  --faint: #677288;
 
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
@@ -229,7 +228,7 @@
   --foreground: #f3f4f6;
   --muted-strong: #d1d5db;
   --muted: #9ca3af;
-  --faint: #6f7787;
+  --faint: #7c8392;
 
   --accent: #3b82f6;
   --accent-hover: #60a5fa;
@@ -286,7 +285,7 @@
   --foreground: #e8f1fb;
   --muted-strong: #bcd3ea;
   --muted: #8fb0cf;
-  --faint: #6b8bab;
+  --faint: #7694b2;
 
   --accent: #3b82f6;
   --accent-hover: #60a5fa;
@@ -456,8 +455,8 @@
 
   --foreground: #111827;
   --muted-strong: #374151;
-  --muted: #6b7280;
-  --faint: #9098a5;
+  --muted: #4b5563;
+  --faint: #6b7280;
 
   --accent: #1e40af;
   --accent-hover: #1e3a8a;
@@ -823,14 +822,26 @@ body {
   line-height: 1;
 }
 
-/* Section eyebrow: small, wide-tracked, quiet. */
-.eyebrow {
-  font-family: var(--font-serif), ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.71875rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--faint);
+/*
+  Section eyebrow: small, wide-tracked, quiet.
+
+  In the components layer, for the reason the label rule above sits in base:
+  an unlayered rule beats every Tailwind utility whatever the specificity, so
+  the classes written beside an eyebrow were silently ignored. Metric labels
+  asked for 10px and drew at 11.5px, the hero's "What it means" asked for the
+  accent and drew faint, and the institutional table's headers asked for
+  medium weight and drew semibold. Here a utility on the same element wins,
+  which is what those call sites were written to expect.
+*/
+@layer components {
+  .eyebrow {
+    font-family: var(--font-serif), ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.71875rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
 }
 
 /* Running prose gets a comfortable measure — roughly 65 characters, which is
