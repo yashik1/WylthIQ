@@ -5,6 +5,7 @@ import { CircleHelp } from "lucide-react";
 import { Barlow, Barlow_Condensed } from "next/font/google";
 import "./globals.css";
 import { WylthMark } from "@/components/logo";
+import { SectionTabs } from "@/components/section-tabs";
 import { MobileNav, Sidebar } from "@/components/sidebar";
 import { SearchBox } from "@/components/search-box";
 import { ThemePicker } from "@/components/theme-picker";
@@ -13,6 +14,7 @@ import { auth } from "@/lib/auth";
 import { AccountMenu } from "@/components/auth/account-menu";
 import { NewsletterSubscribeForm } from "@/components/newsletter/subscribe-form";
 import { SLOGAN } from "@/lib/brand";
+import { NAV_SECTIONS } from "@/lib/nav";
 import { siteUrl } from "@/lib/site-url";
 import { StructuredData } from "@/components/structured-data";
 import { organisationLd } from "@/lib/structured-data";
@@ -157,20 +159,6 @@ try {
 } catch (e) {}
 `;
 
-const NAV = [
-  { href: "/", label: "Dashboard" },
-  { href: "/research", label: "Research" },
-  { href: "/alerts", label: "Alerts" },
-  { href: "/watchlist", label: "Watchlist" },
-  { href: "/portfolio", label: "Portfolio" },
-  { href: "/screen", label: "Screener" },
-  { href: "/compare", label: "Compare" },
-  { href: "/markets", label: "Markets" },
-  { href: "/backtest", label: "Backtest" },
-  { href: "/journal", label: "Journal" },
-  { href: "/learn", label: "Learn" },
-];
-
 /**
  * A footer link.
  *
@@ -244,7 +232,7 @@ export default async function RootLayout({ children }: LayoutPageProps) {
             </span>
           </Link>
 
-          <MobileNav items={NAV} />
+          <MobileNav items={NAV_SECTIONS} />
 
           {/* The search takes the room the seven tabs used to. */}
           <SearchBox className="min-w-0 flex-1 lg:max-w-[560px]" />
@@ -288,7 +276,7 @@ export default async function RootLayout({ children }: LayoutPageProps) {
         </header>
 
         <div className="flex flex-1">
-          <Sidebar items={NAV} />
+          <Sidebar items={NAV_SECTIONS} />
 
           {/*
             `.content-column` is not decoration: it clips the few pixels
@@ -297,6 +285,7 @@ export default async function RootLayout({ children }: LayoutPageProps) {
           */}
           <div className="content-column flex flex-1 flex-col">
             <main className="mx-auto w-full max-w-[var(--content-max)] flex-1 px-4 py-[var(--main-pad-y)] sm:px-7">
+              <SectionTabs />
               {children}
             </main>
 

@@ -3,62 +3,32 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Bookmark,
-  Briefcase,
-  CandlestickChart,
-  ChevronsLeft,
-  GitCompare,
-  GraduationCap,
-  History,
-  LayoutDashboard,
-  Menu,
-  Microscope,
-  NotebookPen,
-  SlidersHorizontal,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { ChevronsLeft, Menu, X } from "lucide-react";
+import { activeTab, sectionFor, type NavSection } from "@/lib/nav";
 import { cn } from "@/lib/utils";
+import { SECTION_ICONS, TAB_ICONS } from "./nav-icons";
 
-export type NavItem = { href: string; label: string };
+export type NavItem = NavSection;
 
-/** "/" would otherwise prefix-match every route in the app. */
-function isActive(href: string, pathname: string): boolean {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+/**
+ * Whether `item` is the section the reader is in — on any of its pages, so
+ * Research stays lit on Alerts and Watchlist, and Explore on Compare.
+ */
+function isActive(item: NavItem, items: NavItem[], pathname: string): boolean {
+  return sectionFor(pathname, items)?.href === item.href;
 }
-
-/*
-  Keyed by href rather than threaded through NavItem: the NAV array lives in
-  the server-rendered layout.tsx, and a React component reference cannot cross
-  the server/client boundary as a prop the way a plain string can. Both the
-  rail and the mobile drawer live in this one client file, so one map covers
-  both — which is the reason they were merged into a single file when the
-  horizontal tabs became a sidebar.
-*/
-const NAV_ICONS: Record<string, LucideIcon> = {
-  "/": LayoutDashboard,
-  "/research": Microscope,
-  "/watchlist": Bookmark,
-  "/portfolio": Briefcase,
-  "/screen": SlidersHorizontal,
-  "/compare": GitCompare,
-  "/markets": CandlestickChart,
-  "/backtest": History,
-  "/journal": NotebookPen,
-  "/learn": GraduationCap,
-};
 
 const STORAGE_KEY = "sidebar";
 
 /**
  * The primary navigation, as a left rail.
  *
- * A vertical rail rather than the horizontal tabs this replaces. Seven links
- * across the top of a page compete with the search box for the same row and
- * cap what the navigation can ever grow to; down the side they have room, they
- * read as a list rather than as chrome, and the current section stays visible
- * while the reader scrolls a long stock page.
+ * A vertical rail rather than the horizontal tabs this replaces. Links across
+ * the top of a page compete with the search box for the same row and cap what
+ * the navigation can ever grow to; down the side they have room, they read as
+ * a list rather than as chrome, and the current section stays visible while
+ * the reader scrolls a long stock page. It lists the sections only; the pages
+ * within one are tabs at the top of the page (see SectionTabs).
  *
  * Collapsing is stamped on `<html data-sidebar>` rather than held in React
  * state alone, for the same reason the theme is: the width has to be right
@@ -108,7 +78,7 @@ export function Sidebar({ items }: { items: NavItem[] }) {
           <li key={item.href}>
             <RailLink
               item={item}
-              active={isActive(item.href, pathname)}
+              active={isActive(item, items, pathname)}
               collapsed={collapsed}
             />
           </li>
@@ -141,7 +111,7 @@ function RailLink({
   active: boolean;
   collapsed: boolean;
 }) {
-  const Icon = NAV_ICONS[item.href];
+  const Icon = SECTION_ICONS[item.href];
 
   return (
     <Link
@@ -173,7 +143,8 @@ function RailLink({
  * The same navigation below `lg`, where there is no room for a rail.
  *
  * A dropdown rather than a full-screen drawer: this app reaches for an overlay
- * nowhere else, and seven links do not need one. Closing behaviour follows the
+ * nowhere else, and a handful of sections do not need one. Each section's
+ * pages are listed under it, so any page is one tap away. Closing behaviour follows the
  * pattern SearchBox already uses, so the popovers in this header behave alike
  * rather than each inventing their own rules.
  */
@@ -235,31 +206,62 @@ export function MobileNav({ items }: { items: NavItem[] }) {
             does, and the header is where the width should come from.
             Anchored here it would inherit this wrapper's own 34px box.
           */
-          className="absolute inset-x-4 top-full z-50 mt-2 list-none rounded-xl border border-border bg-surface py-1 shadow-[var(--shadow-lg)] sm:inset-x-7"
+          // Sections and their pages can be taller than a short phone, so the panel scrolls itself.
+          className="absolute inset-x-4 top-full z-50 mt-2 max-h-[calc(100dvh-var(--header-h)-1rem)] list-none overflow-y-auto rounded-xl border border-border bg-surface py-1 shadow-[var(--shadow-lg)] sm:inset-x-7"
         >
           {items.map((item) => {
-            const active = isActive(item.href, pathname);
-            const Icon = NAV_ICONS[item.href];
+            const active = isActive(item, items, pathname);
+            const Icon = SECTION_ICONS[item.href];
+            // In a section with pages, the page is what is marked, not the section as well.
+            const tab = active ? activeTab(item, pathname) : null;
 
             return (
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  aria-current={active ? "page" : undefined}
+                  aria-current={active && !item.tabs ? "page" : undefined}
                   // Closes on tap rather than only once the route changes.
                   // Tapping the link for the page already open changes no
                   // pathname for the render-time check above to react to.
                   onClick={() => setOpen(false)}
                   className={cn(
                     "flex items-center gap-2.5 border-l-2 px-4 py-3 text-[0.90625rem] font-medium transition-colors",
-                    active
+                    active && !item.tabs
                       ? "border-accent bg-surface-2 text-foreground"
-                      : "border-transparent text-muted hover:bg-surface-2 hover:text-foreground",
+                      : active
+                        ? "border-transparent text-foreground hover:bg-surface-2"
+                        : "border-transparent text-muted hover:bg-surface-2 hover:text-foreground",
                   )}
                 >
                   {Icon && <Icon aria-hidden className="size-[18px]" strokeWidth={2} />}
                   {item.label}
                 </Link>
+                {item.tabs && (
+                  <ul className="list-none pb-1">
+                    {item.tabs.map((page) => {
+                      const current = tab?.href === page.href;
+                      const PageIcon = TAB_ICONS[page.href];
+                      return (
+                        <li key={page.href}>
+                          <Link
+                            href={page.href}
+                            aria-current={current ? "page" : undefined}
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center gap-2 border-l-2 py-2 pr-4 pl-11 text-[0.84375rem] transition-colors",
+                              current
+                                ? "border-accent bg-surface-2 font-medium text-foreground"
+                                : "border-transparent text-muted hover:bg-surface-2 hover:text-foreground",
+                            )}
+                          >
+                            {PageIcon && <PageIcon aria-hidden className="size-[15px]" strokeWidth={2} />}
+                            {page.label}
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </li>
             );
           })}
