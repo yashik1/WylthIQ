@@ -159,6 +159,30 @@
   }
 }
 
+/* Keep the Backtest form usable in its desktop rail. Five controls in a
+   single row become clipped at the rail's available width; use two columns
+   until the form itself has enough room for a full row. */
+@media (min-width: 1024px) {
+  main:has(#amount) > .space-y-5 {
+    grid-template-columns: minmax(360px, 420px) minmax(0, 1fr);
+  }
+
+  main:has(#amount) > .space-y-5 > .rounded-xl:has(#amount) form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  main:has(#amount) > .space-y-5 > .rounded-xl:has(#amount) form > button[type="submit"] {
+    align-self: end;
+    justify-self: start;
+  }
+}
+
+@media (max-width: 1023px) {
+  main:has(#amount) > .space-y-5 > .rounded-xl:has(#amount) form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* -------------------------------------------------------------------------
    JOURNAL
    The journal has more than a table, so the layout separates the personal
