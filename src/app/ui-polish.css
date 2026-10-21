@@ -426,3 +426,60 @@ main .scroll-x > table {
 main :is(input, select, textarea, button, a):focus-visible {
   scroll-margin-block: 6rem;
 }
+
+
+/* JOURNAL LAYOUT CORRECTION
+   Keep the performance dashboard full-width. The previous two-column rule
+   placed short analytics cards in a narrow left rail, leaving a large blank
+   region beside them and stretching the forms awkwardly down the right side.
+   Use the full canvas for analytics and the trade log, then pair the smaller
+   import/logging and strategy/notes panels where there is room. */
+@media (min-width: 1100px) {
+  main:has(#entryDate) > .space-y-5 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
+    align-items: start;
+  }
+
+  main:has(#entryDate) > .space-y-5 > header,
+  main:has(#entryDate) > .space-y-5 > :nth-child(2),
+  main:has(#entryDate) > .space-y-5 > :nth-child(3),
+  main:has(#entryDate) > .space-y-5 > :nth-child(4),
+  main:has(#entryDate) > .space-y-5 > :nth-child(5),
+  main:has(#entryDate) > .space-y-5 > :nth-child(8) {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  main:has(#entryDate) > .space-y-5 > :nth-child(6),
+  main:has(#entryDate) > .space-y-5 > :nth-child(7),
+  main:has(#entryDate) > .space-y-5 > :nth-child(9),
+  main:has(#entryDate) > .space-y-5 > :nth-child(10) {
+    grid-column: span 1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Analytics panels should use the space available instead of inheriting
+     the narrow left-rail width from the old layout. */
+  main:has(#entryDate) > .space-y-5 > :nth-child(2) > *,
+  main:has(#entryDate) > .space-y-5 > :nth-child(3) > *,
+  main:has(#entryDate) > .space-y-5 > :nth-child(4) > * {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 1099px) {
+  main:has(#entryDate) > .space-y-5 {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  main:has(#entryDate) > .space-y-5 > * {
+    width: 100%;
+    min-width: 0;
+  }
+}
