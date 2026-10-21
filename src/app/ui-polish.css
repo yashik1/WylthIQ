@@ -275,3 +275,130 @@ main:has(#amount) .min-w-0,
 main:has(#entryDate) .min-w-0 {
   min-width: 0;
 }
+
+
+/* -------------------------------------------------------------------------
+   READABILITY PASS — shared guardrails across all existing pages.
+   Let content breathe at ordinary laptop widths, prevent grid children from
+   forcing their parents wider, and keep controls readable when a page uses a
+   narrow rail. No content or application behaviour is changed.
+   ------------------------------------------------------------------------- */
+
+/* A grid/flex child must be allowed to shrink; long financial values can
+   otherwise push cards beyond the available content column. */
+main > *,
+main > * > *,
+main .rounded-xl,
+main .rounded-2xl {
+  min-width: 0;
+}
+
+main p,
+main li {
+  overflow-wrap: anywhere;
+}
+
+main :is(input, select, textarea, button) {
+  max-width: 100%;
+}
+
+main :is(input, select, textarea) {
+  min-width: 0;
+}
+
+/* Data tables may scroll inside their own viewport, never through the page. */
+main .scroll-x {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+main .scroll-x > table {
+  width: 100%;
+}
+
+/* Give the main workspace more useful breathing room on wide screens, while
+   avoiding excess edge padding on tablets and phones. */
+@media (min-width: 1280px) {
+  main {
+    padding-left: clamp(1.5rem, 2.2vw, 2.75rem);
+    padding-right: clamp(1.5rem, 2.2vw, 2.75rem);
+  }
+}
+
+@media (max-width: 639px) {
+  main {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  main .rounded-xl,
+  main .rounded-2xl {
+    max-width: 100%;
+  }
+
+  main :is(input, select, textarea) {
+    font-size: 16px;
+  }
+}
+
+/* BACKTEST — the five-field desktop form must not be squeezed into the
+   250–320px rail. Reserve a genuinely usable rail and use two columns. */
+@media (min-width: 1024px) {
+  main:has(#amount) > .space-y-5 {
+    grid-template-columns: minmax(360px, 420px) minmax(0, 1fr);
+  }
+
+  main:has(#amount) > .space-y-5 > .rounded-xl:has(#amount) form {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.875rem;
+  }
+
+  main:has(#amount) > .space-y-5 > .rounded-xl:has(#amount) form > button[type="submit"] {
+    justify-self: start;
+    align-self: end;
+  }
+
+  main:has(#amount) > .space-y-5 > .rounded-xl:has(#amount) form > div {
+    min-width: 0;
+  }
+}
+
+/* On tablet and mobile, let each workspace card take the available width and
+   keep parameter controls in a predictable two-column layout. */
+@media (max-width: 1023px) {
+  main:has(#amount) > .space-y-5 > .rounded-xl:has(#amount) form {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 420px) {
+  main:has(#amount) > .space-y-5 > .rounded-xl:has(#amount) form {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* COMPARE — keep its filter controls from becoming cramped on medium
+   desktops, and let the evidence column shrink independently. */
+@media (min-width: 1024px) and (max-width: 1199px) {
+  main:has(#symbols) > .space-y-5 {
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+    gap: 1rem;
+  }
+}
+
+/* JOURNAL — don't compress the trade-entry controls into a narrow rail. */
+@media (min-width: 1100px) and (max-width: 1279px) {
+  main:has(#entryDate) > .space-y-5 {
+    grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+    gap: 1rem;
+  }
+}
+
+/* Clear focus and enough target height make dense financial screens easier to
+   operate with a keyboard, touchpad, or touch screen. */
+main :is(input, select, textarea, button, a):focus-visible {
+  scroll-margin-block: 6rem;
+}
