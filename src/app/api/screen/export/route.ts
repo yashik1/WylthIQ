@@ -3,6 +3,7 @@ import { refuseIfRateLimited } from "@/lib/security/guard";
 import { canAccess, getEntitlement } from "@/lib/billing/entitlement";
 import { runScreen, type ScreenFilters } from "@/lib/screener";
 import { csvFilename, screenRowsToCsv } from "@/lib/screener-csv";
+import { isTrendKey } from "@/lib/technicals";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +105,8 @@ function filtersFromQuery(params: URLSearchParams): ScreenFilters {
   if (preset) filters.preset = preset as ScreenFilters["preset"];
   const sort = params.get("sort");
   if (sort) filters.sort = sort as ScreenFilters["sort"];
+  const trend = params.get("trend");
+  if (isTrendKey(trend)) filters.trend = trend;
 
   return filters;
 }

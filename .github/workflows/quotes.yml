@@ -65,7 +65,7 @@ jobs:
 
       - run: npm ci
 
-      - name: Refresh stored quotes
+      - name: Refresh stored quotes and price trends
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
@@ -73,6 +73,9 @@ jobs:
           TIINGO_API_KEY: ${{ secrets.TIINGO_API_KEY }}
           EODHD_API_KEY: ${{ secrets.EODHD_API_KEY }}
           ENABLE_YAHOO_FALLBACK: ${{ secrets.ENABLE_YAHOO_FALLBACK }}
+          # Daily bars for the price-trend step; Alpaca serves the US listings.
+          ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+          ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
         run: |
           if [ -n "${{ github.event.inputs.limit }}" ]; then
             npm run quotes -- --limit ${{ github.event.inputs.limit }}

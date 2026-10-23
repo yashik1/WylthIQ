@@ -1,7 +1,8 @@
 import { isPriceStale } from "./quote-session";
-import { and, asc, desc, eq, gte, isNotNull, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, arrayContains, asc, desc, eq, gte, isNotNull, lte, or, sql, type SQL } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "./db";
 import { companies, scores } from "./db/schema";
+import type { TrendKey } from "./technicals";
 
 /**
  * One-click screens, written the way someone would actually ask the question.
@@ -130,6 +131,12 @@ export interface ScreenFilters {
   minFScore?: number;
   minMarketCap?: number;
   minGrowth?: number;
+  /**
+   * Where the share price stands against its own history — a golden or death
+   * cross, above or below the 200-day average, near a 52-week high or low,
+   * overbought or oversold. One at a time. See lib/technicals.ts.
+   */
+  trend?: TrendKey;
   sort?: SortKey;
 
   /* ------------------------------------------------------------ advanced
@@ -233,6 +240,17 @@ export interface ScreenRow {
   dividendYield: number | null;
   returnOnAssets: number | null;
   currentRatio: number | null;
+
+  /* Price-trend figures, so a row can say why it matched the trend filter. */
+  technicalClose: number | null;
+  sma50: number | null;
+  sma200: number | null;
+  rsi14: number | null;
+  high52w: number | null;
+  low52w: number | null;
+  lastCross: string | null;
+  lastCrossDate: string | null;
+  technicalsAsOf: string | null;
 }
 
 /**
@@ -419,6 +437,9 @@ export async function runScreen(filters: ScreenFilters, limit = 100, offset = 0)
   if (filters.minFScore != null) conditions.push(gte(scores.fScore, filters.minFScore));
   if (filters.minMarketCap != null) conditions.push(gte(scores.marketCap, filters.minMarketCap));
   if (filters.minGrowth != null) conditions.push(gte(scores.revenueGrowth, filters.minGrowth));
+  // The states were decided when the figures were worked out (technicals.ts),
+  // so the filter is one containment test rather than the rule again in SQL.
+  if (filters.trend) conditions.push(arrayContains(scores.trendStates, [filters.trend]));
 
   /*
     The advanced set. Each ratio filter also requires the column to be
@@ -516,6 +537,15 @@ export async function runScreen(filters: ScreenFilters, limit = 100, offset = 0)
         dividendYield: scores.dividendYield,
         returnOnAssets: scores.returnOnAssets,
         currentRatio: scores.currentRatio,
+        technicalClose: scores.technicalClose,
+        sma50: scores.sma50,
+        sma200: scores.sma200,
+        rsi14: scores.rsi14,
+        high52w: scores.high52w,
+        low52w: scores.low52w,
+        lastCross: scores.lastCross,
+        lastCrossDate: scores.lastCrossDate,
+        technicalsAsOf: scores.technicalsAsOf,
       })
       .from(companies)
       .innerJoin(scores, eq(scores.companyId, companies.id))
@@ -533,6 +563,18 @@ export async function runScreen(filters: ScreenFilters, limit = 100, offset = 0)
         rows: rows.map((row) => ({ ...row, priceStale: isPriceStale(row.priceUpdatedAt) })),
         total,
       };
+    }
+
+    // A trend filter on a table whose trends were never worked out matches
+    // nothing for want of data, not for want of a qualifying company.
+    if (filters.trend) {
+      const [worked] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(scores)
+        .where(isNotNull(scores.technicalsAsOf));
+      if ((worked?.count ?? 0) === 0) {
+        return { status: "ok", rows: [], total: 0, missingData: { needs: "daily price history, worked out each weekday evening" } };
+      }
     }
 
     // Distinguish "nothing qualifies" from "this preset can never match,
@@ -584,6 +626,23 @@ export async function getUniverseCount(): Promise<number | null> {
     return row?.count ?? 0;
   } catch {
     // Null means "could not determine", distinct from a genuine zero.
+    return null;
+  }
+}
+
+/**
+ * The date the screener's price trends are as of: the newest daily bar they
+ * were worked out from. Null before they have ever been worked out, or when
+ * it cannot be read.
+ */
+export async function getTrendsAsOf(): Promise<string | null> {
+  if (!isDatabaseConfigured()) return null;
+  try {
+    const [row] = await getDb()
+      .select({ asOf: sql<string | null>`max(${scores.technicalsAsOf})` })
+      .from(scores);
+    return row?.asOf ?? null;
+  } catch {
     return null;
   }
 }

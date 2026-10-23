@@ -42,6 +42,15 @@ const row = (over: Partial<ScreenRow> = {}): ScreenRow => ({
   dividendYield: 0.0042,
   returnOnAssets: 0.312,
   currentRatio: 0.87,
+  technicalClose: 319.7,
+  sma50: 305.2,
+  sma200: 281.9,
+  rsi14: 61.4,
+  high52w: 325,
+  low52w: 210.5,
+  lastCross: "golden",
+  lastCrossDate: "2026-05-04",
+  technicalsAsOf: "2026-10-22",
   ...over,
 });
 
@@ -54,6 +63,17 @@ describe("the shape of the file", () => {
     expect(header).toContain("Symbol");
     expect(header).toContain("Health score");
     expect(header).toContain("Piotroski F-Score");
+  });
+
+  it("carries the price-trend figures a screen can filter on", () => {
+    const [header, first] = lines(screenRowsToCsv([row()]));
+    const at = (name: string) => first.split(",")[header.split(",").indexOf(name)];
+    expect(at("200-day average")).toBe("281.90");
+    expect(at("Last 50/200-day cross")).toBe("golden");
+    expect(at("RSI (14)")).toBe("61.4");
+    expect(at("Price trends as of")).toBe("2026-10-22");
+    const blank = lines(screenRowsToCsv([row({ sma200: null, lastCross: null })]))[1];
+    expect(blank.split(",")[header.split(",").indexOf("200-day average")]).toBe("");
   });
 
   it("writes one line per company", () => {
