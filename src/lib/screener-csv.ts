@@ -29,6 +29,14 @@ const COLUMNS = [
   "Return on assets",
   "Debt to equity",
   "Current ratio",
+  "50-day average",
+  "200-day average",
+  "Last 50/200-day cross",
+  "Last cross date",
+  "52-week high",
+  "52-week low",
+  "RSI (14)",
+  "Price trends as of",
 ] as const;
 
 /**
@@ -85,6 +93,14 @@ export function screenRowsToCsv(rows: readonly ScreenRow[]): string {
         num(row.returnOnAssets, 4),
         num(row.debtToEquity),
         num(row.currentRatio),
+        num(row.sma50),
+        num(row.sma200),
+        field(row.lastCross),
+        field(row.lastCrossDate),
+        num(row.high52w),
+        num(row.low52w),
+        num(row.rsi14, 1),
+        field(row.technicalsAsOf),
       ].join(","),
     );
   }

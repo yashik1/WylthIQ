@@ -7,6 +7,7 @@ import { savedScreenRuns, savedScreeners } from "./db/schema";
 import { canAccess, getEntitlement } from "./billing/entitlement";
 import { PRESETS, SORTS, type ScreenFilters } from "./screener";
 import { cleanScreenName, copyName } from "./saved-screen-names";
+import { isTrendKey } from "./technicals";
 
 /**
  * Screens a reader saved, and the rules for reading them back.
@@ -75,6 +76,7 @@ function parseFilters(raw: unknown): ScreenFilters {
   if (typeof input.sort === "string" && input.sort in SORTS) {
     out.sort = input.sort as ScreenFilters["sort"];
   }
+  if (isTrendKey(input.trend)) out.trend = input.trend;
 
   return out;
 }

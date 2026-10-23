@@ -166,6 +166,25 @@ export const scores = pgTable(
     changePercent: doublePrecision("change_percent"),
     priceUpdatedAt: timestamp("price_updated_at", { withTimezone: true }),
 
+    /**
+     * Where the share price stands against its own history, from daily closes:
+     * the screener's price-trend filter. Refreshed each weekday evening after
+     * the quotes (lib/technicals-refresh.ts); see lib/technicals.ts for the rules.
+     */
+    technicalClose: doublePrecision("technical_close"),
+    sma50: doublePrecision("sma_50"),
+    sma200: doublePrecision("sma_200"),
+    rsi14: doublePrecision("rsi_14"),
+    high52w: doublePrecision("high_52w"),
+    low52w: doublePrecision("low_52w"),
+    /** "golden" or "death": the direction of the last 50/200-day cross, and its ISO date. */
+    lastCross: text("last_cross"),
+    lastCrossDate: text("last_cross_date"),
+    /** The trend states the figures put the company in (TrendKey values). */
+    trendStates: text("trend_states").array(),
+    /** The date of the last bar the figures were worked out from, ISO. */
+    technicalsAsOf: text("technicals_as_of"),
+
     /** Cached plain-English question output, so pages render without recompute. */
     questions: jsonb("questions"),
     headline: text("headline"),

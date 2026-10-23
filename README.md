@@ -94,7 +94,7 @@ npm run db:migrate
 npm run ingest -- --limit 25
 npm run ingest
 
-# 4. Load quotes, for movers and the sector heatmap
+# 4. Load quotes, for movers and the sector heatmap, then price trends
 npm run quotes
 ```
 
@@ -102,6 +102,16 @@ The two jobs are separate on purpose: filings change quarterly, prices change
 constantly. Run `ingest` nightly and `quotes` as often as your price plan allows —
 Finnhub's free tier permits 60 requests a minute, so the full universe takes about
 ten minutes.
+
+After the quotes, the same run works out each company's **price trends** for the
+screener's "Price trend" filter: the 50- and 200-day averages and the last time one
+crossed the other (golden and death crosses), the price against its 200-day average,
+the 52-week high and low, and the 14-day RSI. They come from about 400 days of daily
+bars per company, through the same provider chain and Postgres bar cache as the
+charts. Alpaca's free plan (`ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`) covers the
+US listings at 200 requests a minute; without it they fall to the slower providers.
+`npm run technicals` runs the trends alone, and `npm run quotes -- --skip-technicals`
+the quotes alone. Run it after the US close so the day's bars have settled.
 
 ---
 

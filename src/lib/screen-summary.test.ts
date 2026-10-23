@@ -8,6 +8,11 @@ describe("describing a saved screen", () => {
     ).toBe("Quality · Canada only · health ≥ 7 · growth ≥ 15%");
   });
 
+  it("names the price trend screened on", () => {
+    expect(describeFilters({ sector: "Energy", trend: "golden-cross" })).toBe("Energy · Golden cross");
+    expect(describeFilters({ trend: "oversold" })).toBe("Oversold");
+  });
+
   it("counts advanced filters rather than spelling each out", () => {
     expect(describeFilters({ maxPb: 3, safeZoneOnly: true })).toBe("2 advanced filters");
     expect(describeFilters({ minRoa: 0.1 })).toBe("1 advanced filter");

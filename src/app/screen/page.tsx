@@ -25,6 +25,7 @@ import {
 import { calendarDate, money, multiple, percent, price as fmtPrice, signedPercent } from "@/lib/format";
 import { healthRating } from "@/lib/scoring/ratings";
 import {
+  getTrendsAsOf,
   numericParam,
   PRESETS,
   runScreen,
@@ -36,6 +37,7 @@ import {
   type ScreenRow,
   type SortKey,
 } from "@/lib/screener";
+import { isTrendKey, TREND_FILTERS, trendDetail, type TrendKey } from "@/lib/technicals";
 import { DISPLAY_SECTORS } from "@/lib/scoring/sectors";
 import { accountIsEnough } from "@/lib/billing/access-mode";
 import { canAccess, getEntitlement } from "@/lib/billing/entitlement";
@@ -126,6 +128,7 @@ export default async function ScreenPage({ searchParams }: SearchPageProps) {
     minFScore: numeric("minFScore"),
     minMarketCap: numeric("minMarketCap"),
     minGrowth: numeric("minGrowth"),
+    trend: trendParam(get("trend")),
     sort: sort in SORTS ? sort : ("health" as SortKey),
 
     // The Pro dimensions. Read unconditionally and stripped below rather than
@@ -173,7 +176,10 @@ export default async function ScreenPage({ searchParams }: SearchPageProps) {
   const advancedRequested = usesAdvancedFilters(requested);
   const filters = mayUseAdvanced ? requested : withoutAdvancedFilters(requested);
 
-  const result = await runScreen(filters, pageSize, (page - 1) * pageSize);
+  const [result, trendsAsOf] = await Promise.all([
+    runScreen(filters, pageSize, (page - 1) * pageSize),
+    getTrendsAsOf(),
+  ]);
 
   // A run is recorded only when a saved screen was opened and the query ran.
   // A connection error is not a screen that returned nothing.
@@ -311,6 +317,7 @@ export default async function ScreenPage({ searchParams }: SearchPageProps) {
 
           <Field label="Sector" name="sector" value={filters.sector} options={SECTORS} />
           <Field label="Listing" name="country" value={filters.country} options={COUNTRIES} />
+          <TrendField value={filters.trend} asOf={trendsAsOf} />
 
           <NumberField
             label="Min health score"
@@ -548,7 +555,7 @@ export default async function ScreenPage({ searchParams }: SearchPageProps) {
                 </Link>
               ) : null}
             </div>
-            <ResultsTable rows={result.rows} />
+            <ResultsTable rows={result.rows} trend={filters.trend} />
             {result.total > pageSize && (
               <Pagination
                 filters={filters}
@@ -582,7 +589,7 @@ export default async function ScreenPage({ searchParams }: SearchPageProps) {
                   was rate-limited. A confidently wrong explanation is worse
                   than none, because it costs somebody an afternoon.
                 */
-                description={`"${filters.preset ? PRESETS[filters.preset].label : "This screen"}" needs ${result.missingData.needs}, and no company in the database has it yet. Prices are stored by a separate refresh from the one that reads the filings, so this screen fills in once that has run — every other screen works meanwhile.`}
+                description={`"${filters.preset ? PRESETS[filters.preset].label : filters.trend ? TREND_FILTERS[filters.trend].short : "This screen"}" needs ${result.missingData.needs}, and no company in the database has it yet. Prices are stored by a separate refresh from the one that reads the filings, so this screen fills in once that has run — every other screen works meanwhile.`}
                 action={
                   <Link
                     href="/screen?preset=healthy"
@@ -793,7 +800,7 @@ function screenPageHref(filters: ScreenFilters, page: number): string {
   return `/screen?${params.toString()}`;
 }
 
-function ResultsTable({ rows }: { rows: ScreenRow[] }) {
+function ResultsTable({ rows, trend }: { rows: ScreenRow[]; trend?: TrendKey }) {
   return (
     <div className="scroll-x">
       <table className="w-full min-w-[58rem] text-sm">
@@ -804,6 +811,8 @@ function ResultsTable({ rows }: { rows: ScreenRow[] }) {
             {/* Price sits before the figures derived from it, so a reader can
                 see what the market value and the P/E were computed against. */}
             <th scope="col" className="px-3 py-2 text-right font-medium">Price</th>
+            {/* Only while screening on a trend: the figure that made each row match. */}
+            {trend && <th scope="col" className="px-3 py-2 font-medium">Price trend</th>}
             <th scope="col" className="px-3 py-2 text-right font-medium">Market value</th>
             <th scope="col" className="px-3 py-2 text-right font-medium">P/E</th>
             <th scope="col" className="px-3 py-2 text-right font-medium">Growth</th>
@@ -872,6 +881,12 @@ function ResultsTable({ rows }: { rows: ScreenRow[] }) {
                   <NotReported />
                 )}
               </td>
+              {trend && (
+                <td className="px-3 py-3">
+                  <span className="block text-xs font-medium">{TREND_FILTERS[trend].short}</span>
+                  <span className="tnum block text-xs whitespace-nowrap text-muted">{trendDetail(trend, r) ?? "—"}</span>
+                </td>
+              )}
               <td className="tnum px-3 py-3 text-right">{money(r.marketCap)}</td>
               <td className="tnum px-3 py-3 text-right">{multiple(r.peRatio)}</td>
               <td className="tnum px-3 py-3 text-right">{percent(r.revenueGrowth)}</td>
@@ -890,6 +905,58 @@ function ResultsTable({ rows }: { rows: ScreenRow[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/** The trend states, in their groups, for the filter's dropdown. */
+const TREND_GROUPS = Object.entries(TREND_FILTERS).reduce<Record<string, [TrendKey, string][]>>(
+  (groups, [key, filter]) => {
+    (groups[filter.group] ??= []).push([key as TrendKey, filter.label]);
+    return groups;
+  },
+  {},
+);
+
+/** A trend from the URL, or nothing for anything that is not one of the listed states. */
+function trendParam(raw: string | undefined): TrendKey | undefined {
+  return isTrendKey(raw) ? raw : undefined;
+}
+
+/**
+ * Filtering by where the price stands against its own history. Says what the
+ * chosen state means, how current the figures are, and that it describes the
+ * past: none of these predicts the next move.
+ */
+function TrendField({ value, asOf }: { value?: TrendKey; asOf: string | null }) {
+  return (
+    <div className="min-w-0">
+      <label htmlFor="trend" className="text-xs text-muted">
+        Price trend
+      </label>
+      <select
+        id="trend"
+        name="trend"
+        defaultValue={value ?? ""}
+        aria-describedby="trend-help"
+        className="mt-1 w-full min-w-0 rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+      >
+        <option value="">Any</option>
+        {Object.entries(TREND_GROUPS).map(([group, options]) => (
+          <optgroup key={group} label={group}>
+            {options.map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+      <p id="trend-help" className="mt-1 text-[11px] leading-snug text-faint">
+        {value && `${TREND_FILTERS[value].describes} `}
+        From daily closes{asOf ? `, as of ${calendarDate(asOf) ?? asOf}` : ""}. It describes past prices and does not
+        predict the next move.
+      </p>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { money } from "./format";
 import { ADVANCED_FILTER_KEYS, PRESETS, type ScreenFilters } from "./screener";
+import { TREND_FILTERS } from "./technicals";
 
 /**
  * A saved screen in one line — "Quality · Canada only · health ≥ 7".
@@ -23,6 +24,7 @@ export function describeFilters(filters: ScreenFilters): string {
   if (filters.minFScore != null) parts.push(`F-Score ≥ ${filters.minFScore}`);
   if (filters.minGrowth != null) parts.push(`growth ≥ ${Math.round(filters.minGrowth * 100)}%`);
   if (filters.minMarketCap != null) parts.push(`market value ≥ ${money(filters.minMarketCap)}`);
+  if (filters.trend) parts.push(TREND_FILTERS[filters.trend].short);
 
   const advanced = ADVANCED_FILTER_KEYS.filter(
     (key) => filters[key] != null && filters[key] !== false,
