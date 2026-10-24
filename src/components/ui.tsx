@@ -417,7 +417,8 @@ export function EmptyState({
   icon,
 }: {
   title: string;
-  description: string;
+  /** Text, or inline elements such as a reader-local time. */
+  description: ReactNode;
   action?: ReactNode;
   icon?: ReactNode;
 }) {

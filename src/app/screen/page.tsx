@@ -10,6 +10,7 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
+import { LocalTime } from "@/components/local-time";
 import { SetupNotice } from "@/components/setup-notice";
 import { SaveScreenForm, SavedScreenItem } from "@/components/screen/saved-screens";
 import {
@@ -38,6 +39,7 @@ import {
   type SortKey,
 } from "@/lib/screener";
 import { isTrendKey, TREND_FILTERS, trendDetail, type TrendKey } from "@/lib/technicals";
+import { nextTrendRefresh } from "@/lib/trend-schedule";
 import { DISPLAY_SECTORS } from "@/lib/scoring/sectors";
 import { accountIsEnough } from "@/lib/billing/access-mode";
 import { canAccess, getEntitlement } from "@/lib/billing/entitlement";
@@ -180,6 +182,8 @@ export default async function ScreenPage({ searchParams }: SearchPageProps) {
     runScreen(filters, pageSize, (page - 1) * pageSize),
     getTrendsAsOf(),
   ]);
+  // Only said while trends have never been worked out: when the first will be.
+  const nextTrendRun = trendsAsOf ? null : nextTrendRefresh(new Date());
 
   // A run is recorded only when a saved screen was opened and the query ran.
   // A connection error is not a screen that returned nothing.
@@ -317,7 +321,7 @@ export default async function ScreenPage({ searchParams }: SearchPageProps) {
 
           <Field label="Sector" name="sector" value={filters.sector} options={SECTORS} />
           <Field label="Listing" name="country" value={filters.country} options={COUNTRIES} />
-          <TrendField value={filters.trend} asOf={trendsAsOf} />
+          <TrendField value={filters.trend} asOf={trendsAsOf} nextRun={nextTrendRun} />
 
           <NumberField
             label="Min health score"
@@ -569,7 +573,33 @@ export default async function ScreenPage({ searchParams }: SearchPageProps) {
 
         {result.status === "ok" && result.rows.length === 0 && (
           <Card>
-            {result.missingData ? (
+            {result.missingData && filters.trend ? (
+              // Trends that have never been worked out: say when they will be,
+              // rather than leaving the reader to wonder whether the filter works.
+              <EmptyState
+                title="Price trends haven't been calculated yet"
+                description={
+                  <>
+                    They&apos;re worked out each weekday after the US market closes, and the first calculation
+                    hasn&apos;t run yet.
+                    {nextTrendRun && (
+                      <>
+                        {" "}The next one is <LocalTime value={nextTrendRun.toISOString()} showZone />.
+                      </>
+                    )}{" "}
+                    Every other filter works meanwhile.
+                  </>
+                }
+                action={
+                  <Link
+                    href={screenPageHref({ ...filters, trend: undefined }, 1)}
+                    className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg"
+                  >
+                    Show results without the trend filter
+                  </Link>
+                }
+              />
+            ) : result.missingData ? (
               // This preset can never match until the data it needs exists, so
               // saying "no companies match" would send people to adjust filters
               // that were never the problem.
@@ -589,7 +619,7 @@ export default async function ScreenPage({ searchParams }: SearchPageProps) {
                   was rate-limited. A confidently wrong explanation is worse
                   than none, because it costs somebody an afternoon.
                 */
-                description={`"${filters.preset ? PRESETS[filters.preset].label : filters.trend ? TREND_FILTERS[filters.trend].short : "This screen"}" needs ${result.missingData.needs}, and no company in the database has it yet. Prices are stored by a separate refresh from the one that reads the filings, so this screen fills in once that has run — every other screen works meanwhile.`}
+                description={`"${filters.preset ? PRESETS[filters.preset].label : "This screen"}" needs ${result.missingData.needs}, and no company in the database has it yet. Prices are stored by a separate refresh from the one that reads the filings, so this screen fills in once that has run — every other screen works meanwhile.`}
                 action={
                   <Link
                     href="/screen?preset=healthy"
@@ -928,7 +958,7 @@ function trendParam(raw: string | undefined): TrendKey | undefined {
  * chosen state means, how current the figures are, and that it describes the
  * past: none of these predicts the next move.
  */
-function TrendField({ value, asOf }: { value?: TrendKey; asOf: string | null }) {
+function TrendField({ value, asOf, nextRun }: { value?: TrendKey; asOf: string | null; nextRun: Date | null }) {
   return (
     <div className="min-w-0">
       <label htmlFor="trend" className="text-xs text-muted">
@@ -956,6 +986,11 @@ function TrendField({ value, asOf }: { value?: TrendKey; asOf: string | null }) 
         {value && `${TREND_FILTERS[value].describes} `}
         From daily closes{asOf ? `, as of ${calendarDate(asOf) ?? asOf}` : ""}. It describes past prices and does not
         predict the next move.
+        {!asOf && nextRun && (
+          <>
+            {" "}Not calculated yet: the first run is <LocalTime value={nextRun.toISOString()} showZone />.
+          </>
+        )}
       </p>
     </div>
   );
