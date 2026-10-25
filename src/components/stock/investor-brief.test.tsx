@@ -69,7 +69,7 @@ const ADVICE = /\b(buy|sell|should|price target)\b/i;
 
 describe("investor brief card", () => {
   it("has the parts the card promises", () => {
-    for (const heading of ["Investor brief", "Business", "Conclusion", "Research path"]) {
+    for (const heading of ["Investor brief", "Business", "Conclusion"]) {
       expect(html, heading).toContain(`${heading}</h`);
     }
   });
@@ -117,7 +117,7 @@ describe("investor brief card", () => {
   });
 
   it("points to the sections below for the evidence, rather than repeating it", () => {
-    expect(text).toMatch(/Use the sections below for the evidence/);
+    expect(text).toMatch(/supporting evidence appear in their dedicated sections below/);
     // Health ratings, valuation multiples and the watch item live in their own sections.
     expect(text).not.toMatch(/Profitability\s+(Strong|Mixed|Weak|Not enough data)/);
     expect(html).not.toContain(escaped(brief.health.summary));

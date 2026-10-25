@@ -178,7 +178,8 @@ describe("health report", () => {
   // Valuation is scored but excluded from the health composite, so an expensive
   // price cannot make a sound business look financially weak.
   it("excludes valuation from the health score", () => {
-    const report = buildHealthReport(aapl, AAPL_SECTOR, 3.5e12);
+    // A $10T price: rich enough for a poor P/E on trailing twelve-month earnings.
+    const report = buildHealthReport(aapl, AAPL_SECTOR, 1e13);
     expect(report.questions.find((q) => q.key === "valuation")!.rating).toBe("poor");
     expect(report.score!).toBeGreaterThanOrEqual(8);
   });
