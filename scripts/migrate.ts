@@ -33,6 +33,7 @@ const EXPECTED_TABLES = [
   "watchlist_groups", "saved_screen_runs", "investment_theses", "portfolio_holdings",
   "fund_profile_cache",
   "broker_connections", "broker_positions", "broker_executions", "broker_trade_links",
+  "trade_charts", "trade_screenshots",
 ] as const;
 
 /** Postgres error codes we treat as "already done" rather than failures. */

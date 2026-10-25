@@ -34,6 +34,12 @@ there accounting red flags — and links every figure back to the filing it came
 - **Connect a broker, read-only.** Readers link their own brokerage account through
   SnapTrade, or upload an IBKR statement — never giving this site a key for it. Holdings
   appear on `/portfolio` and trades in the journal. See [Connecting a broker](#connecting-a-broker).
+- **A chart of every trade** in the journal. Each trade's own page draws it on the
+  candles it happened on, with an arrow at every buy and sell, and lines for the entry,
+  exit, stop and target. The candles are captured when the trade comes in (one-minute
+  for a scalp, up to daily for a long hold) and kept, so the chart outlasts the free
+  intraday history it was drawn from. Readers can add their own screenshots too, by
+  file, drag and drop, or paste; each is re-encoded to WebP and kept private to them.
 - **Portfolio charts** on `/portfolio` — an allocation ring that groups holdings by
   company, sector, broker or currency, and a map of every company sized by its value and
   shaded by its gain or loss on cost.
