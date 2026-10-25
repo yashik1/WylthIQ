@@ -4,6 +4,7 @@ import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb } from "../db";
 import { brokerConnections, brokerExecutions, brokerPositions, brokerTradeLinks, trades } from "../db/schema";
+import { captureDueChartsAfterResponse } from "../journal/chart-capture";
 import { accountTypeLabel, isAccountType } from "../portfolio/account-types";
 import { actionRateLimited, userRateLimited } from "../security/guard";
 import { siteUrl } from "../site-url";
@@ -511,6 +512,7 @@ async function syncBrokerNowUnguarded(
   const outcome = await syncConnection(connection.id);
   refresh();
   if (!outcome.ok) return outcome;
+  captureDueChartsAfterResponse(gate.userId);
   return {
     ok: true,
     message: `Synced. ${summarise(outcome.positions, outcome.tradesAdded, outcome.tradesUpdated)}.`,

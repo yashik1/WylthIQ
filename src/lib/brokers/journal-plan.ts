@@ -1,3 +1,4 @@
+import { fillInstant, fillsKey, type TradeFill } from "../journal/fills";
 import type { RoundTrip } from "./round-trips";
 
 /**
@@ -6,8 +7,8 @@ import type { RoundTrip } from "./round-trips";
  * Pure, so every rule below is tested without a database. The rules:
  *
  * - A round trip already linked to a journal trade updates that trade, but
- *   only the fields the broker is the authority on — side, size, prices, fees
- *   and dates. The reader's own additions (strategy, notes, stop, target,
+ *   only the fields the broker is the authority on — side, size, prices, fees,
+ *   dates and the fills themselves. The reader's own additions (strategy, notes, stop, target,
  *   whether they kept to their rules) are theirs and a sync never touches
  *   them.
  * - A link whose trade is gone means the reader deleted it. It stays deleted:
@@ -26,6 +27,8 @@ export interface SyncedTradeFields {
   fees: number;
   openedAt: string;
   closedAt: string | null;
+  /** Each fill with its instant, for the trade's chart. */
+  fills: TradeFill[];
 }
 
 export interface ExistingLink {
@@ -51,7 +54,11 @@ function round(n: number | null): number | null {
   return n === null ? null : Math.round(n * 1e6) / 1e6;
 }
 
-export function fieldsFor(trip: RoundTrip): SyncedTradeFields {
+/**
+ * `family` is the broker link family the fills came from, which decides the
+ * zone their times are read in (see journal/fills.ts).
+ */
+export function fieldsFor(trip: RoundTrip, family: string): SyncedTradeFields {
   return {
     symbol: trip.symbol,
     side: trip.side,
@@ -61,6 +68,13 @@ export function fieldsFor(trip: RoundTrip): SyncedTradeFields {
     fees: round(trip.fees)!,
     openedAt: trip.openedAt,
     closedAt: trip.closedAt,
+    fills: trip.fills.map((f) => ({
+      date: f.tradeDate,
+      at: fillInstant(f.executedAt, family),
+      side: f.side,
+      shares: round(f.shares)!,
+      price: round(f.price)!,
+    })),
   };
 }
 
@@ -73,7 +87,8 @@ function same(a: SyncedTradeFields, b: SyncedTradeFields): boolean {
     round(a.exitPrice) === round(b.exitPrice) &&
     round(a.fees) === round(b.fees) &&
     a.openedAt === b.openedAt &&
-    a.closedAt === b.closedAt
+    a.closedAt === b.closedAt &&
+    fillsKey(a.fills) === fillsKey(b.fills)
   );
 }
 
@@ -81,12 +96,13 @@ export function planJournalWrites(
   roundTrips: RoundTrip[],
   links: ExistingLink[],
   journalSince: string,
+  family: string,
 ): JournalPlan {
   const byKey = new Map(links.map((link) => [`${link.accountId}|${link.openingExternalId}`, link]));
   const plan: JournalPlan = { inserts: [], updates: [], keptDeleted: 0, beforeStart: 0 };
 
   for (const trip of roundTrips) {
-    const fields = fieldsFor(trip);
+    const fields = fieldsFor(trip, family);
     const link = byKey.get(`${trip.accountId}|${trip.openingExternalId}`);
 
     if (link) {

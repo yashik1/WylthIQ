@@ -40,6 +40,17 @@ export interface Fill {
   executedAt: string;
 }
 
+/** The part of a broker fill that belongs to one round trip. */
+export interface TripFill {
+  /** As the broker reported it: see Fill.executedAt. */
+  executedAt: string;
+  tradeDate: string;
+  side: "buy" | "sell";
+  /** Always positive. */
+  shares: number;
+  price: number;
+}
+
 export interface RoundTrip {
   accountId: string;
   conid: string;
@@ -58,6 +69,12 @@ export interface RoundTrip {
   /** ISO dates. */
   openedAt: string;
   closedAt: string | null;
+  /**
+   * The fills that made it, in order. A fill that crosses zero — selling 15
+   * out of a 10-share long — is split, its first 10 here and the rest opening
+   * the next trade.
+   */
+  fills: TripFill[];
 }
 
 /** Fractional shares make exact zero comparisons unreliable. */
@@ -78,6 +95,7 @@ interface OpenTrade {
   exitProceeds: number;
   fees: number;
   openedAt: string;
+  fills: TripFill[];
 }
 
 function finish(trade: OpenTrade, accountId: string, conid: string, closedAt: string | null): RoundTrip {
@@ -94,6 +112,7 @@ function finish(trade: OpenTrade, accountId: string, conid: string, closedAt: st
     fees: trade.fees,
     openedAt: trade.openedAt,
     closedAt,
+    fills: trade.fills,
   };
 }
 
@@ -125,6 +144,7 @@ function pairInstrument(fills: Fill[], reportedQuantity: number): RoundTrip[] {
           exitProceeds: 0,
           fees: 0,
           openedAt: "",
+          fills: [],
         };
 
   const trips: RoundTrip[] = [];
@@ -148,6 +168,7 @@ function pairInstrument(fills: Fill[], reportedQuantity: number): RoundTrip[] {
           exitProceeds: 0,
           fees: 0,
           openedAt: fill.tradeDate,
+          fills: [],
         };
       }
 
@@ -168,6 +189,13 @@ function pairInstrument(fills: Fill[], reportedQuantity: number): RoundTrip[] {
         open.exitProceeds += shares * fill.price;
       }
       if (feeCounts) open.fees += fill.commission * (shares / size);
+      open.fills.push({
+        executedAt: fill.executedAt,
+        tradeDate: fill.tradeDate,
+        side: signed > 0 ? "buy" : "sell",
+        shares,
+        price: fill.price,
+      });
 
       position += signed;
       remaining -= signed;

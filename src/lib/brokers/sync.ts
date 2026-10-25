@@ -8,6 +8,7 @@ import {
   trades,
   type BrokerConnection,
 } from "../db/schema";
+import { readFills } from "../journal/fills";
 import { isAccountType, type AccountType } from "../portfolio/account-types";
 import { decryptToken } from "./crypto";
 import { holdingsAfterLaterFills, matchProvisional, withConfirmations } from "./confirmations";
@@ -327,6 +328,7 @@ export async function applyReport(
           fees: trades.fees,
           openedAt: trades.openedAt,
           closedAt: trades.closedAt,
+          fills: trades.fills,
         })
         .from(brokerTradeLinks)
         .leftJoin(trades, eq(trades.id, brokerTradeLinks.tradeId))
@@ -347,11 +349,12 @@ export async function applyReport(
                 fees: row.fees!,
                 openedAt: row.openedAt!,
                 closedAt: row.closedAt,
+                fills: readFills(row.fills),
               }
             : null,
       }));
 
-      const plan = planJournalWrites(roundTrips, links, connection.journalSince);
+      const plan = planJournalWrites(roundTrips, links, connection.journalSince, family);
 
       const inserts = plan.inserts.slice(0, MAX_JOURNAL_INSERTS);
       if (plan.inserts.length > inserts.length) {

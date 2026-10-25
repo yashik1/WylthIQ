@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { canAccess, entitlementForUser } from "@/lib/billing/entitlement";
 import { connectionsDue, syncConnection } from "@/lib/brokers/sync";
 import { isDatabaseConfigured } from "@/lib/db";
+import { captureDueCharts } from "@/lib/journal/chart-capture";
 import { refuseUnauthorizedCron } from "@/lib/security/cron-auth";
 import { refuseIfRateLimited } from "@/lib/security/guard";
 
@@ -20,6 +21,9 @@ export const dynamic = "force-dynamic";
  * Connections waiting on their reader (an expired token, a broken query) are
  * skipped until the reader fixes them, and so are readers whose plan no longer
  * covers the feature.
+ *
+ * After each sync, the reader's new and changed trades have their charts
+ * captured, while the intraday history to draw them from is still there.
  */
 const DEFAULT_BATCH = 5;
 const MAX_BATCH = 20;
@@ -38,6 +42,7 @@ export async function GET(request: Request) {
   let synced = 0;
   let failed = 0;
   let skipped = 0;
+  let charts = 0;
 
   try {
     for (const { id, userId } of await connectionsDue(batch)) {
@@ -48,13 +53,17 @@ export async function GET(request: Request) {
       const outcome = await syncConnection(id);
       if (outcome.ok) synced++;
       else failed++;
+      // Best-effort and bounded: a provider being slow costs some charts this
+      // hour, never the syncs still to run.
+      const captured = await captureDueCharts(userId, { limit: 10, budgetMs: 30_000 }).catch(() => null);
+      charts += captured?.captured ?? 0;
     }
   } catch (err) {
     // Only the error's class: a database message can quote values.
     console.error("[cron] broker sync stopped:", err instanceof Error ? err.name : "unknown");
-    return NextResponse.json({ ok: false, synced, failed, skipped }, { status: 500 });
+    return NextResponse.json({ ok: false, synced, failed, skipped, charts }, { status: 500 });
   }
 
   // Counts only. Which readers failed, and why, is on each reader's own account page.
-  return NextResponse.json({ ok: true, synced, failed, skipped });
+  return NextResponse.json({ ok: true, synced, failed, skipped, charts });
 }
