@@ -17,7 +17,7 @@ import { cssVar, localCrosshair, localTick } from "@/lib/chart-theme";
 import { num } from "@/lib/format";
 import type { TradeFill } from "@/lib/journal/fills";
 import { fillMarkers } from "@/lib/journal/trade-chart";
-import type { Bar } from "@/lib/providers/types";
+import type { Bar, Timeframe } from "@/lib/providers/types";
 
 export interface TradeLevels {
   entry: number | null;
@@ -43,14 +43,14 @@ export function TradeChart({
   levels,
 }: {
   bars: Bar[];
-  timeframe: string;
+  timeframe: Timeframe;
   fills: TradeFill[];
   levels: TradeLevels;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const intraday = timeframe !== "1Day" && timeframe !== "1Week";
-  const markers = useMemo(() => fillMarkers(fills, bars, timeframe as never), [fills, bars, timeframe]);
+  const markers = useMemo(() => fillMarkers(fills, bars, timeframe), [fills, bars, timeframe]);
 
   const build = useCallback(() => {
     if (!containerRef.current) return;

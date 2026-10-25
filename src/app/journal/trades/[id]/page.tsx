@@ -16,7 +16,7 @@ import { averagePrice, timeframeLabel } from "@/lib/journal/trade-chart";
 import { plannedR, realisedPnl, realisedR, type Trade } from "@/lib/journal/trade-math";
 import { loadTradePage } from "@/lib/journal/trade-page";
 import { money, num } from "@/lib/format";
-import type { Bar } from "@/lib/providers/types";
+import type { Bar, Timeframe } from "@/lib/providers/types";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -154,7 +154,7 @@ export default async function TradePage({ params }: PageProps<"/journal/trades/[
             <>
               <TradeChart
                 bars={bars}
-                timeframe={data.chart.timeframe}
+                timeframe={data.chart.timeframe as Timeframe}
                 fills={fills}
                 levels={{
                   entry: averagePrice(fills, entrySide) ?? trade.entryPrice,
