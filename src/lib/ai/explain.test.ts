@@ -19,6 +19,7 @@ vi.mock("../security/rate-limit", () => ({
 }));
 vi.mock("../stock-data", () => ({ getStockPageData: vi.fn() }));
 vi.mock("./anthropic", () => ({ callClaude: vi.fn() }));
+vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers()) }));
 
 import { getEntitlement } from "../billing/entitlement";
 import { actionRateLimited } from "../security/guard";

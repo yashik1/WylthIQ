@@ -189,22 +189,27 @@ export function buildValuationMetrics(
       capexTtm.asOf ?? ocfTtm.asOf,
       statusFor(fcfYield),
     ),
-    enterpriseValueToRevenue: metric(
-      sector === "financial" ? null : evRevenue,
+    // notMeaningful rather than metric(null, …): metric() reads a null value
+    // as "unavailable", which dropped the reason these are left out for banks.
+    enterpriseValueToRevenue:
       sector === "financial"
-        ? "EV/revenue is not a useful primary measure for financial companies."
-        : "enterprise value / trailing twelve-month revenue",
-      revenueTtm.asOf,
-      sector === "financial" ? "not_meaningful" : statusFor(evRevenue),
-    ),
-    enterpriseValueToEbitda: metric(
-      sector === "financial" ? null : evEbitda,
+        ? notMeaningful(
+            "EV/revenue is not a useful primary measure for financial companies.",
+            revenueTtm.asOf,
+          )
+        : metric(evRevenue, "enterprise value / trailing twelve-month revenue", revenueTtm.asOf, statusFor(evRevenue)),
+    enterpriseValueToEbitda:
       sector === "financial"
-        ? "EV/EBITDA is not a useful primary measure for financial companies."
-        : "enterprise value / trailing twelve-month EBITDA",
-      operatingIncomeTtm.asOf ?? depreciationTtm.asOf,
-      sector === "financial" ? "not_meaningful" : statusFor(evEbitda),
-    ),
+        ? notMeaningful(
+            "EV/EBITDA is not a useful primary measure for financial companies.",
+            operatingIncomeTtm.asOf ?? depreciationTtm.asOf,
+          )
+        : metric(
+            evEbitda,
+            "enterprise value / trailing twelve-month EBITDA",
+            operatingIncomeTtm.asOf ?? depreciationTtm.asOf,
+            statusFor(evEbitda),
+          ),
   };
 }
 
