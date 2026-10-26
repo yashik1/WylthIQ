@@ -10,10 +10,21 @@ import {
 } from "@/lib/journal/trade-actions";
 import type { Playbook } from "@/lib/db/schema";
 import { cn } from "@/lib/utils";
+import { useTimeZone } from "@/components/local-time";
 
 const FIELD =
   "mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent";
 const LABEL = "text-xs text-muted";
+
+/**
+ * The reader's time zone, sent with a form so a time they type is read as
+ * their own clock. Empty until the browser has said, in which case the times
+ * are ignored and the trade is charted from its dates.
+ */
+function ZoneField() {
+  const zone = useTimeZone();
+  return <input type="hidden" name="tz" value={zone ?? ""} />;
+}
 
 function Feedback({ state }: { state: TradeResult | null }) {
   if (!state) return null;
@@ -43,6 +54,7 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
 
   return (
     <form action={action} className="space-y-4 p-5">
+      <ZoneField />
       <div className="grid grid-cols-1 gap-3 @md:grid-cols-2 @4xl:grid-cols-5">
         <div>
           <label htmlFor="t-symbol" className={LABEL}>Symbol</label>
@@ -68,7 +80,11 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
         </div>
         <div>
           <label htmlFor="t-opened" className={LABEL}>Opened</label>
-          <input id="t-opened" name="openedAt" type="date" defaultValue={today} className={FIELD} />
+          <div className="flex gap-2">
+            <input id="t-opened" name="openedAt" type="date" defaultValue={today} className={cn(FIELD, "min-w-0")} />
+            <input name="openedTime" type="time" aria-label="Time opened (optional)"
+              className={cn(FIELD, "w-28 shrink-0")} />
+          </div>
         </div>
       </div>
 
@@ -104,7 +120,9 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
           and quietly reporting "no stops set" later. */}
       <p className="text-xs leading-relaxed text-faint">
         A stop is optional, but it is what defines the risk on a trade — without one,
-        this trade has no R-multiple and sits out of your average R.
+        this trade has no R-multiple and sits out of your average R. The times are
+        optional too: with them, the trade&apos;s chart puts your buy and sell on the
+        exact candle.
       </p>
 
       <div className="border-t border-border pt-4">
@@ -121,11 +139,15 @@ export function NewTradeForm({ playbooks }: { playbooks: Playbook[] }) {
               <input id="t-exit" name="exitPrice" type="number" step="any" min="0"
                 placeholder="191.20" className={FIELD} />
             </div>
-            <div>
+            <div className="@4xl:col-span-2">
               <label htmlFor="t-closed" className={LABEL}>Closed</label>
-              <input id="t-closed" name="closedAt" type="date" defaultValue={today} className={FIELD} />
+              <div className="flex gap-2">
+                <input id="t-closed" name="closedAt" type="date" defaultValue={today} className={cn(FIELD, "min-w-0")} />
+                <input name="closedTime" type="time" aria-label="Time closed (optional)"
+                  className={cn(FIELD, "w-28 shrink-0")} />
+              </div>
             </div>
-            <div className="@4xl:col-span-3">
+            <div className="@4xl:col-span-2">
               <label htmlFor="t-followed" className={LABEL}>Did you follow your rules?</label>
               <select id="t-followed" name="followedRules" className={FIELD} defaultValue="">
                 <option value="">Not saying</option>
@@ -173,6 +195,7 @@ export function CloseTradeForm({ id }: { id: number }) {
   return (
     <form action={action} className="flex flex-wrap items-end gap-2">
       <input type="hidden" name="id" value={id} />
+      <ZoneField />
       <div>
         <label htmlFor={`x-${id}`} className="text-[0.6875rem] text-muted">Exit</label>
         <input id={`x-${id}`} name="exitPrice" required type="number" step="any" min="0"
@@ -182,6 +205,12 @@ export function CloseTradeForm({ id }: { id: number }) {
         <label htmlFor={`d-${id}`} className="text-[0.6875rem] text-muted">On</label>
         <input id={`d-${id}`} name="closedAt" type="date" defaultValue={today}
           className="mt-0.5 rounded-lg border border-border bg-surface px-2 py-1 text-xs" />
+      </div>
+      <div>
+        <label htmlFor={`t-${id}`} className="text-[0.6875rem] text-muted">At</label>
+        <input id={`t-${id}`} name="closedTime" type="time" aria-describedby={`t-${id}-hint`}
+          className="mt-0.5 rounded-lg border border-border bg-surface px-2 py-1 text-xs" />
+        <span id={`t-${id}-hint`} className="sr-only">Optional</span>
       </div>
       <div>
         <label htmlFor={`r-${id}`} className="text-[0.6875rem] text-muted">Rules?</label>

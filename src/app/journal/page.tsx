@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ChartCandlestick } from "lucide-react";
 import { Badge, Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
 import { Paywall } from "@/components/billing/paywall";
 import { NewEntryForm, DeleteEntryButton } from "@/components/journal/journal-form";
@@ -368,6 +369,13 @@ function TradeLog({
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex flex-col items-start gap-2">
+                      <Link
+                        href={`/journal/trades/${t.id}`}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-medium transition-colors hover:border-accent hover:text-accent"
+                      >
+                        <ChartCandlestick className="size-3.5" aria-hidden />
+                        Chart
+                      </Link>
                       {!isClosed(t) &&
                         (synced.has(t.id) ? (
                           <span className="text-xs text-faint">Closes when your broker reports the sale</span>

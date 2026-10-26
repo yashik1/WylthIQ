@@ -48,6 +48,8 @@ export const RULES = {
   brokerUpload: { limit: 10, windowSeconds: 3600 },
   /** Settings on a connected broker, such as an account's type: a small write, but still a write. */
   brokerSettings: { limit: 60, windowSeconds: 3600 },
+  /** Screenshots for the journal: each is decoded and re-encoded, so bounded per address and account. */
+  journalUpload: { limit: 30, windowSeconds: 3600 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type RuleName = keyof typeof RULES;

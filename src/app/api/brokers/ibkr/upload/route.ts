@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { logBrokerFailure, UNAVAILABLE_MESSAGE } from "@/lib/brokers/failsafe";
 import { brokerReader, denied, journalSinceFrom } from "@/lib/brokers/gate";
 import { ingestStatement, MAX_STATEMENT_BYTES } from "@/lib/brokers/upload";
+import { captureDueChartsAfterResponse } from "@/lib/journal/chart-capture";
 import { refuseIfRateLimited, userRateLimited } from "@/lib/security/guard";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +66,7 @@ export async function POST(request: Request) {
     revalidatePath("/account");
     revalidatePath("/portfolio");
     revalidatePath("/journal");
+    captureDueChartsAfterResponse(gate.userId);
   }
   return NextResponse.json(result, { status: result.ok ? 200 : 400 });
 }

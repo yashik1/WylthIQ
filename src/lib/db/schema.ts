@@ -1,5 +1,6 @@
 import {
   boolean,
+  customType,
   doublePrecision,
   index,
   integer,
@@ -560,6 +561,12 @@ export const trades = pgTable(
     /** Whether the reader kept to their own rules. Null when not answered. */
     followedRules: boolean("followed_rules"),
     notes: text("notes").notNull().default(""),
+    /**
+     * The fills inside the trade, each with its instant, for the trade's
+     * chart (lib/journal/fills.ts). Written by the broker sync or the manual
+     * form; null on trades from before it was kept.
+     */
+    fills: jsonb("fills"),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -569,6 +576,62 @@ export const trades = pgTable(
     index("trades_user_symbol_idx").on(t.userId, t.symbol),
     index("trades_user_playbook_idx").on(t.userId, t.playbookId),
   ],
+);
+
+/**
+ * The price bars a trade's chart is drawn from, captured close to when the
+ * trade happened (lib/journal/trade-charts.ts). Free intraday history runs out
+ * after a few weeks for most listings, so the bars are kept rather than
+ * fetched each time. `fillsKey` records which fills they were captured for, so
+ * a trade that is added to or closed is captured again.
+ */
+export const tradeCharts = pgTable(
+  "trade_charts",
+  {
+    tradeId: integer("trade_id")
+      .primaryKey()
+      .references(() => trades.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    timeframe: text("timeframe").notNull(),
+    fromAt: timestamp("from_at", { withTimezone: true }).notNull(),
+    toAt: timestamp("to_at", { withTimezone: true }).notNull(),
+    /** Bar[]; empty when no provider had history for the window. */
+    bars: jsonb("bars").notNull().default(sql`'[]'::jsonb`),
+    source: text("source"),
+    /** Tiingo's daily closes are adjusted for later dividends, so old fills sit a little off them. */
+    includesDividends: boolean("includes_dividends").notNull().default(false),
+    fillsKey: text("fills_key").notNull().default(""),
+    capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("trade_charts_user_idx").on(t.userId)],
+);
+
+/** Raw bytes; postgres-js reads and writes bytea as a Buffer. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
+
+/** A reader's own screenshot of a trade, re-encoded to WebP on upload. */
+export const tradeScreenshots = pgTable(
+  "trade_screenshots",
+  {
+    id: serial("id").primaryKey(),
+    tradeId: integer("trade_id")
+      .notNull()
+      .references(() => trades.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    image: bytea("image").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    bytes: integer("bytes").notNull(),
+    caption: text("caption").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("trade_screenshots_trade_idx").on(t.tradeId)],
 );
 
 /* ----------------------------------------------------------------- watchlist
@@ -1061,6 +1124,7 @@ export type JournalEntry = typeof journalEntries.$inferSelect;
 export type WatchlistItem = typeof watchlistItems.$inferSelect;
 export type Playbook = typeof playbooks.$inferSelect;
 export type TradeRow = typeof trades.$inferSelect;
+export type TradeChartRow = typeof tradeCharts.$inferSelect;
 export type InstitutionalHolding = typeof institutionalHoldings.$inferSelect;
 export type CusipSymbol = typeof cusipSymbols.$inferSelect;
 export type SavedScreener = typeof savedScreeners.$inferSelect;

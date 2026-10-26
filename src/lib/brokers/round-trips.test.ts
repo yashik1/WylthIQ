@@ -126,6 +126,23 @@ describe("pairing fills into round trips", () => {
     expect(after[0].openingExternalId).toBe(before[0].openingExternalId);
   });
 
+  it("keeps the fills that make each trade, splitting one that crosses zero", () => {
+    const crossing = fill(-15, 110, "2025-01-05", { executedAt: "2025-01-05T14:20:00" });
+    const trips = pairRoundTrips(
+      [fill(6, 100, "2025-01-02"), fill(4, 102, "2025-01-03"), crossing, fill(5, 105, "2025-01-09")],
+      {},
+    );
+    expect(trips[0].fills.map((f) => [f.side, f.shares, f.price])).toEqual([
+      ["buy", 6, 100],
+      ["buy", 4, 102],
+      ["sell", 10, 110],
+    ]);
+    expect(trips[1].fills.map((f) => [f.side, f.shares, f.price, f.executedAt])).toEqual([
+      ["sell", 5, 110, "2025-01-05T14:20:00"],
+      ["buy", 5, 105, "2025-01-09T10:00:00"],
+    ]);
+  });
+
   it("is not thrown by fractional shares", () => {
     const [trip] = pairRoundTrips([fill(0.1, 100, "2025-01-02"), fill(0.2, 100, "2025-01-03"), fill(-0.3, 110, "2025-01-04")], {});
     expect(trip.closedAt).toBe("2025-01-04");
@@ -137,7 +154,7 @@ describe("planning journal writes", () => {
   const key = { accountId: "U0000001", openingExternalId: closed[0].openingExternalId };
 
   it("adds a new round trip as a trade", () => {
-    const plan = planJournalWrites(closed, [], "2024-01-01");
+    const plan = planJournalWrites(closed, [], "2024-01-01", "ibkr-flex");
     expect(plan.inserts).toHaveLength(1);
     expect(plan.inserts[0].fields).toMatchObject({ side: "long", quantity: 10, entryPrice: 100, exitPrice: 110 });
   });
@@ -146,21 +163,21 @@ describe("planning journal writes", () => {
     const open: ExistingLink = {
       ...key,
       tradeId: 7,
-      current: { symbol: "AAPL", side: "long", quantity: 10, entryPrice: 100, exitPrice: null, fees: 1, openedAt: "2025-01-02", closedAt: null },
+      current: { symbol: "AAPL", side: "long", quantity: 10, entryPrice: 100, exitPrice: null, fees: 1, openedAt: "2025-01-02", closedAt: null, fills: [] },
     };
-    const plan = planJournalWrites(closed, [open], "2024-01-01");
+    const plan = planJournalWrites(closed, [open], "2024-01-01", "ibkr-flex");
     expect(plan.inserts).toHaveLength(0);
     expect(plan.updates).toEqual([{ tradeId: 7, fields: expect.objectContaining({ exitPrice: 110, closedAt: "2025-02-03" }) }]);
   });
 
   it("writes nothing when the trade already matches", () => {
-    const plan = planJournalWrites(closed, [], "2024-01-01");
+    const plan = planJournalWrites(closed, [], "2024-01-01", "ibkr-flex");
     const current = plan.inserts[0].fields;
-    expect(planJournalWrites(closed, [{ ...key, tradeId: 7, current }], "2024-01-01").updates).toHaveLength(0);
+    expect(planJournalWrites(closed, [{ ...key, tradeId: 7, current }], "2024-01-01", "ibkr-flex").updates).toHaveLength(0);
   });
 
   it("never brings back a trade the reader deleted", () => {
-    const plan = planJournalWrites(closed, [{ ...key, tradeId: null, current: null }], "2024-01-01");
+    const plan = planJournalWrites(closed, [{ ...key, tradeId: null, current: null }], "2024-01-01", "ibkr-flex");
     expect(plan.inserts).toHaveLength(0);
     expect(plan.updates).toHaveLength(0);
     expect(plan.keptDeleted).toBe(1);
@@ -168,13 +185,31 @@ describe("planning journal writes", () => {
 
   it("adds nothing twice after a disconnect and reconnect", () => {
     // Links outlive the connection, so the same round trip finds its trade again.
-    const first = planJournalWrites(closed, [], "2024-01-01");
-    const again = planJournalWrites(closed, [{ ...key, tradeId: 7, current: first.inserts[0].fields }], "2024-01-01");
+    const first = planJournalWrites(closed, [], "2024-01-01", "ibkr-flex");
+    const again = planJournalWrites(closed, [{ ...key, tradeId: 7, current: first.inserts[0].fields }], "2024-01-01", "ibkr-flex");
     expect(again.inserts).toHaveLength(0);
   });
 
+  it("writes each fill with its instant, read in the broker's own zone", () => {
+    const [ibkr] = planJournalWrites(closed, [], "2024-01-01", "ibkr-flex").inserts;
+    // 10:00 in New York in January is 15:00 UTC.
+    expect(ibkr.fields.fills).toEqual([
+      { date: "2025-01-02", at: "2025-01-02T15:00:00.000Z", side: "buy", shares: 10, price: 100 },
+      { date: "2025-02-03", at: "2025-02-03T15:00:00.000Z", side: "sell", shares: 10, price: 110 },
+    ]);
+    const [snap] = planJournalWrites(closed, [], "2024-01-01", "snaptrade").inserts;
+    expect(snap.fields.fills[0].at).toBe("2025-01-02T10:00:00.000Z");
+  });
+
+  it("fills in the fills of a trade synced before they were kept", () => {
+    const current = { ...planJournalWrites(closed, [], "2024-01-01", "ibkr-flex").inserts[0].fields, fills: [] };
+    const plan = planJournalWrites(closed, [{ ...key, tradeId: 7, current }], "2024-01-01", "ibkr-flex");
+    expect(plan.updates).toHaveLength(1);
+    expect(plan.updates[0].fields.fills).toHaveLength(2);
+  });
+
   it("skips trades opened before the reader's chosen start", () => {
-    const plan = planJournalWrites(closed, [], "2025-06-01");
+    const plan = planJournalWrites(closed, [], "2025-06-01", "ibkr-flex");
     expect(plan.inserts).toHaveLength(0);
     expect(plan.beforeStart).toBe(1);
   });

@@ -5,6 +5,7 @@ import { brokerConnections } from "@/lib/db/schema";
 import { logBrokerFailure } from "@/lib/brokers/failsafe";
 import { brokerReader, denied } from "@/lib/brokers/gate";
 import { SNAPTRADE, syncConnection } from "@/lib/brokers/sync";
+import { captureDueChartsAfterResponse } from "@/lib/journal/chart-capture";
 import { refuseIfRateLimited } from "@/lib/security/guard";
 import { siteUrl } from "@/lib/site-url";
 
@@ -40,6 +41,7 @@ export async function GET(request: Request) {
 
     const outcome = await syncConnection(connection.id);
     if (!outcome.ok) return back("failed");
+    captureDueChartsAfterResponse(gate.userId);
     // Trades are read once a day, so a broker added since the last read
     // shows its holdings now and its trades with the next daily sync.
     return back(outcome.tradesRead ? "connected" : "connected-holdings");

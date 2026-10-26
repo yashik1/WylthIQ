@@ -1,10 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "../db";
 import { brokerTradeLinks, playbooks, trades, type Playbook, type TradeRow } from "../db/schema";
 import { ACCESS_MODE, getEntitlement, hasAccess } from "../billing/entitlement";
+import { manualFills, readFills, type TradeFill } from "./fills";
+import { captureTradeChart } from "./chart-capture";
 import type { Side, Trade } from "./trade-math";
 
 /**
@@ -71,6 +74,24 @@ function isoDate(form: FormData, key: string, fallback?: string): string | null 
   const raw = String(form.get(key) ?? "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
   return fallback ?? null;
+}
+
+/** An optional HH:MM from a time input, or null. */
+function clockTime(form: FormData, key: string): string | null {
+  const raw = String(form.get(key) ?? "").trim();
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(raw);
+  return match ? raw : null;
+}
+
+/**
+ * Draws the trade's chart once the reader has their answer. A chart is a
+ * nicety on top of the trade, so nothing about saving it waits on, or fails
+ * because of, a price provider.
+ */
+function captureLater(tradeId: number, userId: string): void {
+  after(async () => {
+    await captureTradeChart(tradeId, userId).catch(() => undefined);
+  });
 }
 
 /** Maps a stored row onto the shape the maths works in. */
@@ -153,6 +174,12 @@ export async function createTrade(
     return { ok: false, message: "The closing date is before the opening date." };
   }
 
+  const openedTime = clockTime(form, "openedTime");
+  const closedTime = closedAt ? clockTime(form, "closedTime") : null;
+  if (closedAt === openedAt && openedTime && closedTime && closedTime < openedTime) {
+    return { ok: false, message: "The closing time is before the opening time." };
+  }
+
   const playbookRaw = Number(form.get("playbookId"));
   const playbookId = Number.isInteger(playbookRaw) && playbookRaw > 0 ? playbookRaw : null;
 
@@ -171,23 +198,40 @@ export async function createTrade(
   const followedRules =
     followedRaw === "yes" ? true : followedRaw === "no" ? false : null;
 
-  await getDb().insert(trades).values({
-    userId: gate.userId,
-    symbol,
+  const fills = manualFills({
     side,
     quantity,
     entryPrice,
     exitPrice,
-    stopPrice: optional(form, "stopPrice"),
-    targetPrice: optional(form, "targetPrice"),
-    fees: optional(form, "fees") ?? 0,
     openedAt,
     closedAt,
-    playbookId,
-    followedRules,
-    notes: String(form.get("notes") ?? "").slice(0, MAX_NOTES),
+    openedTime,
+    closedTime,
+    zone: String(form.get("tz") ?? "") || null,
   });
 
+  const [created] = await getDb()
+    .insert(trades)
+    .values({
+      userId: gate.userId,
+      symbol,
+      side,
+      quantity,
+      entryPrice,
+      exitPrice,
+      stopPrice: optional(form, "stopPrice"),
+      targetPrice: optional(form, "targetPrice"),
+      fees: optional(form, "fees") ?? 0,
+      openedAt,
+      closedAt,
+      playbookId,
+      followedRules,
+      notes: String(form.get("notes") ?? "").slice(0, MAX_NOTES),
+      fills,
+    })
+    .returning({ id: trades.id });
+
+  captureLater(created.id, gate.userId);
   revalidatePath("/journal");
   return { ok: true, message: closedAt ? "Trade logged." : "Position opened." };
 }
@@ -224,11 +268,47 @@ export async function closeTrade(
   const followedRules =
     followedRaw === "yes" ? true : followedRaw === "no" ? false : null;
 
+  const [current] = await getDb()
+    .select({
+      side: trades.side,
+      quantity: trades.quantity,
+      entryPrice: trades.entryPrice,
+      openedAt: trades.openedAt,
+      fills: trades.fills,
+    })
+    .from(trades)
+    .where(and(eq(trades.id, id), eq(trades.userId, gate.userId)))
+    .limit(1);
+  // Same message whether the row belongs to somebody else or does not exist,
+  // so this cannot be used to probe which ids are real.
+  if (!current) return { ok: false, message: "That trade does not exist." };
+  if (closedAt < current.openedAt) {
+    return { ok: false, message: "The closing date is before the opening date." };
+  }
+
+  // The opening fill as it was recorded, time and all; the exit is added to it.
+  const side: Side = current.side === "short" ? "short" : "long";
+  const entrySide = side === "long" ? "buy" : "sell";
+  const kept = readFills(current.fills).filter((f) => f.side === entrySide);
+  const closing = manualFills({
+    side,
+    quantity: current.quantity,
+    entryPrice: current.entryPrice,
+    exitPrice,
+    openedAt: current.openedAt,
+    closedAt,
+    openedTime: null,
+    closedTime: clockTime(form, "closedTime"),
+    zone: String(form.get("tz") ?? "") || null,
+  });
+  const fills: TradeFill[] = [...(kept.length > 0 ? kept : closing.slice(0, 1)), ...closing.slice(1)];
+
   const updated = await getDb()
     .update(trades)
     .set({
       exitPrice,
       closedAt,
+      fills,
       ...(followedRules === null ? {} : { followedRules }),
       updatedAt: new Date(),
     })
@@ -237,13 +317,11 @@ export async function closeTrade(
     .where(and(eq(trades.id, id), eq(trades.userId, gate.userId)))
     .returning({ id: trades.id });
 
-  if (updated.length === 0) {
-    // Same message whether the row belongs to somebody else or does not
-    // exist, so this cannot be used to probe which ids are real.
-    return { ok: false, message: "That trade does not exist." };
-  }
+  if (updated.length === 0) return { ok: false, message: "That trade does not exist." };
 
+  captureLater(id, gate.userId);
   revalidatePath("/journal");
+  revalidatePath(`/journal/trades/${id}`);
   return { ok: true, message: "Trade closed." };
 }
 
@@ -381,11 +459,12 @@ export async function importTrades(
       return Number.isFinite(n) && n > 0 ? n : null;
     };
     const fees = Number(d.fees);
+    const side: Side = d.side === "short" ? "short" : "long";
 
     values.push({
       userId: gate.userId,
       symbol,
-      side: d.side === "short" ? "short" : "long",
+      side,
       quantity,
       entryPrice,
       exitPrice,
@@ -397,6 +476,18 @@ export async function importTrades(
       playbookId: null,
       followedRules: null,
       notes: String(d.notes ?? "").slice(0, MAX_NOTES),
+      // Dates only: a file's times are rarely there and rarely in a known zone.
+      fills: manualFills({
+        side,
+        quantity,
+        entryPrice,
+        exitPrice,
+        openedAt,
+        closedAt,
+        openedTime: null,
+        closedTime: null,
+        zone: null,
+      }),
     });
   }
 
