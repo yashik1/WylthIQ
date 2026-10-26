@@ -21,8 +21,11 @@ export const dynamic = "force-dynamic";
  * the 1 MB that server actions accept. It acts on the signed-in reader's
  * journal, so it takes the guard a server action gets for free: the request
  * must come from this site's own pages.
+ *
+ * The trade is named in the form rather than the path, so the page posts to
+ * one fixed address and no request URL is ever built from a value.
  */
-export async function POST(request: Request, ctx: RouteContext<"/api/journal/trades/[id]/screenshots">) {
+export async function POST(request: Request) {
   const origin = request.headers.get("origin");
   const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
   if (!origin || !host || new URL(origin).host !== host) {
@@ -42,18 +45,6 @@ export async function POST(request: Request, ctx: RouteContext<"/api/journal/tra
     );
   }
 
-  const { id } = await ctx.params;
-  const tradeId = Number(id);
-  const existing = Number.isInteger(tradeId) && tradeId > 0 ? await screenshotCount(tradeId, reader.userId) : null;
-  // The same answer whether the trade is somebody else's or does not exist.
-  if (existing === null) return NextResponse.json({ ok: false, message: "That trade does not exist." }, { status: 404 });
-  if (existing >= MAX_PER_TRADE) {
-    return NextResponse.json(
-      { ok: false, message: `A trade can have ${MAX_PER_TRADE} screenshots. Delete one to add another.` },
-      { status: 400 },
-    );
-  }
-
   // Checked before reading, with room for the form's own framing.
   const declared = Number(request.headers.get("content-length"));
   if (!Number.isFinite(declared) || declared > MAX_UPLOAD_BYTES + 64 * 1024) {
@@ -61,8 +52,21 @@ export async function POST(request: Request, ctx: RouteContext<"/api/journal/tra
   }
 
   const form = await request.formData().catch(() => null);
-  const file = form?.get("image");
-  if (!form || !(file instanceof File) || file.size === 0) {
+  const tradeId = Number(form?.get("tradeId"));
+  const existing = Number.isInteger(tradeId) && tradeId > 0 ? await screenshotCount(tradeId, reader.userId) : null;
+  // The same answer whether the trade is somebody else's or does not exist.
+  if (!form || existing === null) {
+    return NextResponse.json({ ok: false, message: "That trade does not exist." }, { status: 404 });
+  }
+  if (existing >= MAX_PER_TRADE) {
+    return NextResponse.json(
+      { ok: false, message: `A trade can have ${MAX_PER_TRADE} screenshots. Delete one to add another.` },
+      { status: 400 },
+    );
+  }
+
+  const file = form.get("image");
+  if (!(file instanceof File) || file.size === 0) {
     return NextResponse.json({ ok: false, message: "Choose an image to upload." }, { status: 400 });
   }
   if (file.size > MAX_UPLOAD_BYTES) {

@@ -40,8 +40,9 @@ export function TradeScreenshots({ tradeId, screenshots }: { tradeId: number; sc
       setMessage(null);
       try {
         const body = new FormData();
+        body.set("tradeId", String(tradeId));
         body.set("image", file);
-        const res = await fetch(`/api/journal/trades/${tradeId}/screenshots`, { method: "POST", body });
+        const res = await fetch("/api/journal/screenshots", { method: "POST", body });
         const result = (await res.json().catch(() => null)) as { ok?: boolean; message?: string } | null;
         setMessage({ ok: Boolean(result?.ok), text: result?.message ?? "That did not upload. Try again." });
         if (result?.ok) router.refresh();

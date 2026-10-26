@@ -29,14 +29,15 @@ vi.mock("@/lib/db", () => ({
 import { journalReader } from "@/lib/journal/reader";
 import { screenshotCount } from "@/lib/journal/screenshots";
 import { GET } from "./screenshots/[id]/route";
-import { POST } from "./trades/[id]/screenshots/route";
+import { POST } from "./screenshots/route";
 
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) }) as never;
 
-function upload(headers: Record<string, string> = {}): Request {
+function upload(headers: Record<string, string> = {}, tradeId = "7"): Request {
   const body = new FormData();
+  body.set("tradeId", tradeId);
   body.set("image", new File([new Uint8Array([1, 2, 3])], "chart.png", { type: "image/png" }));
-  return new Request("https://wylthiq.example/api/journal/trades/7/screenshots", {
+  return new Request("https://wylthiq.example/api/journal/screenshots", {
     method: "POST",
     body,
     headers: { origin: "https://wylthiq.example", host: "wylthiq.example", "content-length": "500", ...headers },
@@ -47,41 +48,47 @@ beforeEach(() => {
   rows.length = 0;
   insert.mockReset();
   vi.mocked(journalReader).mockResolvedValue({ userId: "reader-a" });
-  vi.mocked(screenshotCount).mockResolvedValue(0);
+  vi.mocked(screenshotCount).mockReset().mockResolvedValue(0);
 });
 
 describe("adding a screenshot", () => {
   it("refuses a post from another site", async () => {
-    const res = await POST(upload({ origin: "https://elsewhere.example" }), ctx("7"));
+    const res = await POST(upload({ origin: "https://elsewhere.example" }));
     expect(res.status).toBe(403);
     expect(insert).not.toHaveBeenCalled();
   });
 
   it("refuses a reader who is not signed in", async () => {
     vi.mocked(journalReader).mockResolvedValue(null);
-    expect((await POST(upload(), ctx("7"))).status).toBe(401);
+    expect((await POST(upload())).status).toBe(401);
   });
 
   it("answers not found for somebody else's trade, as for one that does not exist", async () => {
     vi.mocked(screenshotCount).mockResolvedValue(null);
-    const res = await POST(upload(), ctx("7"));
+    const res = await POST(upload());
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ ok: false, message: "That trade does not exist." });
     expect(screenshotCount).toHaveBeenCalledWith(7, "reader-a");
   });
 
+  it("answers not found for a trade id that is not a number", async () => {
+    const res = await POST(upload({}, "../../users"));
+    expect(res.status).toBe(404);
+    expect(screenshotCount).not.toHaveBeenCalled();
+  });
+
   it("stops at six per trade", async () => {
     vi.mocked(screenshotCount).mockResolvedValue(6);
-    expect((await POST(upload(), ctx("7"))).status).toBe(400);
+    expect((await POST(upload())).status).toBe(400);
     expect(insert).not.toHaveBeenCalled();
   });
 
   it("refuses a body declared over the limit before reading it", async () => {
-    expect((await POST(upload({ "content-length": String(20 * 1024 * 1024) }), ctx("7"))).status).toBe(413);
+    expect((await POST(upload({ "content-length": String(20 * 1024 * 1024) }))).status).toBe(413);
   });
 
   it("keeps nothing that is not an image", async () => {
-    const res = await POST(upload(), ctx("7"));
+    const res = await POST(upload());
     expect(res.status).toBe(400);
     expect(insert).not.toHaveBeenCalled();
   });
