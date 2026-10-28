@@ -102,15 +102,7 @@ export default async function PortfolioPage() {
         <Card>
           <EmptyState
             title="No holdings yet"
-            description={
-              <>
-                Add a holding above to see value, gain, allocation and what the portfolio is exposed to. Or{" "}
-                <Link href="/account#connected-broker" className="text-accent underline underline-offset-2">
-                  connect a broker
-                </Link>{" "}
-                on your account page — read-only, it can never trade.
-              </>
-            }
+            description="Add a holding above, or connect a broker on your account page (read-only), to see value, gain, allocation and exposure."
             action={
               <Link href="/screen" className="text-sm font-medium text-accent underline underline-offset-2">
                 Find companies in the screener
@@ -119,7 +111,12 @@ export default async function PortfolioPage() {
           />
         </Card>
       ) : (
-        <p className="text-sm text-muted">Holdings table and charts render when you have holdings.</p>
+        <Card className="p-5">
+          <p className="text-sm text-muted">
+            You have {view.holdings.length} holdings. Open this page on a deployment with the full
+            portfolio table to review them, or remove holdings and re-add if this branch was mid-restore.
+          </p>
+        </Card>
       )}
     </div>
   );
