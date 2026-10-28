@@ -117,16 +117,30 @@ function failed(provider: string, err: unknown): ProviderAttempt {
 }
 
 /**
+ * Safe for a single log field: no line breaks, bounded length.
+ *
+ * Symbols and similar values reach this module from the URL or a form. Written
+ * into a log line as-is, a crafted value with newlines can forge extra entries
+ * (CWE-117). Categories and fixed labels do not need this; anything influenced
+ * by the caller does.
+ */
+function sanitizeForLog(value: string, maxLen = 40): string {
+  return value.replace(/[\r\n\u2028\u2029]/g, " ").trim().slice(0, maxLen) || "?";
+}
+
+/**
  * Records that nothing could be served.
  *
  * Categories only. A provider's own error text can quote the request URL, and
  * several providers carry the API key in the query string, so the raw message
- * never reaches a log line.
+ * never reaches a log line. The symbol is sanitised so a caller cannot inject
+ * newlines into the process log.
  */
 function logUnavailable(kind: string, symbol: string, attempts: ProviderAttempt[]): void {
   if (attempts.length === 0 || process.env.NODE_ENV === "test") return;
+  const safeSymbol = sanitizeForLog(symbol);
   console.warn(
-    `[providers] ${kind} unavailable for ${symbol}: ${attempts.map((a) => `${a.provider}=${a.category}`).join(", ")}`,
+    `[providers] ${kind} unavailable for ${safeSymbol}: ${attempts.map((a) => `${a.provider}=${a.category}`).join(", ")}`,
   );
 }
 

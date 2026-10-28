@@ -64,6 +64,22 @@ const brokerFacing = (p: string) => code(p).replace(OWN_ROUTE_CALL, "");
 const SNAPTRADE_LEGAL_PAGE = /"https:\/\/snaptrade\.com\/(terms-and-conditions|privacy-policy)"/g;
 
 /**
+ * Hostnames as plain substrings, not unanchored URL regexes.
+ *
+ * This file scans source text for forbidden hosts. Matching with `.includes`
+ * is enough and avoids CodeQL treating these as URL allow-list checks that
+ * need `^`/`$` anchors (those alerts were noise: the input is our own code).
+ */
+function mentionsIbkrHost(source: string): boolean {
+  const lower = source.toLowerCase();
+  return lower.includes("interactivebrokers.com") || /\bibkr\.com\b/i.test(source);
+}
+
+function mentionsSnaptradeHost(source: string): boolean {
+  return source.toLowerCase().includes("snaptrade.com");
+}
+
+/**
  * Every request the SnapTrade client may make. Registering, opening the
  * connection page and deleting are the only writes, and none of them touches
  * an account: they manage the reader's link to SnapTrade itself.
@@ -92,12 +108,14 @@ describe("the broker connections can only read", () => {
 
   it("talks to IBKR from one file only", () => {
     // Both of IBKR's domains: the trading Web API lives on ibkr.com.
-    const naming = everything.filter((p) => /interactivebrokers\.com|\bibkr\.com/i.test(code(p)));
+    const naming = everything.filter((p) => mentionsIbkrHost(code(p)));
     expect(naming.map(rel)).toEqual([join("lib", "brokers", "ibkr-flex.ts")]);
   });
 
   it("talks to SnapTrade from one file only", () => {
-    const naming = everything.filter((p) => /snaptrade\.com/i.test(code(p).replace(SNAPTRADE_LEGAL_PAGE, "")));
+    const naming = everything.filter((p) =>
+      mentionsSnaptradeHost(code(p).replace(SNAPTRADE_LEGAL_PAGE, "")),
+    );
     expect(naming.map(rel)).toEqual([join("lib", "brokers", "snaptrade.ts")]);
   });
 
