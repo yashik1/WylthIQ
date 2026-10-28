@@ -26,9 +26,19 @@ export function StatsHeadline({ stats }: { stats: TradeStats }) {
       <Card className="p-5">
         <p className="eyebrow">Your numbers</p>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-          Nothing closed yet, so there is nothing to average. Log a trade below and
-          close it when you are out — the figures here fill in from your own fills,
-          not from anything this site fetches.
+          {stats.open > 0 ? (
+            <>
+              {stats.open === 1 ? "One trade is" : `${stats.open} trades are`} still open, so there is
+              nothing closed to average yet. Close a position when you are out — the figures here
+              fill in from your own fills, not from anything this site fetches.
+            </>
+          ) : (
+            <>
+              Nothing closed yet, so there is nothing to average. Log a trade below and close it when
+              you are out — the figures here fill in from your own fills, not from anything this site
+              fetches.
+            </>
+          )}
         </p>
       </Card>
     );

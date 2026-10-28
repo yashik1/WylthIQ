@@ -61,6 +61,10 @@ export function SignUpForm({ canOfferNewsletter }: { canOfferNewsletter: boolean
           required
           hint={`At least ${MIN_PASSWORD_LENGTH} characters. Length matters more than symbols.`}
         />
+        <p className="text-xs leading-relaxed text-muted">
+          No verification email is sent. Once the account is created you can sign in
+          straight away with this email and password.
+        </p>
       </ActionForm>
 
       {/*
