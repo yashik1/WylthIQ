@@ -128,9 +128,20 @@ export default async function AlertsPage() {
       {feed.length === 0 ? (
         <Card>
           <EmptyState
-            title="Nothing needs your attention"
-            description={saved.length === 0 ? "Save companies to start monitoring them." : "Your saved companies and theses have no current review flags."}
-            action={<Link href={saved.length === 0 ? "/screen" : "/research"} className="text-sm font-medium text-accent underline">{saved.length === 0 ? "Find companies" : "Open research"}</Link>}
+            title={saved.length === 0 ? "Nothing to monitor yet" : "Nothing needs your attention"}
+            description={
+              saved.length === 0
+                ? "Save companies from a stock page or the screener, and write a thesis when you have a view. This queue only fills from what you choose to follow."
+                : "Your saved companies and theses have no current review flags. That is ordinary — most weeks nothing material changes."
+            }
+            action={
+              <Link
+                href={saved.length === 0 ? "/screen" : "/research"}
+                className="text-sm font-medium text-accent underline underline-offset-2"
+              >
+                {saved.length === 0 ? "Find companies to follow" : "Open research"}
+              </Link>
+            }
           />
         </Card>
       ) : (
