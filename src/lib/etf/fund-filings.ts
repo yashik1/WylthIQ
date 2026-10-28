@@ -180,6 +180,9 @@ function writeReport(symbol: string, value: FundReport | null): void {
   }
 }
 
+/** Positions kept from each filing, largest first. */
+export const HOLDINGS_KEPT = 100;
+
 /**
  * The fund's latest reported portfolio, or null.
  *
@@ -254,7 +257,10 @@ async function fetchFundReport(upper: string): Promise<FundReport | null> {
       hundred bytes of aggregates however large the document is — which also
       means there is no size at which a fund simply gets no holdings.
     */
-    const reader = new NportReader();
+    // The hundred largest: enough to answer "is this company in it" for any
+    // fund a reader is likely to look up, while the page shows the first
+    // twenty-five and folds the rest away.
+    const reader = new NportReader({ limit: HOLDINGS_KEPT });
     const decoder = new TextDecoder();
 
     for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {

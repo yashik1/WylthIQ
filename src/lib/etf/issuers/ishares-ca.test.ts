@@ -5,6 +5,7 @@ import {
   indexFundList,
   isoFromCompactDate,
   isoFromLongDate,
+  listingSymbol,
   parseHoldingsCsv,
   splitCsvLine,
   type ISharesFund,
@@ -126,8 +127,36 @@ describe("an iShares Canada profile", () => {
 
   it("counts positions and lists the largest, leaving cash out of both", () => {
     expect(xic.holdingCount).toBe(5);
-    expect(xic.topHoldings.map((h) => h.symbol)).toEqual(["RY", "TD", "SHOP", "BMO", "BNS"]);
-    expect(xic.topHoldings[0]).toEqual({ name: "ROYAL BANK OF CANADA", symbol: "RY", weight: 0.0779, detail: null });
+    // Each with this site's symbol for its Toronto listing, so its row links to its page.
+    expect(xic.topHoldings.map((h) => h.symbol)).toEqual(["RY.TO", "TD.TO", "SHOP.TO", "BMO.TO", "BNS.TO"]);
+    expect(xic.topHoldings[0]).toEqual({
+      name: "ROYAL BANK OF CANADA",
+      symbol: "RY.TO",
+      weight: 0.0779,
+      detail: null,
+      sector: "Financials",
+    });
+  });
+
+  it("names the listing a holding links to, and links nothing it cannot place", () => {
+    expect(listingSymbol("RY", "Toronto Stock Exchange")).toBe("RY.TO");
+    expect(listingSymbol("BBD.B", "Toronto Stock Exchange")).toBe("BBD-B.TO");
+    expect(listingSymbol("AAPL", "NASDAQ")).toBe("AAPL");
+    expect(listingSymbol("BRK/B", "New York Stock Exchange Inc.")).toBe("BRK.B");
+    expect(listingSymbol("VOD", "London Stock Exchange")).toBeNull();
+    expect(listingSymbol("", "Toronto Stock Exchange")).toBeNull();
+    expect(listingSymbol("-", "NASDAQ")).toBeNull();
+  });
+
+  it("keeps the hundred largest positions by name", () => {
+    const rows = Array.from({ length: 120 }, (_, i) =>
+      `"T${i}","HOLDING ${i}","Financials","Equity","1.00","${(0.5 + i / 1000).toFixed(4)}","1.00","1.00","1.00","Canada","Toronto Stock Exchange"`,
+    );
+    const header = XIC_CSV.split("\n").slice(0, XIC_CSV.split("\n").findIndex((l) => l.startsWith('"RY"')));
+    const big = buildISharesProfile(XIC_ROW, parseHoldingsCsv([...header, ...rows].join("\n")))!;
+    expect(big.holdingCount).toBe(120);
+    expect(big.topHoldings).toHaveLength(100);
+    expect(big.topHoldings[0].name).toBe("HOLDING 119");
   });
 
   it("sums a stock fund's sectors from its positions", () => {

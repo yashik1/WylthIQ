@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Card, CardHeader, MeterBar, Metric } from "@/components/ui";
+import { Card, CardHeader, Metric } from "@/components/ui";
+import { HoldingsTable } from "@/components/stock/holdings-table";
 import { count, money, num, percent } from "@/lib/format";
 import {
   assetLabel,
@@ -74,10 +75,13 @@ export function FundProfile({
   symbol,
   portfolio,
   filing,
+  symbols = {},
 }: {
   symbol: string;
   portfolio: FundPortfolio;
   filing: NportFiling;
+  /** CUSIP to this site's symbol, for the holdings it has a page for. */
+  symbols?: Record<string, string>;
 }) {
   const {
     holdings,
@@ -87,13 +91,6 @@ export function FundProfile({
     byAsset,
     byCountry,
   } = portfolio;
-
-  // Bars are scaled to the largest position rather than to 100%, or every row
-  // in a five-hundred-stock index fund renders as an empty track.
-  const largest = Math.max(
-    ...holdings.map((h) => Math.abs(h.percent ?? 0)),
-    0.0001,
-  );
 
   return (
     <Card>
@@ -145,73 +142,19 @@ export function FundProfile({
       </dl>
 
       {holdings.length > 0 && (
-        <div className="scroll-x border-b border-border">
-          <table className="w-full min-w-[34rem] text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-2/50 text-left text-xs text-muted">
-                <th scope="col" className="px-5 py-2.5 font-medium">
-                  Holding
-                </th>
-                <th scope="col" className="px-3 py-2 font-medium">
-                  Where
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">
-                  Weight
-                </th>
-                <th scope="col" className="w-[28%] px-3 py-2 font-medium">
-                  <span className="sr-only">Relative size</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {holdings.map((holding, i) => {
-                const terms = bondTerms(holding);
-                return (
-                  <tr
-                    key={`${holding.cusip ?? holding.name}-${i}`}
-                    className="hover:bg-surface-2"
-                  >
-                    <td className="px-5 py-2.5">
-                      <span className="font-medium">{holding.name}</span>
-                      {/* A short is the opposite bet at the same weight, so it
-                        cannot be left to a minus sign three columns away. */}
-                      {holding.isShort && (
-                        <span className="ml-2 text-xs font-medium text-down">
-                          short
-                        </span>
-                      )}
-                      {/* Without this a bond fund renders twenty rows all reading
-                        "United States Treasury Note/Bond" — accurate, and
-                        indistinguishable. The coupon and maturity are what tell
-                        one Treasury from another, and are what a bond reader
-                        was looking for anyway. */}
-                      {terms && (
-                        <span className="tnum block text-xs text-faint">
-                          {terms}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 text-xs text-muted">
-                      {holding.country ? countryLabel(holding.country) : "—"}
-                    </td>
-                    <td className="tnum px-3 py-2.5 text-right font-medium">
-                      {holding.percent == null
-                        ? "—"
-                        : percent(holding.percent / 100, 2)}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <MeterBar
-                        value={Math.abs(holding.percent ?? 0)}
-                        max={largest}
-                        rating={holding.isShort ? "poor" : "good"}
-                        label={`${holding.name}, ${percent((holding.percent ?? 0) / 100, 2)} of the fund`}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="border-b border-border">
+          <HoldingsTable
+            whereLabel="Where"
+            rows={holdings.map((holding) => ({
+              name: holding.name,
+              symbol: holding.cusip ? (symbols[holding.cusip] ?? null) : null,
+              where: holding.country ? countryLabel(holding.country) : null,
+              // N-PORT reports percent units; the table takes fractions.
+              weight: holding.percent == null ? null : holding.percent / 100,
+              detail: bondTerms(holding),
+              isShort: holding.isShort,
+            }))}
+          />
         </div>
       )}
 

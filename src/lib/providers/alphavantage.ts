@@ -265,7 +265,15 @@ export interface EtfProfile {
    * Toronto-only stock belongs in it all the same. Empty where the fund's own
    * N-PORT filing already lists every position further down the page.
    */
-  topHoldings: { name: string; symbol: string | null; weight: number; detail: string | null }[];
+  topHoldings: {
+    name: string;
+    /** This site's symbol for the holding, where it has a page here. */
+    symbol: string | null;
+    weight: number;
+    detail: string | null;
+    /** The manager's sector for it, where given. */
+    sector?: string | null;
+  }[];
   /** Positions held, cash lines excluded. Null where the source does not say. */
   holdingCount: number | null;
   /** The whole fund's net assets, in `netAssetsCurrency`. */

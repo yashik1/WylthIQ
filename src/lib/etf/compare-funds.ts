@@ -1,5 +1,8 @@
 import { getBarsWithSource, getEtfProfile, yahoo } from "../providers";
+import type { EtfProfile } from "../providers/alphavantage";
 import type { Bar } from "../providers/types";
+import { getFundReport, type FundReport } from "./fund-filings";
+import { symbolsForCusips } from "./holding-symbols";
 import { isSameListing, summariseIncome, type PayoutFrequency } from "./income";
 
 /**
@@ -62,6 +65,8 @@ export interface FundFacts {
   holdingCount: number | null;
   /** Share of the fund in its ten largest positions. */
   topTenWeight: number | null;
+  /** Its largest positions, by name, largest first. Empty where none are published. */
+  largest: LargestHolding[];
   netAssets: number | null;
   netAssetsCurrency: string | null;
   frequency: PayoutFrequency | null;
@@ -71,6 +76,54 @@ export interface FundFacts {
   returns: ReturnWindow[];
   /** Whether the prices behind the returns already have distributions in them. */
   includesDividends: boolean | null;
+}
+
+export interface LargestHolding {
+  name: string;
+  /** This site's symbol for it, where it has a page here. */
+  symbol: string | null;
+  /** A fraction of the fund. */
+  weight: number;
+}
+
+/** How many of each fund's largest positions the comparison lists. */
+export const LARGEST_SHOWN = 5;
+
+/**
+ * What a fund holds, for the comparison, from the best source there is.
+ *
+ * A fund's own N-PORT filing first: it is the regulator's record and covers
+ * every US fund, which the data feeds mostly do not. A manager's published
+ * file next, which is how a Toronto fund gets a list at all. A count or a
+ * concentration that neither gives stays empty rather than estimated.
+ */
+export function holdingsFacts(
+  report: FundReport | null,
+  profile: EtfProfile | null,
+  symbols: Record<string, string> = {},
+): Pick<FundFacts, "holdingCount" | "topTenWeight" | "largest"> {
+  const filed = report?.portfolio;
+  if (filed && filed.holdings.length > 0) {
+    const top = filed.topTenPercent;
+    return {
+      holdingCount: filed.holdingCount,
+      topTenWeight: top != null && top > 0 && top <= 100 ? top / 100 : null,
+      largest: filed.holdings
+        .filter((h) => h.percent != null && !h.isShort)
+        .slice(0, LARGEST_SHOWN)
+        .map((h) => ({ name: h.name, symbol: h.cusip ? (symbols[h.cusip] ?? null) : null, weight: h.percent! / 100 })),
+    };
+  }
+  return {
+    holdingCount: profile?.holdingCount ?? null,
+    topTenWeight: topTenWeight(
+      profile?.topHoldings && profile.topHoldings.length >= 10 ? profile.topHoldings : profile?.holdings,
+    ),
+    largest: (profile?.topHoldings ?? [])
+      .filter((h) => h.weight > 0)
+      .slice(0, LARGEST_SHOWN)
+      .map((h) => ({ name: h.name, symbol: h.symbol, weight: h.weight })),
+  };
 }
 
 export interface FundComparison {
@@ -221,8 +274,10 @@ async function factsFor(item: {
   name: string;
   quote: { price: number | null; currency?: string | null } | null;
 }): Promise<{ facts: Omit<FundFacts, "returns">; bars: Bar[] }> {
-  const [profile, income, prices] = await Promise.all([
+  const [profile, report, income, prices] = await Promise.all([
     getEtfProfile(item.symbol).catch(() => null),
+    // Cached, and null at once for a fund that files nothing with the SEC.
+    getFundReport(item.symbol).catch(() => null),
     yahoo.getIncomeAndRange(item.symbol).catch(() => null),
     getBarsWithSource(
       item.symbol,
@@ -256,11 +311,10 @@ async function factsFor(item: {
       feeSource: profile?.source.name ?? null,
       launched: profile?.inceptionDate ?? null,
       firstPriced: bars[0] ? isoDate(bars[0].time) : null,
-      holdingCount: profile?.holdingCount ?? null,
-      topTenWeight: topTenWeight(
-        profile?.topHoldings && profile.topHoldings.length >= 10
-          ? profile.topHoldings
-          : profile?.holdings,
+      ...holdingsFacts(
+        report,
+        profile,
+        await symbolsForCusips(report?.portfolio.holdings.slice(0, LARGEST_SHOWN).map((h) => h.cusip) ?? []),
       ),
       netAssets: profile?.netAssets ?? null,
       netAssetsCurrency: profile?.netAssetsCurrency ?? null,

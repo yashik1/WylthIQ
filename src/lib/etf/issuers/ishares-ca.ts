@@ -52,7 +52,8 @@ const HOLDINGS_TTL_MS = 12 * 60 * 60 * 1000;
 const HOLDINGS_FAILURE_TTL_MS = 10 * 60 * 1000;
 const HOLDINGS_CACHE_MAX = 200;
 
-const TOP_HOLDINGS = 10;
+/** Positions listed by name, largest first; the page shows 25 and folds the rest. */
+const TOP_HOLDINGS = 100;
 
 /** Above this an MER is a units mistake, not a fee. Percent units. */
 const MAX_CREDIBLE_MER = 25;
@@ -240,6 +241,25 @@ const US_EXCHANGE = /^(nyse arca|nasdaq|new york stock exchange|nyse|cboe bzx)/i
 /** A position that is itself a fund — how a fund of funds shows up. */
 const A_FUND = /\bishares\b|\betf\b/i;
 
+const TORONTO = /^toronto stock exchange|^tsx$/i;
+
+/**
+ * This site's symbol for a holding, so its row can link to its page: a
+ * Toronto listing gets the .TO suffix, a New York or Nasdaq one stays bare,
+ * and anything else — a London share, a bond, cash — gets no link rather than
+ * one to a different company that happens to share the ticker.
+ */
+export function listingSymbol(ticker: string, exchange: string): string | null {
+  const base = ticker.trim().toUpperCase();
+  if (!base || !/^[A-Z0-9][A-Z0-9./ -]*$/.test(base)) return null;
+  if (TORONTO.test(exchange.trim())) {
+    // Toronto share classes are written with a dash here: BBD.B is BBD-B.TO.
+    return `${base.replace(/[./ ]+/g, "-")}.TO`;
+  }
+  if (US_EXCHANGE.test(exchange.trim())) return base.replace(/[/ ]+/g, ".");
+  return null;
+}
+
 /**
  * The link the fund page's "download holdings" button points at.
  *
@@ -304,9 +324,10 @@ export function buildISharesProfile(
       .map((h) => ({ symbol: h.ticker.toUpperCase(), weight: h.weight })),
     topHoldings: byWeight.slice(0, TOP_HOLDINGS).map((h) => ({
       name: h.name,
-      symbol: h.ticker || null,
+      symbol: h.assetClass === "Fixed Income" ? null : listingSymbol(h.ticker, h.exchange),
       weight: h.weight,
       detail: bondDetail(h),
+      sector: present(h.sector),
     })),
     holdingCount: file ? positions.length : null,
     netAssets,

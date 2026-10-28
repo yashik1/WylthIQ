@@ -55,6 +55,9 @@ import { FundProfile } from "@/components/stock/fund-profile";
 import { FundFacts } from "@/components/stock/fund-facts";
 import { Subsidiaries } from "@/components/stock/subsidiaries";
 import { getFundReport, loadFundMap } from "@/lib/etf/fund-filings";
+import { fundManager } from "@/lib/etf/fund-manager";
+import { FundHoldingsNote } from "@/components/stock/fund-holdings-note";
+import { symbolsForCusips } from "@/lib/etf/holding-symbols";
 import { getEtfProfile, yahoo } from "@/lib/providers";
 import { isSameListing, summariseIncome } from "@/lib/etf/income";
 import { getFundAnalytics } from "@/lib/etf/fund-analytics";
@@ -484,15 +487,20 @@ async function StockBody({
     read and the price history it already fetches. Last, because the valuation
     needs the holdings list the profile above carries.
   */
-  const [analytics, sinceLaunch] = isFund
+  const [analytics, sinceLaunch, holdingSymbols] = isFund
     ? await Promise.all([
         getFundAnalytics(upper, fundProfile?.holdings ?? []).catch(() => null),
         // What it has returned over its whole life, which is the one figure a
         // fund is usually judged on and the only one that does not depend on
         // where the chart window happens to start.
         getSinceInception(upper, fundProfile?.inceptionDate ?? null),
+        // Which of the filed positions have a page here, so their rows link.
+        symbolsForCusips(fund?.portfolio.holdings.map((h) => h.cusip) ?? []),
       ])
-    : [null, null];
+    : [null, null, {}];
+  // Whose fund it is, for saying where its holdings are when none are here.
+  const manager = isFund ? fundManager(data.profile?.name ?? unsupported?.name, upper) : null;
+  const issuerHoldings = (fundProfile?.topHoldings.length ?? 0) > 0;
   const signedIn = Boolean(session?.user?.id);
   const alreadySaved = saved.some((s) => s.symbol === upper);
 
@@ -714,7 +722,8 @@ async function StockBody({
   const sections: StockSection[] = [
     brief && { id: "overview", label: "Overview" },
     warnings.length > 0 && { id: "warning-signs", label: "Risks" },
-    { id: "health", label: "Health" },
+    // A fund has no health score; what fills this section for one is what it holds.
+    { id: "health", label: isFund ? "Holdings" : "Health" },
     changes && { id: "what-changed", label: "What changed" },
     askable && { id: "ask", label: "Ask" },
     { id: "price", label: "Price" },
@@ -969,9 +978,11 @@ async function StockBody({
               has no revenue, no balance sheet and files no annual report, so the
               profitability, debt and accounting scores used for companies have nothing to
               measure here.{" "}
-              {fund
-                ? "What it owns is a matter of public record, and it is below."
-                : "Price history below still applies."}
+              <FundHoldingsNote
+                filed={Boolean(fund)}
+                publishedBy={issuerHoldings ? (fundProfile?.source.name ?? null) : null}
+                manager={manager}
+              />
             </p>
             {!fund && (
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
@@ -1004,6 +1015,7 @@ async function StockBody({
               symbol={upper}
               portfolio={fund.portfolio}
               filing={fund.filing}
+              symbols={holdingSymbols}
             />
           )}
         </div>
