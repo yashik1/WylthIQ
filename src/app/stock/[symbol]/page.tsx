@@ -83,7 +83,8 @@ import { LocalTime } from "@/components/local-time";
 import { describeQuoteTime } from "@/lib/quote-time";
 import { MarketExpects, hasMarketExpectations } from "@/components/stock/market-expects";
 import { Section, SectionNav, type StockSection } from "@/components/stock/section-nav";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { isCrawler } from "@/lib/crawler";
 import { CURRENCY_COOKIE, supportedCurrency } from "@/lib/currency-choice";
 import { CurrencyPicker } from "@/components/currency-picker";
 
@@ -312,11 +313,24 @@ export default async function StockPage({
     }
   }
 
+  const body = <StockBody symbol={upper} unsupported={unsupported} currency={requested} />;
+
+  /*
+    A crawler gets the finished page in one piece.
+
+    Streamed, the company arrives in a hidden block that a script swaps in —
+    which Google runs and most crawlers, the AI answer engines among them, do
+    not, so to them every company page read as a loading skeleton and three
+    words. See src/lib/crawler.ts. People keep the streamed page, which shows
+    them something at once.
+  */
+  if (isCrawler((await headers()).get("user-agent"))) return body;
+
   return (
     <Suspense
       fallback={<StockSkeleton label={assetClass ? "Loading price history…" : undefined} />}
     >
-      <StockBody symbol={upper} unsupported={unsupported} currency={requested} />
+      {body}
     </Suspense>
   );
 }
