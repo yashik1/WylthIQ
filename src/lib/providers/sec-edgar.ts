@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import { getDb, isDatabaseConfigured } from "../db";
+import { companies } from "../db/schema";
 import { normalizeCompanyFacts } from "../fundamentals/normalize";
 import type { NormalizedFundamentals, SecCompanyFacts } from "../fundamentals/types";
 import { SEC_USER_AGENT } from "./sec-config";
@@ -115,9 +118,12 @@ function writeFacts(cik: string, value: NormalizedFundamentals | null): void {
 
 async function fetchFactsByCik(cik: string): Promise<NormalizedFundamentals | null> {
   try {
+    // Not through Next's data cache, which refuses anything over 2MB and logs
+    // an error each time it does — and companyfacts runs to 12MB for a large
+    // filer. The normalized result is cached above instead.
     const res = await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
       headers: SEC_HEADERS,
-      next: { revalidate: FACTS_TTL },
+      cache: "no-store",
     });
 
     // A 404 is a settled answer — this filer has no XBRL facts — so it is worth
@@ -161,7 +167,32 @@ async function lookupTicker(symbol: string): Promise<TickerEntry | null> {
     if (hyphenated) return hyphenated;
   }
 
-  return null;
+  return universeEntry(upper);
+}
+
+/**
+ * A company this site already scores, from its own table.
+ *
+ * The SEC's ticker file is the first answer, not the only one. A site audit
+ * found AvalonBay (AVB) answering 404 while the screener listed it, so the
+ * ticker file could not place a company the site itself ranks. The nightly
+ * ingest recorded each company's CIK, so a company the site ranks can always
+ * be found again from that. Fails soft to null.
+ */
+async function universeEntry(symbol: string): Promise<TickerEntry | null> {
+  if (!isDatabaseConfigured()) return null;
+  try {
+    const [row] = await getDb()
+      .select({ cik: companies.cik, name: companies.name })
+      .from(companies)
+      .where(eq(companies.symbol, symbol))
+      .limit(1);
+    const cik = Number(row?.cik?.replace(/\D/g, ""));
+    if (!row || !Number.isFinite(cik) || cik <= 0) return null;
+    return { cik_str: cik, ticker: symbol, title: row.name };
+  } catch {
+    return null;
+  }
 }
 
 export async function cikForSymbol(symbol: string): Promise<string | null> {
@@ -263,13 +294,54 @@ export interface SecSubmissions {
   };
 }
 
+/**
+ * A filer's submissions, cached in this process.
+ *
+ * One stock page asks for these up to four times — its filings, whether it is
+ * a fund, insider trades and large stakes — and for a large filer the file is
+ * two to six megabytes. Next's data cache refuses anything over 2MB, so every
+ * one of those asks was a fresh download, which is much of why some company
+ * pages took several seconds. Kept here instead, with requests in flight
+ * shared, so a page downloads it once and the next visitor not at all.
+ */
+const SUBMISSIONS_CACHE_MAX = 60;
+const submissionsCache = new Map<string, { at: number; value: SecSubmissions | null }>();
+const submissionsInflight = new Map<string, Promise<SecSubmissions | null>>();
+
 export async function fetchSubmissions(cik: string): Promise<SecSubmissions | null> {
-  const res = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
-    headers: SEC_HEADERS,
-    next: { revalidate: SUBMISSIONS_TTL },
-  });
-  if (!res.ok) return null;
-  return (await res.json()) as SecSubmissions;
+  const hit = submissionsCache.get(cik);
+  if (hit && Date.now() - hit.at <= SUBMISSIONS_TTL * 1000) return hit.value;
+
+  const pending = submissionsInflight.get(cik);
+  if (pending) return pending;
+
+  const work = (async () => {
+    const res = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
+      headers: SEC_HEADERS,
+      cache: "no-store",
+    });
+    // As with facts: a 404 is an answer, a 429 or 5xx is not.
+    if (!res.ok) {
+      if (res.status === 404) rememberSubmissions(cik, null);
+      return null;
+    }
+    const value = (await res.json()) as SecSubmissions;
+    rememberSubmissions(cik, value);
+    return value;
+  })().finally(() => submissionsInflight.delete(cik));
+
+  submissionsInflight.set(cik, work);
+  return work;
+}
+
+function rememberSubmissions(cik: string, value: SecSubmissions | null): void {
+  submissionsCache.delete(cik);
+  submissionsCache.set(cik, { at: Date.now(), value });
+  while (submissionsCache.size > SUBMISSIONS_CACHE_MAX) {
+    const oldest = submissionsCache.keys().next().value;
+    if (oldest === undefined) break;
+    submissionsCache.delete(oldest);
+  }
 }
 
 /**
