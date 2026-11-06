@@ -12,6 +12,7 @@ import "dotenv/config";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import postgres from "postgres";
+import { isAlreadyDoneNotice, noticeLine } from "../src/lib/db/notices";
 
 /**
  * Every table the app expects to exist once all migrations have run: the five
@@ -79,16 +80,35 @@ async function main() {
   for (const f of files) console.log(`  ${f}`);
   console.log();
 
-  const sql = postgres(url, { max: 1, connect_timeout: 15, prepare: false });
+  /*
+    A statement written IF NOT EXISTS succeeds on a database that already has
+    the thing, and says so in a notice rather than an error. Those count with
+    the "already existed" errors below instead of being printed — the client's
+    default printed each as a nine-line object, 500-odd lines a deploy — see
+    src/lib/db/notices.ts. One connection and one statement at a time, so a
+    notice belongs to the statement in flight.
+  */
+  let foundDone = false;
+  const sql = postgres(url, {
+    max: 1,
+    connect_timeout: 15,
+    prepare: false,
+    onnotice: (notice) => {
+      if (isAlreadyDoneNotice(notice)) foundDone = true;
+      else console.log(noticeLine(notice));
+    },
+  });
 
   let created = 0;
   let skipped = 0;
 
   try {
     for (const statement of statements) {
+      foundDone = false;
       try {
         await sql.unsafe(statement);
-        created++;
+        if (foundDone) skipped++;
+        else created++;
       } catch (err) {
         const code = (err as { code?: string }).code;
         if (code && ALREADY_EXISTS.has(code)) {
