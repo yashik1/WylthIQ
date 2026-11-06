@@ -35,7 +35,7 @@ import { validateFundamentals } from "@/lib/fundamentals/validate";
 import { isAiConfigured } from "@/lib/ai/config";
 import { AI_QUESTION_OPTIONS } from "@/lib/ai/questions";
 import { PricePanel } from "@/components/stock/peer-chart";
-import { fitTitle } from "@/lib/page-title";
+import { fitDescription, fitTitle, tidyCompanyName, titleSubject } from "@/lib/page-title";
 import { RecordVisit, WatchButton } from "@/components/watchlist";
 import { StrengthsAndRisks, WhatItDoes } from "@/components/stock/orientation";
 import { buildBusinessSummary } from "@/lib/scoring/business";
@@ -55,6 +55,9 @@ import { FundProfile } from "@/components/stock/fund-profile";
 import { FundFacts } from "@/components/stock/fund-facts";
 import { Subsidiaries } from "@/components/stock/subsidiaries";
 import { getFundReport, loadFundMap } from "@/lib/etf/fund-filings";
+import { fundManager } from "@/lib/etf/fund-manager";
+import { FundHoldingsNote } from "@/components/stock/fund-holdings-note";
+import { symbolsForCusips } from "@/lib/etf/holding-symbols";
 import { getEtfProfile, yahoo } from "@/lib/providers";
 import { isSameListing, summariseIncome } from "@/lib/etf/income";
 import { getFundAnalytics } from "@/lib/etf/fund-analytics";
@@ -80,7 +83,8 @@ import { LocalTime } from "@/components/local-time";
 import { describeQuoteTime } from "@/lib/quote-time";
 import { MarketExpects, hasMarketExpectations } from "@/components/stock/market-expects";
 import { Section, SectionNav, type StockSection } from "@/components/stock/section-nav";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { isCrawler } from "@/lib/crawler";
 import { CURRENCY_COOKIE, supportedCurrency } from "@/lib/currency-choice";
 import { CurrencyPicker } from "@/components/currency-picker";
 
@@ -148,8 +152,11 @@ export async function generateMetadata({
     : listing
       ? ((await resolveUnsupported(upper).catch(() => null))?.name ?? null)
       : await displayName(upper);
-  const subject = name ? `${name} (${upper})` : upper;
-  const shortSubject = name ?? upper;
+  // Tidied, because the companies table keeps the SEC's own form of a name —
+  // "ZIONS BANCORPORATION, NATIONAL ASSOCIATION /UT/" — and shortened only
+  // as far as it takes to fit a result list.
+  const subject = name ? titleSubject(name, upper) : upper;
+  const shortSubject = name ? tidyCompanyName(name) : upper;
 
   /*
     A fund gets a fund's title.
@@ -192,13 +199,28 @@ export async function generateMetadata({
             subject,
             tails: ["financial health in plain English", "financial health"],
           });
+  // Each with a shorter wording for a long name, so none runs past what a
+  // result list shows.
   const description = instrument
-    ? `Live price, long-run history and backtesting for ${shortSubject}. It files no accounts, so the company health scores do not apply.`
+    ? fitDescription(
+        `Live price, long-run history and backtesting for ${shortSubject}. It files no accounts, so the company health scores do not apply.`,
+        `Live price, long-run history and backtesting for ${shortSubject}.`,
+      )
     : listing
-      ? `Price history and fund details for ${shortSubject}, the ${listing.exchange} listing — a different security from any same-named ticker elsewhere.`
+      ? fitDescription(
+          `Price history and fund details for ${shortSubject}, the ${listing.exchange} listing — a different security from any same-named ticker elsewhere.`,
+          `Price history and details for ${shortSubject}, the ${listing.exchange} listing — not a same-named ticker elsewhere.`,
+          `Price history and details for ${shortSubject} on the ${listing.exchange}.`,
+        )
       : isFund
-        ? `What ${shortSubject} holds, what it charges and what it pays out — holdings taken straight from its own filings with the SEC.`
-        : `Is ${shortSubject} profitable, growing, or carrying too much debt? Plain-English answers, taken straight from its regulatory filings.`;
+        ? fitDescription(
+            `What ${shortSubject} holds, what it charges and what it pays out — holdings taken straight from its own filings with the SEC.`,
+            `What ${shortSubject} holds, charges and pays out, from its own SEC filings.`,
+          )
+        : fitDescription(
+            `Is ${shortSubject} profitable, growing, or carrying too much debt? Plain-English answers, taken straight from its regulatory filings.`,
+            `Is ${shortSubject} profitable, growing, or too indebted? Plain-English answers from its filings.`,
+          );
 
   return {
     title,
@@ -309,11 +331,24 @@ export default async function StockPage({
     }
   }
 
+  const body = <StockBody symbol={upper} unsupported={unsupported} currency={requested} />;
+
+  /*
+    A crawler gets the finished page in one piece.
+
+    Streamed, the company arrives in a hidden block that a script swaps in —
+    which Google runs and most crawlers, the AI answer engines among them, do
+    not, so to them every company page read as a loading skeleton and three
+    words. See src/lib/crawler.ts. People keep the streamed page, which shows
+    them something at once.
+  */
+  if (isCrawler((await headers()).get("user-agent"))) return body;
+
   return (
     <Suspense
       fallback={<StockSkeleton label={assetClass ? "Loading price history…" : undefined} />}
     >
-      <StockBody symbol={upper} unsupported={unsupported} currency={requested} />
+      {body}
     </Suspense>
   );
 }
@@ -484,15 +519,20 @@ async function StockBody({
     read and the price history it already fetches. Last, because the valuation
     needs the holdings list the profile above carries.
   */
-  const [analytics, sinceLaunch] = isFund
+  const [analytics, sinceLaunch, holdingSymbols] = isFund
     ? await Promise.all([
         getFundAnalytics(upper, fundProfile?.holdings ?? []).catch(() => null),
         // What it has returned over its whole life, which is the one figure a
         // fund is usually judged on and the only one that does not depend on
         // where the chart window happens to start.
         getSinceInception(upper, fundProfile?.inceptionDate ?? null),
+        // Which of the filed positions have a page here, so their rows link.
+        symbolsForCusips(fund?.portfolio.holdings.map((h) => h.cusip) ?? []),
       ])
-    : [null, null];
+    : [null, null, {}];
+  // Whose fund it is, for saying where its holdings are when none are here.
+  const manager = isFund ? fundManager(data.profile?.name ?? unsupported?.name, upper) : null;
+  const issuerHoldings = (fundProfile?.topHoldings.length ?? 0) > 0;
   const signedIn = Boolean(session?.user?.id);
   const alreadySaved = saved.some((s) => s.symbol === upper);
 
@@ -714,7 +754,8 @@ async function StockBody({
   const sections: StockSection[] = [
     brief && { id: "overview", label: "Overview" },
     warnings.length > 0 && { id: "warning-signs", label: "Risks" },
-    { id: "health", label: "Health" },
+    // A fund has no health score; what fills this section for one is what it holds.
+    { id: "health", label: isFund ? "Holdings" : "Health" },
     changes && { id: "what-changed", label: "What changed" },
     askable && { id: "ask", label: "Ask" },
     { id: "price", label: "Price" },
@@ -969,9 +1010,11 @@ async function StockBody({
               has no revenue, no balance sheet and files no annual report, so the
               profitability, debt and accounting scores used for companies have nothing to
               measure here.{" "}
-              {fund
-                ? "What it owns is a matter of public record, and it is below."
-                : "Price history below still applies."}
+              <FundHoldingsNote
+                filed={Boolean(fund)}
+                publishedBy={issuerHoldings ? (fundProfile?.source.name ?? null) : null}
+                manager={manager}
+              />
             </p>
             {!fund && (
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
@@ -1004,6 +1047,7 @@ async function StockBody({
               symbol={upper}
               portfolio={fund.portfolio}
               filing={fund.filing}
+              symbols={holdingSymbols}
             />
           )}
         </div>

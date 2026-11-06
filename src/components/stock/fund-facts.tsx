@@ -1,4 +1,5 @@
 import { Card, CardHeader, Metric } from "@/components/ui";
+import { HoldingsTable } from "@/components/stock/holdings-table";
 import { count, money, num, percent, price, signedPercent } from "@/lib/format";
 import type { SinceInception } from "@/lib/etf/since-inception";
 import { cn } from "@/lib/utils";
@@ -351,27 +352,24 @@ export function FundFacts({
         TOTAL U.S. COM" gets the initialisms wrong.
       */}
       {profile && profile.topHoldings.length > 0 && (
-        <div className="border-t border-border px-5 py-4">
-          <p className="eyebrow text-[0.625rem]">
-            Largest holdings
+        <div className="border-t border-border">
+          <p className="eyebrow px-5 pt-4 pb-2.5 text-[0.625rem]">
+            {profile.holdingCount != null && profile.holdingCount > profile.topHoldings.length
+              ? `The ${profile.topHoldings.length} largest of ${count(profile.holdingCount)} holdings`
+              : "Holdings"}
             {profile.source.asOf ? `, ${launched(profile.source.asOf, true)}` : ""}
           </p>
-          <ul className="mt-2.5 grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-1.5 sm:grid-cols-2">
-            {profile.topHoldings.map((h, i) => (
-              <li
-                key={`${h.symbol ?? h.name}-${i}`}
-                className="flex items-baseline justify-between gap-4 text-sm"
-              >
-                <span className="min-w-0 truncate text-muted-strong">
-                  {h.name}
-                  {h.detail && <span className="text-faint"> · {h.detail}</span>}
-                </span>
-                <span className="tnum shrink-0 font-medium">
-                  {percent(h.weight, 1)}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <HoldingsTable
+            whereLabel="Sector"
+            rows={profile.topHoldings.map((h) => ({
+              name: h.name,
+              symbol: h.symbol,
+              where: h.sector ?? null,
+              weight: h.weight,
+              detail: h.detail,
+              isShort: h.weight < 0,
+            }))}
+          />
         </div>
       )}
 

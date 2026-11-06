@@ -26,9 +26,12 @@ import { healthRating, loadWatchlist, sortWatchlist } from "@/lib/watchlist/dash
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Research",
+  // A private page, kept out of search by `robots` below; the title and the
+  // canonical are for the reader's own tabs and bookmarks.
+  title: "Research — your companies, filings and notes",
   description:
     "Pick up where you left off: companies you opened and saved, what changed, what they filed, and your notes.",
+  alternates: { canonical: "/research" },
   robots: { index: false, follow: false },
 };
 

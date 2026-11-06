@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { breadcrumbLd, corporationLd, faqLd, organisationLd, websiteLd } from "./structured-data";
+import { breadcrumbLd, corporationLd, faqLd, organisationLd, pageLd, websiteLd } from "./structured-data";
 
 /**
  * Guards on the JSON-LD, and one of them is here for a specific reason.
@@ -113,5 +113,21 @@ describe("a company", () => {
     expect(ld).not.toHaveProperty("sameAs");
     expect(ld).not.toHaveProperty("identifier");
     expect(ld).not.toHaveProperty("description");
+  });
+});
+
+describe("a page's dates", () => {
+  it("are as fresh as its figures when they are newer than the deployment", () => {
+    const later = new Date(Date.now() + 3 * 86_400_000);
+    const ld = pageLd({ name: "Home", description: "d", path: "/", dataAsOf: later });
+    expect(ld.datePublished).toBe("2026-06-01");
+    expect(ld.dateModified).toBe(later.toISOString().slice(0, 10));
+  });
+
+  it("keep the deployment's date when the figures are older, or missing", () => {
+    const deployed = pageLd({ name: "Home", description: "d", path: "/" }).dateModified as string;
+    expect(pageLd({ name: "Home", description: "d", path: "/", dataAsOf: new Date("2020-01-02") }).dateModified).toBe(deployed);
+    expect(pageLd({ name: "Home", description: "d", path: "/", dataAsOf: null }).dateModified).toBe(deployed);
+    expect(pageLd({ name: "Home", description: "d", path: "/", dataAsOf: new Date("nope") }).dateModified).toBe(deployed);
   });
 });

@@ -10,12 +10,14 @@ import { LocalTime } from "@/components/local-time";
 import { money, num, percent, signedPercent } from "@/lib/format";
 import { healthRating } from "@/lib/scoring/ratings";
 import { getHealthiest, getUniverseCount } from "@/lib/screener";
-import { websiteLd } from "@/lib/structured-data";
+import { pageLd, SITE_DESCRIPTION, websiteLd } from "@/lib/structured-data";
 import { StructuredData } from "@/components/structured-data";
 import { FaqSection } from "@/components/faq-section";
 import { auth } from "@/lib/auth";
 import { listWatchlist } from "@/lib/watchlist/actions";
 import { Suspense } from "react";
+import { headers } from "next/headers";
+import { isCrawler } from "@/lib/crawler";
 import { MarketNews } from "@/components/market-news";
 import { getDashboardNews, pickNewsSymbols } from "@/lib/market-news";
 
@@ -35,11 +37,28 @@ export default async function HomePage() {
     listWatchlist(),
   ]);
   const signedIn = Boolean(session?.user?.id);
+  // A crawler waits for the headlines rather than reading the placeholder — see
+  // the stock page and src/lib/crawler.ts.
+  const crawler = isCrawler((await headers()).get("user-agent"));
 
   return (
     <div>
-      {/* The organisation itself is emitted once, by the layout. */}
-      <StructuredData data={[websiteLd()]} />
+      {/*
+        The organisation itself is emitted once, by the layout. The page's own
+        block carries its dates: the movers and sectors below change with each
+        trading session, so it is as fresh as the newest stored price.
+      */}
+      <StructuredData
+        data={[
+          websiteLd(),
+          pageLd({
+            name: "WylthIQ — Company financials in plain English",
+            description: SITE_DESCRIPTION,
+            path: "/",
+            dataAsOf: market.asOf,
+          }),
+        ]}
+      />
       <TranslationHero />
 
       <IndexStrip readings={indices} universeCount={universeCount} asOf={market.asOf} stale={market.stale} />
@@ -59,14 +78,23 @@ export default async function HomePage() {
           awaiting it up front would hold the whole dashboard behind the
           slowest request on it.
         */}
-        <Suspense fallback={<NewsPlaceholder />}>
+        {crawler ? (
           <DashboardNewsPanel
             watchlist={saved.map((c) => c.symbol)}
             gainers={market.gainers.map((m) => m.symbol)}
             losers={market.losers.map((m) => m.symbol)}
             healthiest={healthiest.rows.map((r) => r.symbol)}
           />
-        </Suspense>
+        ) : (
+          <Suspense fallback={<NewsPlaceholder />}>
+            <DashboardNewsPanel
+              watchlist={saved.map((c) => c.symbol)}
+              gainers={market.gainers.map((m) => m.symbol)}
+              losers={market.losers.map((m) => m.symbol)}
+              healthiest={healthiest.rows.map((r) => r.symbol)}
+            />
+          </Suspense>
+        )}
 
         <WatchlistSync signedIn={signedIn} />
         <WatchlistPanel signedIn={signedIn} saved={saved} />
@@ -196,6 +224,9 @@ function NewsPlaceholder() {
       <div className="mb-3">
         <p className="eyebrow mb-1">In the news</p>
         <h2 className="font-display text-xl">What is being written</h2>
+        <p className="mt-1 text-sm text-muted">
+          Recent news coverage of the companies this page follows, from the last 30 days, newest first.
+        </p>
       </div>
       <Card>
         <div className="h-32 animate-pulse bg-surface-2" />

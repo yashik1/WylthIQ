@@ -10,15 +10,27 @@ import { getEntitlement, hasAccess } from "@/lib/billing/entitlement";
 import { Paywall } from "@/components/billing/paywall";
 import { StructuredData } from "@/components/structured-data";
 import { pageLd } from "@/lib/structured-data";
+import { screenBacktestText, withVariant } from "@/lib/variant-metadata";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
+const BASE_METADATA: Metadata = {
   title: "Backtest the screener",
   description:
     "What buying this app's healthiest-rated companies and rebalancing every year would have returned.",
   alternates: { canonical: "/backtest/screener" },
 };
+
+/** The page's own title, or the run it shows — see lib/variant-metadata.ts. */
+export async function generateMetadata({ searchParams }: PageProps<"/backtest/screener">): Promise<Metadata> {
+  const params = await searchParams;
+  const topN = typeof params.topN === "string" ? Number(params.topN) : 10;
+  const text = screenBacktestText({
+    start: typeof params.start === "string" ? params.start : "",
+    topN: Number.isFinite(topN) ? Math.max(1, Math.min(25, topN)) : 10,
+  });
+  return withVariant(BASE_METADATA, text);
+}
 
 const SUGGESTIONS = [
   { label: "Since 2020, top 10", start: "2020-01-01", topN: "10" },

@@ -17,7 +17,7 @@ import { SLOGAN } from "@/lib/brand";
 import { NAV_SECTIONS } from "@/lib/nav";
 import { siteUrl } from "@/lib/site-url";
 import { StructuredData } from "@/components/structured-data";
-import { organisationLd } from "@/lib/structured-data";
+import { organisationLd, SITE_DESCRIPTION } from "@/lib/structured-data";
 
 /**
  * Three faces, each with one job.
@@ -62,9 +62,7 @@ const mono = Barlow({
   display: "swap",
 });
 
-const DESCRIPTION =
-  "Understand any company's financial health without reading a balance sheet. " +
-  "Plain-English answers, sourced directly from regulatory filings.";
+const DESCRIPTION = SITE_DESCRIPTION;
 
 export const metadata: Metadata = {
   /*

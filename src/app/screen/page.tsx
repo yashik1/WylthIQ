@@ -53,10 +53,11 @@ import { describeFilters } from "@/lib/screen-summary";
 import { StructuredData } from "@/components/structured-data";
 import { FaqSection } from "@/components/faq-section";
 import { pageLd } from "@/lib/structured-data";
+import { screenText, withVariant } from "@/lib/variant-metadata";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
+const BASE_METADATA: Metadata = {
   title: "Screener — filter companies by financial health",
   description:
     "Filter hundreds of US and Canadian companies by financial health, valuation, growth and debt.",
@@ -69,6 +70,13 @@ export const metadata: Metadata = {
   */
   alternates: { canonical: "/screen" },
 };
+
+/** The page's own title, or one naming the screen — see lib/variant-metadata.ts. */
+export async function generateMetadata({ searchParams }: SearchPageProps): Promise<Metadata> {
+  const { filters, page } = readScreenUrl(await searchParams);
+  const text = screenText(filters, page);
+  return withVariant(BASE_METADATA, text);
+}
 
 /** One icon per preset. "red-flags" is a warning, not an invitation, so it is
  * styled separately below rather than sharing the other presets' accent tile. */
@@ -100,9 +108,10 @@ const COUNTRIES = [
   { value: "CA", label: "Canada only" },
 ];
 
-export default async function ScreenPage({ searchParams }: SearchPageProps) {
-  const params = await searchParams;
-
+/**
+ * The screen a URL asks for, read the same way by the page and its title.
+ */
+function readScreenUrl(params: Record<string, string | string[] | undefined>) {
   const get = (key: string): string | undefined => {
     const v = params[key];
     return Array.isArray(v) ? v[0] : v;
@@ -112,7 +121,6 @@ export default async function ScreenPage({ searchParams }: SearchPageProps) {
 
   const preset = get("preset") as PresetKey | undefined;
   const sort = (get("sort") as SortKey | undefined) ?? "health";
-  const pageSize = 100;
   const pageParam = numericParam(get("page"));
   const page = Math.max(1, Math.floor(pageParam ?? 1));
 
@@ -121,7 +129,7 @@ export default async function ScreenPage({ searchParams }: SearchPageProps) {
     return v === "1" || v === "true" ? true : undefined;
   };
 
-  const fromUrl: ScreenFilters = {
+  const filters: ScreenFilters = {
     preset: preset && preset in PRESETS ? preset : undefined,
     sector: get("sector") || undefined,
     country: get("country") || undefined,
@@ -145,6 +153,15 @@ export default async function ScreenPage({ searchParams }: SearchPageProps) {
     safeZoneOnly: flag("safeZoneOnly"),
     excludeAccountingFlags: flag("excludeAccountingFlags"),
   };
+
+  return { get, filters, page };
+}
+
+export default async function ScreenPage({ searchParams }: SearchPageProps) {
+  const params = await searchParams;
+
+  const { get, filters: fromUrl, page } = readScreenUrl(params);
+  const pageSize = 100;
 
   /*
     The gate, applied to the query rather than to the page.

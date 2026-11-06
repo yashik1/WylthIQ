@@ -75,7 +75,7 @@ export const PRESETS = {
       "Or a health score of 4 or less",
     ],
     doesNotTell:
-      "That anything is actually wrong. Each is a statistical screen or a weak score — a prompt to read the filings, not evidence of a problem.",
+      "Whether anything is actually wrong. Each red flag is a statistical screen or a weak score — a prompt to read the filings, not evidence of a problem.",
   },
 } as const;
 

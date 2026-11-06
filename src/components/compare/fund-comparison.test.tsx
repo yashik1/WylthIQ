@@ -28,6 +28,7 @@ const fund = (over: Partial<FundFacts>): FundFacts => ({
   firstPriced: "2012-11-05",
   holdingCount: 60,
   topTenWeight: 0.693,
+  largest: [],
   netAssets: 9_000_000_000,
   netAssetsCurrency: "CAD",
   frequency: "Monthly",

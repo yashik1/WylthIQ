@@ -169,6 +169,30 @@ function rowsFor(): FundRow[] {
       render: (f) => (f.topTenWeight == null ? NONE : <span className="tnum">{percent(f.topTenWeight, 1)}</span>),
     },
     {
+      label: "Largest holdings",
+      hint: "Its biggest positions and their share of the fund, from its SEC filing or its manager's published list. A dash means the manager doesn't publish them in a form this site reads.",
+      value: () => null,
+      render: (f) =>
+        f.largest.length === 0 ? (
+          NONE
+        ) : (
+          <ul className="space-y-0.5 text-left">
+            {f.largest.map((h, i) => (
+              <li key={`${h.symbol ?? h.name}-${i}`} className="flex items-baseline justify-between gap-3 text-xs">
+                {h.symbol ? (
+                  <Link href={`/stock/${encodeURIComponent(h.symbol)}`} className="min-w-0 truncate hover:text-accent">
+                    {h.name}
+                  </Link>
+                ) : (
+                  <span className="min-w-0 truncate">{h.name}</span>
+                )}
+                <span className="tnum shrink-0 text-muted">{percent(h.weight, 1)}</span>
+              </li>
+            ))}
+          </ul>
+        ),
+    },
+    {
       label: "Fund size",
       hint: "The whole fund's net assets, across every unit class, as its manager reports it.",
       leads: { direction: "highest", word: "Largest" },

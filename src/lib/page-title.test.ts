@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitTitle } from "@/lib/page-title";
+import { fitDescription, fitTitle, tidyCompanyName, titleSubject } from "@/lib/page-title";
 
 /**
  * How long a title may be before a search result cuts it.
@@ -46,5 +46,42 @@ describe("a company page title", () => {
       const title = fitTitle({ subject, tails: COMPANY });
       expect(rendered(title) <= 60 || title === subject, title).toBe(true);
     }
+  });
+});
+
+describe("a company name in a title", () => {
+  it("drops the SEC's state tag and its capitals", () => {
+    expect(tidyCompanyName("ZIONS BANCORPORATION, NATIONAL ASSOCIATION /UT/")).toBe(
+      "Zions Bancorporation, National Association",
+    );
+    expect(tidyCompanyName("AMERICAN TOWER CORP /MA/")).toBe("American Tower Corp");
+    expect(tidyCompanyName("Apple Inc.")).toBe("Apple Inc.");
+  });
+
+  it("drops a trailing legal form only when the name and ticker overrun", () => {
+    expect(titleSubject("Apple Inc.", "AAPL")).toBe("Apple Inc. (AAPL)");
+    expect(titleSubject("CHARLES RIVER LABORATORIES INTERNATIONAL, INC.", "CRL")).toBe(
+      "Charles River Laboratories International (CRL)",
+    );
+    // Loses "Ltd." and stops as soon as it fits.
+    expect(titleSubject("China Gold International Resources Corp. Ltd.", "2099.HK")).toBe(
+      "China Gold International Resources Corp. (2099.HK)",
+    );
+    const zion = titleSubject("ZIONS BANCORPORATION, NATIONAL ASSOCIATION /UT/", "ZION");
+    expect(rendered(zion)).toBeLessThanOrEqual(60);
+  });
+});
+
+describe("a description that fits a result list", () => {
+  it("takes the first candidate that fits", () => {
+    expect(fitDescription("x".repeat(170), "Short and complete.")).toBe("Short and complete.");
+  });
+
+  it("cuts the last at a whole word when none fits", () => {
+    const words = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
+    const cut = fitDescription(words);
+    expect(cut.length).toBeLessThanOrEqual(160);
+    expect(cut.endsWith("…")).toBe(true);
+    expect(cut).toMatch(/word\d+…$/);
   });
 });

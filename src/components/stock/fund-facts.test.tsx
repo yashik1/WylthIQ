@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { FundFacts } from "./fund-facts";
+import { FundHoldingsNote } from "./fund-holdings-note";
 import type { EtfProfile } from "@/lib/providers/alphavantage";
 import type { SinceInception } from "@/lib/etf/since-inception";
 
@@ -87,5 +88,63 @@ describe("the fund card's since-inception figure", () => {
 
   it("is absent rather than blank when there is no figure", () => {
     expect(render(null)).not.toContain("Since inception");
+  });
+});
+
+describe("the fund card's holdings, from the manager's own list", () => {
+  const listed: EtfProfile = {
+    ...profile,
+    holdingCount: 230,
+    topHoldings: Array.from({ length: 30 }, (_, i) => ({
+      name: i === 0 ? "ROYAL BANK OF CANADA" : `HOLDING ${i}`,
+      symbol: i === 0 ? "RY.TO" : null,
+      weight: 0.08 - i * 0.002,
+      detail: null,
+      sector: "Financials",
+    })),
+    source: { name: "iShares Canada", url: "https://www.blackrock.com/ca", asOf: "2026-10-20", publishedByManager: true },
+  };
+  const html = renderToStaticMarkup(
+    <FundFacts
+      profile={listed}
+      quote={null}
+      income={null}
+      range={null}
+      since={null}
+      analytics={null}
+      currency="CAD"
+      filesWithSec={false}
+    />,
+  );
+
+  it("lists them in a table, with a sector column and how many there are in all", () => {
+    expect(html).toContain("The 30 largest of 230 holdings");
+    expect(html).toContain(">Sector<");
+    expect(html).toContain("Show all 30 largest");
+  });
+
+  it("links a holding to its page here", () => {
+    expect(html).toContain('href="/stock/RY.TO"');
+  });
+});
+
+describe("the note on where a fund's holdings come from", () => {
+  const note = (props: Parameters<typeof FundHoldingsNote>[0]) => renderToStaticMarkup(<FundHoldingsNote {...props} />);
+  const bmo = { name: "BMO Global Asset Management", url: "https://www.bmogam.com" };
+
+  it("points below when a filing or a manager's list is on the page", () => {
+    expect(note({ filed: true, publishedBy: null, manager: null })).toContain("matter of public record");
+    expect(note({ filed: false, publishedBy: "iShares Canada", manager: null })).toContain("as iShares Canada publishes it");
+  });
+
+  it("names the manager and links there when neither is", () => {
+    const html = note({ filed: false, publishedBy: null, manager: bmo });
+    expect(html).toContain("BMO Global Asset Management doesn’t publish this fund’s holdings");
+    expect(html).toContain('href="https://www.bmogam.com"');
+    expect(html).toContain('rel="noopener noreferrer"');
+  });
+
+  it("falls back to the price history for an unknown manager", () => {
+    expect(note({ filed: false, publishedBy: null, manager: null })).toContain("Price history below still applies.");
   });
 });

@@ -18,6 +18,7 @@ import { buildHealthReport, type HealthReport } from "./scoring/health";
 import { buildImpliedExpectations, type ImpliedExpectations } from "./scoring/expectations";
 import { resolveType } from "./compare";
 import { classify, findInstrument, type AssetClass, type Instrument } from "./instruments";
+import { confirmPeers } from "./peer-links";
 import { getCorporateEvents } from "./events";
 import { projectNextEvents, type ProjectedEvent } from "./chart-markers";
 import { getInsiderActivity, type InsiderActivity } from "./signals/insider";
@@ -198,7 +199,11 @@ export async function getStockPageData(
         }),
       ),
       getCompanyFilings(upper, 20).catch(() => []),
-      getPeers(upper).catch(() => []),
+      // Only peers that open here: Finnhub lists preferred shares, trust
+      // units and taken-over companies that would each link to a 404.
+      getPeers(upper)
+        .then((peers) => confirmPeers(peers))
+        .catch(() => []),
       getInstrumentType(upper).catch(() => "unknown" as InstrumentType),
       getInsiderActivity(upper).catch(
         (): InsiderActivity => ({ trades: [], pendingSales: [] }),
