@@ -16,6 +16,11 @@ import { siteUrl } from "./site-url";
 
 export type JsonLd = Record<string, unknown>;
 
+/** What the site is, in the words its metadata and markup both use. */
+export const SITE_DESCRIPTION =
+  "Understand any company's financial health without reading a balance sheet. " +
+  "Plain-English answers, sourced directly from regulatory filings.";
+
 /** The company itself, as schema.org understands one. */
 export function corporationLd(input: {
   symbol: string;
@@ -179,9 +184,17 @@ export function pageLd(input: {
   path: string;
   datePublished?: string;
   dateModified?: string;
+  /**
+   * When the figures on the page are from, for a page whose content moves
+   * with the market rather than with deployments. The page then reports the
+   * later of the two as its `dateModified`.
+   */
+  dataAsOf?: Date | null;
 }): JsonLd {
   const base = siteUrl();
   const url = `${base}${input.path}`;
+  const deployed = input.dateModified ?? BUILD_DATE;
+  const data = input.dataAsOf && !Number.isNaN(input.dataAsOf.getTime()) ? input.dataAsOf.toISOString().slice(0, 10) : null;
 
   return {
     "@context": "https://schema.org",
@@ -194,7 +207,7 @@ export function pageLd(input: {
     publisher: { "@id": `${base}/#organisation` },
     inLanguage: "en",
     datePublished: input.datePublished ?? SITE_PUBLISHED,
-    dateModified: input.dateModified ?? BUILD_DATE,
+    dateModified: data && data > deployed ? data : deployed,
   };
 }
 
@@ -264,9 +277,7 @@ export function websiteLd(): JsonLd {
     // Points at the organisation above rather than repeating its fields, which
     // is what makes the two blocks one entity to a crawler.
     publisher: { "@id": `${base}/#organisation` },
-    description:
-      "Understand any company's financial health without reading a balance sheet. " +
-      "Plain-English answers, sourced directly from regulatory filings.",
+    description: SITE_DESCRIPTION,
     potentialAction: {
       "@type": "SearchAction",
       target: { "@type": "EntryPoint", urlTemplate: `${base}/stock/{search_term_string}` },

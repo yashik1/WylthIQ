@@ -91,5 +91,7 @@ export function MarketNews({ news }: { news: DashboardNews }) {
 function describe(news: DashboardNews): string {
   const companies = news.symbols.slice(0, 5).join(", ");
   const from = news.source ? ` From ${news.source}.` : "";
-  return `Coverage of ${companies} in the last 30 days.${from}`;
+  // A whole sentence that names its subject, because an answer engine quotes a
+  // section without the heading above it.
+  return `Recent news coverage of ${companies}, the companies this page follows, from the last 30 days, newest first.${from}`;
 }

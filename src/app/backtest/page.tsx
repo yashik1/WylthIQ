@@ -24,8 +24,10 @@ import { money, signedPercent } from "@/lib/format";
 import { getEntitlement, hasAccess } from "@/lib/billing/entitlement";
 import { classify, findInstrument } from "@/lib/instruments";
 import { StructuredData } from "@/components/structured-data";
+import { FaqSection } from "@/components/faq-section";
 import { pageLd } from "@/lib/structured-data";
 import { backtestText, withVariant } from "@/lib/variant-metadata";
+import { backtestAnswer, defaultBacktestStart } from "@/lib/backtest/answer";
 
 export const dynamic = "force-dynamic";
 
@@ -46,11 +48,17 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
   const symbol = typeof params.symbol === "string" ? params.symbol : "";
   const text = backtestText({
     symbol,
-    start: typeof params.start === "string" ? params.start : "",
+    start: startFor(symbol, params.start),
     amount: typeof params.amount === "string" ? Number(params.amount) : 10_000,
     name: findInstrument(symbol.trim().toUpperCase())?.name ?? null,
   });
   return withVariant(BASE_METADATA, text);
+}
+
+/** The date asked for, or the default for a link that names only a symbol. */
+function startFor(symbol: string, start: string | string[] | undefined): string {
+  if (typeof start === "string" && start) return start;
+  return symbol.trim() ? defaultBacktestStart() : "";
 }
 
 const SUGGESTIONS = [
@@ -70,7 +78,7 @@ function suggestionHref(s: (typeof SUGGESTIONS)[number]) {
 export default async function BacktestPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
   const symbol = typeof params.symbol === "string" ? params.symbol.trim().toUpperCase() : "";
-  const start = typeof params.start === "string" ? params.start : "";
+  const start = startFor(symbol, params.start);
   const amountParam = typeof params.amount === "string" ? Number(params.amount) : 10_000;
   const amount = Number.isFinite(amountParam) && amountParam > 0 ? amountParam : 10_000;
   const reinvest = params.reinvest !== "cash";
@@ -271,6 +279,28 @@ export default async function BacktestPage({ searchParams }: SearchPageProps) {
         </>
       )}
 
+      <FaqSection
+        id="backtest-faq"
+        heading="How the backtest works"
+        entries={[
+          {
+            question: "How is the return worked out?",
+            answer:
+              "From the actual daily closing prices. The amount buys shares, fractions included, at the first close on or after your date, and is valued at the latest close. With dividends reinvested, each payment buys more shares at that day's close; paid out as cash, it is added to the total instead.",
+          },
+          {
+            question: "What does the yearly average mean?",
+            answer:
+              "It is the compound annual growth rate: the steady yearly return that would turn the starting amount into the final one over the same span. A run shorter than a month has none, because annualising a few weeks of prices says almost nothing about the investment.",
+          },
+          {
+            question: "Can I backtest crypto and commodities?",
+            answer:
+              "Yes. Coins are priced every day of the week, weekends included, and commodities use the front-month futures price stitched across contracts. Nobody can hold that futures series without rolling from one contract to the next, so read a commodity result as how its price moved, not what a holder made.",
+          },
+        ]}
+      />
+
       <Card className="p-5">
         <p className="max-w-2xl text-xs leading-relaxed text-muted">
           Educational only, not investment advice. This uses real historical prices and, where
@@ -403,6 +433,17 @@ function BacktestResults({
         </Caveat>
       )}
 
+      <RunAnswer
+        {...backtestAnswer({
+          symbol: backtest.symbol,
+          name: instrument?.name,
+          amount,
+          result,
+          reinvest,
+          dividendsBakedIn: backtest.dividendsBakedIn,
+        })}
+      />
+
       {/* "Gold" reads better than "GC=F" on the headline card. */}
       <ResultCard
         label={instrument?.name ?? backtest.symbol}
@@ -527,6 +568,16 @@ function HorizonTable({
         </p>
       </div>
     </Card>
+  );
+}
+
+/** The run as a question and its answer in a sentence — see lib/backtest/answer.ts. */
+function RunAnswer({ question, answer }: { question: string; answer: string }) {
+  return (
+    <section className="space-y-1.5 px-1">
+      <h2 className="text-lg font-semibold leading-snug tracking-tight">{question}</h2>
+      <p className="max-w-3xl text-sm leading-relaxed text-muted">{answer}</p>
+    </section>
   );
 }
 

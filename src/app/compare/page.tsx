@@ -89,6 +89,21 @@ export default async function ComparePage({ searchParams }: SearchPageProps) {
             answer:
               "Yes, and the table changes to suit. Two funds are compared on cost, income, spread and record, because revenue growth and debt mean nothing for a fund. A fund against a company shows only what both of them have.",
           },
+          {
+            question: "What does the relative performance chart show?",
+            answer:
+              "Each line is the percentage change from that symbol's own first price in the range you pick, so a $30 share and a $500 share both start at 0%. The chart shows which gained more over the period, not which one costs more.",
+          },
+          {
+            question: "Which figures are in the side-by-side table?",
+            answer:
+              "Price, health score and market value, then each company's latest annual revenue, profit, growth, margins, return on equity, P/E, price to book and debt to equity. A dash means the figure isn't available for that company, which is not the same as zero.",
+          },
+          {
+            question: "How is the health score worked out?",
+            answer:
+              "It rates four things out of 10 from the company's latest annual filing: whether it makes a profit, whether it is growing, how comfortably it covers its debts, and whether its accounts look ordinary. The rows beneath the score show the figures it was built from.",
+          },
         ]}
       />
 
@@ -211,7 +226,7 @@ export default async function ComparePage({ searchParams }: SearchPageProps) {
                 Why crypto, commodities and futures show no financial scores
               </h2>
               <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted">
-                There is no company behind them. Bitcoin has no revenue, gold owes nothing,
+                Crypto, commodities and futures have no company behind them. Bitcoin has no revenue, gold owes nothing,
                 and a futures contract is an agreement rather than a business — so the
                 profitability, debt and accounting scores are inapplicable here rather than
                 missing. Their price performance above is directly comparable with any share
@@ -307,7 +322,12 @@ function PeerContextCard({ items }: { items: CompareItem[] }) {
   const others = rest.filter((item) => item.report && !item.error);
   if (!subject?.report || others.length === 0) return null;
 
-  const sentences = describeAgainstPeers(peerFigures(subject), others.map(peerFigures));
+  // Each line names the company rather than opening with "It": an answer
+  // engine quotes one line on its own, and "It trades at a lower P/E" says
+  // nothing without the heading above it.
+  const sentences = describeAgainstPeers(peerFigures(subject), others.map(peerFigures)).map((line) =>
+    line.replace(/^Its\b/, `${subject.symbol}'s`).replace(/^It\b/, subject.symbol),
+  );
   if (sentences.length === 0) return null;
 
   return (
