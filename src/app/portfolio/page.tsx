@@ -23,8 +23,10 @@ import { cn } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Portfolio",
+  // Private, and kept out of search by `robots` below.
+  title: "Portfolio — what you hold and its exposure",
   description: "What you hold, what it is worth, and what it is exposed to — described from company filings.",
+  alternates: { canonical: "/portfolio" },
   robots: { index: false, follow: false },
 };
 

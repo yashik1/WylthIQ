@@ -35,7 +35,7 @@ import { validateFundamentals } from "@/lib/fundamentals/validate";
 import { isAiConfigured } from "@/lib/ai/config";
 import { AI_QUESTION_OPTIONS } from "@/lib/ai/questions";
 import { PricePanel } from "@/components/stock/peer-chart";
-import { fitTitle } from "@/lib/page-title";
+import { fitDescription, fitTitle, tidyCompanyName, titleSubject } from "@/lib/page-title";
 import { RecordVisit, WatchButton } from "@/components/watchlist";
 import { StrengthsAndRisks, WhatItDoes } from "@/components/stock/orientation";
 import { buildBusinessSummary } from "@/lib/scoring/business";
@@ -152,8 +152,11 @@ export async function generateMetadata({
     : listing
       ? ((await resolveUnsupported(upper).catch(() => null))?.name ?? null)
       : await displayName(upper);
-  const subject = name ? `${name} (${upper})` : upper;
-  const shortSubject = name ?? upper;
+  // Tidied, because the companies table keeps the SEC's own form of a name —
+  // "ZIONS BANCORPORATION, NATIONAL ASSOCIATION /UT/" — and shortened only
+  // as far as it takes to fit a result list.
+  const subject = name ? titleSubject(name, upper) : upper;
+  const shortSubject = name ? tidyCompanyName(name) : upper;
 
   /*
     A fund gets a fund's title.
@@ -196,13 +199,28 @@ export async function generateMetadata({
             subject,
             tails: ["financial health in plain English", "financial health"],
           });
+  // Each with a shorter wording for a long name, so none runs past what a
+  // result list shows.
   const description = instrument
-    ? `Live price, long-run history and backtesting for ${shortSubject}. It files no accounts, so the company health scores do not apply.`
+    ? fitDescription(
+        `Live price, long-run history and backtesting for ${shortSubject}. It files no accounts, so the company health scores do not apply.`,
+        `Live price, long-run history and backtesting for ${shortSubject}.`,
+      )
     : listing
-      ? `Price history and fund details for ${shortSubject}, the ${listing.exchange} listing — a different security from any same-named ticker elsewhere.`
+      ? fitDescription(
+          `Price history and fund details for ${shortSubject}, the ${listing.exchange} listing — a different security from any same-named ticker elsewhere.`,
+          `Price history and details for ${shortSubject}, the ${listing.exchange} listing — not a same-named ticker elsewhere.`,
+          `Price history and details for ${shortSubject} on the ${listing.exchange}.`,
+        )
       : isFund
-        ? `What ${shortSubject} holds, what it charges and what it pays out — holdings taken straight from its own filings with the SEC.`
-        : `Is ${shortSubject} profitable, growing, or carrying too much debt? Plain-English answers, taken straight from its regulatory filings.`;
+        ? fitDescription(
+            `What ${shortSubject} holds, what it charges and what it pays out — holdings taken straight from its own filings with the SEC.`,
+            `What ${shortSubject} holds, charges and pays out, from its own SEC filings.`,
+          )
+        : fitDescription(
+            `Is ${shortSubject} profitable, growing, or carrying too much debt? Plain-English answers, taken straight from its regulatory filings.`,
+            `Is ${shortSubject} profitable, growing, or too indebted? Plain-English answers from its filings.`,
+          );
 
   return {
     title,

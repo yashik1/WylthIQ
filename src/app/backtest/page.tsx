@@ -25,10 +25,11 @@ import { getEntitlement, hasAccess } from "@/lib/billing/entitlement";
 import { classify, findInstrument } from "@/lib/instruments";
 import { StructuredData } from "@/components/structured-data";
 import { pageLd } from "@/lib/structured-data";
+import { backtestText, withVariant } from "@/lib/variant-metadata";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
+const BASE_METADATA: Metadata = {
   title: "What if I had invested…",
   // Kept under 160 characters, which is where a result stops showing it.
   description:
@@ -38,6 +39,19 @@ export const metadata: Metadata = {
   // separately, and the form is the same page underneath.
   alternates: { canonical: "/backtest" },
 };
+
+/** The page's own title, or the question this run answers — see lib/variant-metadata.ts. */
+export async function generateMetadata({ searchParams }: SearchPageProps): Promise<Metadata> {
+  const params = await searchParams;
+  const symbol = typeof params.symbol === "string" ? params.symbol : "";
+  const text = backtestText({
+    symbol,
+    start: typeof params.start === "string" ? params.start : "",
+    amount: typeof params.amount === "string" ? Number(params.amount) : 10_000,
+    name: findInstrument(symbol.trim().toUpperCase())?.name ?? null,
+  });
+  return withVariant(BASE_METADATA, text);
+}
 
 const SUGGESTIONS = [
   { label: "AAPL since 2015", symbol: "AAPL", start: "2015-01-01" },

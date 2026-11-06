@@ -13,16 +13,23 @@ import { healthRating } from "@/lib/scoring/ratings";
 import { StructuredData } from "@/components/structured-data";
 import { FaqSection } from "@/components/faq-section";
 import { pageLd } from "@/lib/structured-data";
+import { compareText, withVariant } from "@/lib/variant-metadata";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
+const BASE_METADATA: Metadata = {
   title: "Compare stocks and ETFs",
   description:
     "Compare companies and funds side by side — financial health, valuation, growth and performance.",
   // `?symbols=` makes a fresh URL for every pair anybody has ever compared.
   alternates: { canonical: "/compare" },
 };
+
+/** The page's own title, or one naming what is compared — see lib/variant-metadata.ts. */
+export async function generateMetadata({ searchParams }: SearchPageProps): Promise<Metadata> {
+  const text = compareText(parseSymbols((await searchParams).symbols));
+  return withVariant(BASE_METADATA, text);
+}
 
 const SUGGESTIONS = [
   { label: "Big tech", symbols: "AAPL,MSFT,GOOGL,NVDA" },
