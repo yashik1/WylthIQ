@@ -17,11 +17,13 @@ import type {
 import { ProviderNotConfiguredError } from "./types";
 import { parseEodhdAnalystRatings, type AnalystView } from "../signals/analysts";
 import type { EtfProfile } from "./alphavantage";
+import { EodhdAccess, type EodhdEndpoint } from "./eodhd-access";
 
 const BASE = "https://eodhd.com/api";
 
 /**
- * Says, once, why EODHD refused a request.
+ * Says why EODHD refused a request, and stops asking where the answer cannot
+ * change — see eodhd-access.ts.
  *
  * Every call here treats a non-OK response as "no data" and returns null,
  * which is right for the page and useless for whoever runs it: a wrong key, a
@@ -29,25 +31,37 @@ const BASE = "https://eodhd.com/api";
  * from outside. That silence is how a failing key took every price off the
  * live site with nothing in the logs to say why.
  *
- * Once per endpoint and status for the life of the process, so a bad key does
- * not write a line per page view. The URL is never logged: it carries the API
- * token as a query parameter.
+ * A refusal that closes a door is logged when it closes it, so once per
+ * closure rather than once per page view. One about the symbol is logged once
+ * per endpoint and status for the life of the process. The URL is never
+ * logged: it carries the API token as a query parameter.
  */
+const access = new EodhdAccess();
 const reported = new Set<string>();
 
-function reportRefusal(endpoint: string, status: number): void {
+function noteRefusal(endpoint: EodhdEndpoint, status: number): void {
+  const closure = access.refuse(endpoint, status);
+  if (closure) {
+    // A key EODHD rejects is a fault; a plan's limits are how it was bought.
+    const log = status === 401 ? console.error : console.warn;
+    log(`[eodhd] ${endpoint} refused with HTTP ${status}: ${closure.reason}.`);
+    return;
+  }
   const key = `${endpoint}:${status}`;
   if (reported.has(key)) return;
   reported.add(key);
   const hint =
-    status === 401 || status === 403
-      ? "check EODHD_API_KEY is valid and that the plan includes this endpoint"
-      : status === 404
-        ? "the symbol is not covered"
-        : status === 429
-          ? "rate or daily limit reached"
-          : "unexpected response";
-  console.warn(`[eodhd] ${endpoint} refused with HTTP ${status} — ${hint}.`);
+    status === 404 ? "the symbol is not covered" : status === 422 ? "EODHD does not accept this symbol" : "unexpected response";
+  console.warn(`[eodhd] ${endpoint} refused with HTTP ${status}: ${hint}.`);
+}
+
+/** Fetches from EODHD unless it has already said no; null when it did, or does now. */
+async function request(endpoint: EodhdEndpoint, url: string, init: RequestInit): Promise<Response | null> {
+  if (!access.isOpen(endpoint)) return null;
+  const res = await fetch(url, init);
+  if (res.ok) return res;
+  noteRefusal(endpoint, res.status);
+  return null;
 }
 
 /**
@@ -92,7 +106,8 @@ export class EodhdProvider implements MarketDataProvider {
     const s = this.qualify(symbol);
 
     if (timeframe === "1Day" || timeframe === "1Week") {
-      const res = await fetch(
+      const res = await request(
+        "/eod",
         this.url(`/eod/${s}`, {
           from: from.toISOString().slice(0, 10),
           to: to.toISOString().slice(0, 10),
@@ -100,7 +115,7 @@ export class EodhdProvider implements MarketDataProvider {
         }),
         { next: { revalidate: 3600 } },
       );
-      if (!res.ok) return [];
+      if (!res) return [];
       const rows = (await res.json()) as {
         date: string; open: number; high: number; low: number; close: number; volume: number;
       }[];
@@ -112,7 +127,8 @@ export class EodhdProvider implements MarketDataProvider {
 
     // EODHD supports 1m, 5m and 1h natively; 15m is resampled from 5m.
     const interval = timeframe === "1Hour" ? "1h" : timeframe === "1Min" ? "1m" : "5m";
-    const res = await fetch(
+    const res = await request(
+      "/intraday",
       this.url(`/intraday/${s}`, {
         interval,
         from: String(Math.floor(from.getTime() / 1000)),
@@ -120,7 +136,7 @@ export class EodhdProvider implements MarketDataProvider {
       }),
       { next: { revalidate: 60 } },
     );
-    if (!res.ok) return [];
+    if (!res) return [];
 
     const rows = (await res.json()) as {
       timestamp: number; open: number; high: number; low: number; close: number; volume: number;
@@ -136,13 +152,10 @@ export class EodhdProvider implements MarketDataProvider {
   }
 
   async getQuote(symbol: string): Promise<Quote | null> {
-    const res = await fetch(this.url(`/real-time/${this.qualify(symbol)}`), {
+    const res = await request("/real-time", this.url(`/real-time/${this.qualify(symbol)}`), {
       next: { revalidate: 30 },
     });
-    if (!res.ok) {
-      reportRefusal("/real-time", res.status);
-      return null;
-    }
+    if (!res) return null;
 
     const q = (await res.json()) as {
       close?: number; previousClose?: number; change?: number;
@@ -200,13 +213,10 @@ export class EodhdProvider implements MarketDataProvider {
   }
 
   private async fetchFundamentals(symbol: string): Promise<EodhdFundamentals | null> {
-    const res = await fetch(this.url(`/fundamentals/${this.qualify(symbol)}`), {
+    const res = await request("/fundamentals", this.url(`/fundamentals/${this.qualify(symbol)}`), {
       next: { revalidate: 60 * 60 * 12 },
     });
-    if (!res.ok) {
-      reportRefusal("/fundamentals", res.status);
-      return null;
-    }
+    if (!res) return null;
     return (await res.json()) as EodhdFundamentals;
   }
 
@@ -269,11 +279,12 @@ export class EodhdProvider implements MarketDataProvider {
   }
 
   async getNews(symbol: string, limit = 20): Promise<NewsItem[]> {
-    const res = await fetch(
+    const res = await request(
+      "/news",
       this.url("/news", { s: this.qualify(symbol), limit: String(limit) }),
       { next: { revalidate: 900 } },
     );
-    if (!res.ok) return [];
+    if (!res) return [];
 
     const items = (await res.json()) as {
       title?: string; content?: string; link?: string; date?: string;
@@ -292,10 +303,10 @@ export class EodhdProvider implements MarketDataProvider {
   }
 
   async searchSymbols(query: string, limit = 10): Promise<SymbolSearchResult[]> {
-    const res = await fetch(this.url(`/search/${encodeURIComponent(query)}`, {
+    const res = await request("/search", this.url(`/search/${encodeURIComponent(query)}`, {
       limit: String(limit),
     }), { next: { revalidate: 3600 } });
-    if (!res.ok) return [];
+    if (!res) return [];
 
     const rows = (await res.json()) as {
       Code: string; Name: string; Exchange: string;
