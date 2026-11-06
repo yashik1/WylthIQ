@@ -69,7 +69,7 @@ export default async function ComparePage({ searchParams }: SearchPageProps) {
           pageLd({
             name: "Compare stocks and ETFs side by side",
             description:
-              "Put up to five companies, funds, commodities or coins next to each other " +
+              `Put up to ${MAX_COMPARE} companies, funds, commodities or coins next to each other ` +
               "— health, valuation, growth and performance, from their own filings.",
             path: "/compare",
           }),
@@ -82,7 +82,7 @@ export default async function ComparePage({ searchParams }: SearchPageProps) {
           {
             question: "How do I compare two companies?",
             answer:
-              "Type the tickers into the box above — up to five at once. Every row is read from the companies' own annual filings, so a comparison shows the same measure computed the same way for each of them rather than whatever each company chose to highlight.",
+              `Type the tickers into the box above — up to ${MAX_COMPARE} at once. Every row is read from the companies' own annual filings, so a comparison shows the same measure computed the same way for each of them rather than whatever each company chose to highlight.`,
           },
           {
             question: "Can I compare an ETF with a stock?",
@@ -98,6 +98,11 @@ export default async function ComparePage({ searchParams }: SearchPageProps) {
             question: "Which figures are in the side-by-side table?",
             answer:
               "Price, health score and market value, then each company's latest annual revenue, profit, growth, margins, return on equity, P/E, price to book and debt to equity. A dash means the figure isn't available for that company, which is not the same as zero.",
+          },
+          {
+            question: "Can I compare crypto or a commodity with a stock?",
+            answer:
+              "Yes, on price. Bitcoin, gold or oil can go on the performance chart beside a share or a fund, rebased the same way. They have no filings, so the rows about revenue, margins and debt stay empty for them rather than being filled with something that isn't there.",
           },
           {
             question: "How is the health score worked out?",

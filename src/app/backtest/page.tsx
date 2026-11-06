@@ -294,6 +294,11 @@ export default async function BacktestPage({ searchParams }: SearchPageProps) {
               "It is the compound annual growth rate: the steady yearly return that would turn the starting amount into the final one over the same span. A run shorter than a month has none, because annualising a few weeks of prices says almost nothing about the investment.",
           },
           {
+            question: "How far back can a backtest go?",
+            answer:
+              "Up to ten years of daily prices. Pick an earlier date and the run starts from the oldest price fetched, and the page says so. Something listed more recently starts from its first trading day instead, with the same notice, so the result never quietly covers less than it claims.",
+          },
+          {
             question: "Can I backtest crypto and commodities?",
             answer:
               "Yes. Coins are priced every day of the week, weekends included, and commodities use the front-month futures price stitched across contracts. Nobody can hold that futures series without rolling from one contract to the next, so read a commodity result as how its price moved, not what a holder made.",
